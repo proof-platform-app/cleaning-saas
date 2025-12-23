@@ -1,0 +1,23 @@
+# Python / Django
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# Node / React Native (на будущее)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
