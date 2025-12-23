@@ -1,57 +1,59 @@
-from datetime import date
+from django.utils import timezone
+from django.shortcuts import get_object_or_404
 
-from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
 
+from apps.accounts.models import User
 from apps.jobs.models import Job
-from .serializers import JobSerializer
 
-User = get_user_model()
+from apps.jobs.utils import distance_m
 
 
 class LoginView(APIView):
     """
     MVP Login.
     Авторизация по email + password.
-    Без authenticate(), напрямую через check_password().
     """
 
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = []  # без DRF-авторизации
+    permission_classes = []      # доступен всем
 
     def post(self, request):
-        email = request.data.get("email")
-        password = request.data.get("password")
+        email = (request.data.get("email") or "").strip().lower()
+        password = request.data.get("password") or ""
 
         if not email or not password:
             return Response(
-                {"detail": "Email and password are required"},
+                {"detail": "Email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Ищем активного клинера по email
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(
+                email__iexact=email,
+                role=User.ROLE_CLEANER,
+                is_active=True,
+            )
         except User.DoesNotExist:
             return Response(
                 {"detail": "User not found"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        # Проверяем пароль
         if not user.check_password(password):
             return Response(
-                {"detail": "Wrong password"},
+                {"detail": "Invalid credentials"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if not user.is_active:
-            return Response(
-                {"detail": "User is inactive"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+        # Создаём или берём токен
         token, _ = Token.objects.get_or_create(user=user)
 
         return Response(
@@ -69,44 +71,109 @@ class LoginView(APIView):
 class TodayJobsView(APIView):
     """
     Список задач клинера на сегодня.
-    Авторизация вручную по заголовку Authorization: Token <key>.
+    Требует токен (Authorization: Token <ключ>)
     """
 
-    authentication_classes = []  # не используем встроенную TokenAuthentication
-    permission_classes = []
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # 1. Достаём токен из заголовка
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Token "):
+        user = request.user
+
+        if user.role != User.ROLE_CLEANER:
             return Response(
-                {"detail": "Authorization token required."},
-                status=status.HTTP_401_UNAUTHORIZED,
+                {"detail": "Only cleaners can view today jobs."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        token_key = auth_header.replace("Token ", "").strip()
+        today = timezone.localdate()
 
-        # 2. Находим пользователя по токену
-        try:
-            token = Token.objects.select_related("user").get(key=token_key)
-        except Token.DoesNotExist:
-            return Response(
-                {"detail": "Invalid token."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        user = token.user
-
-        # 3. Фильтруем задания по этому пользователю и сегодняшней дате
-        jobs = (
+        jobs = list(
             Job.objects.filter(
                 cleaner=user,
-                scheduled_date=date.today(),
+                scheduled_date=today,
+            ).values(
+                "id",
+                "location__name",
+                "scheduled_date",
+                "scheduled_start_time",
+                "scheduled_end_time",
+                "status",
             )
-            .select_related("company", "location")
-            .prefetch_related("checklist_items")
-            .order_by("scheduled_start_time", "id")
         )
 
-        serializer = JobSerializer(jobs, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(jobs, status=status.HTTP_200_OK)
+
+
+class JobCheckInView(APIView):
+    """
+    Check-in клинера на задачу.
+
+    POST /api/jobs/<id>/check-in/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        user = request.user
+
+        if user.role != User.ROLE_CLEANER:
+            return Response(
+                {"detail": "Only cleaners can check in."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        job = get_object_or_404(
+            Job.objects.select_related("location"),
+            pk=pk,
+            cleaner=user,
+        )
+
+        if job.status != "scheduled":
+            return Response(
+                {"detail": "Check-in allowed only for scheduled jobs."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = JobCheckInSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        lat = serializer.validated_data["latitude"]
+        lon = serializer.validated_data["longitude"]
+
+        location = job.location
+        if location.latitude is None or location.longitude is None:
+            return Response(
+                {"detail": "Job location has no coordinates."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        distance = distance_m(
+            lat,
+            lon,
+            location.latitude,
+            location.longitude,
+        )
+
+        if distance > 100:
+            return Response(
+                {
+                    "detail": "Too far from job location.",
+                    "distance_m": round(distance, 2),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        job.actual_start_time = timezone.now()
+        job.status = "in_progress"
+        job.save(update_fields=["actual_start_time", "status"])
+
+        return Response(
+            {
+                "detail": "Check-in successful.",
+                "job_id": job.id,
+                "job_status": job.status,
+            },
+            status=status.HTTP_200_OK,
+        )
