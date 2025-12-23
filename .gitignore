@@ -1,7 +1,8 @@
 # Python / Django
 __pycache__/
-*.py[cod]
-*.sqlite3
+*.pyc
+*.pyo
+*.pyd
 
 # Virtual environments
 venv/
@@ -9,19 +10,20 @@ backend/venv/
 
 # Django
 db.sqlite3
+*.sqlite3
+
+# macOS
+.DS_Store
+
+# Node / React Native (future)
+node_modules/
+npm-debug.log*
+yarn-error.log*
 
 # Logs
 logs/
 *.log
 
-# macOS
-.DS_Store
-
 # IDE
 .vscode/
 .idea/
-
-# Node / React Native (на будущее)
-node_modules/
-npm-debug.log*
-yarn-error.log*
