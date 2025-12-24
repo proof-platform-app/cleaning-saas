@@ -4,6 +4,7 @@ from .views import (
     LoginView,
     TodayJobsView,
     JobCheckInView,
+    JobCheckOutView,
 )
 
 urlpatterns = [
@@ -21,5 +22,10 @@ urlpatterns = [
         "jobs/<int:pk>/check-in/",
         JobCheckInView.as_view(),
         name="api-job-check-in",
+    ),
+    path(
+        "jobs/<int:pk>/check-out/",
+        JobCheckOutView.as_view(),
+        name="api-job-check-out",
     ),
 ]

@@ -10,10 +10,9 @@ from rest_framework.permissions import IsAuthenticated
 
 from apps.accounts.models import User
 from apps.jobs.models import Job
-
 from apps.jobs.utils import distance_m
-from .serializers import JobCheckInSerializer
 
+from .serializers import JobCheckInSerializer
 
 
 class LoginView(APIView):
@@ -181,6 +180,87 @@ class JobCheckInView(APIView):
         return Response(
             {
                 "detail": "Check-in successful.",
+                "job_id": job.id,
+                "job_status": job.status,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class JobCheckOutView(APIView):
+    """
+    Check-out клинера с задачи.
+
+    POST /api/jobs/<id>/check-out/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        user = request.user
+
+        # 1) Только клинер может делать check-out
+        if user.role != User.ROLE_CLEANER:
+            return Response(
+                {"detail": "Only cleaners can check out."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # 2) Находим job, которая принадлежит этому клинеру
+        job = get_object_or_404(
+            Job.objects.select_related("location"),
+            pk=pk,
+            cleaner=user,
+        )
+
+        # 3) Check-out только из статуса in_progress
+        if job.status != "in_progress":
+            return Response(
+                {"detail": "Check-out allowed only for in_progress jobs."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 4) Валидируем координаты (тот же сериализатор)
+        serializer = JobCheckInSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        lat = serializer.validated_data["latitude"]
+        lon = serializer.validated_data["longitude"]
+
+        # 5) Проверяем координаты локации
+        location = job.location
+        if location.latitude is None or location.longitude is None:
+            return Response(
+                {"detail": "Job location has no coordinates."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 6) Проверяем расстояние
+        distance = distance_m(
+            lat,
+            lon,
+            location.latitude,
+            location.longitude,
+        )
+
+        if distance > 100:
+            return Response(
+                {
+                    "detail": "Too far from job location.",
+                    "distance_m": round(distance, 2),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 7) Обновляем job
+        job.actual_end_time = timezone.now()
+        job.status = "completed"
+        job.save(update_fields=["actual_end_time", "status"])
+
+        return Response(
+            {
+                "detail": "Check-out successful.",
                 "job_id": job.id,
                 "job_status": job.status,
             },

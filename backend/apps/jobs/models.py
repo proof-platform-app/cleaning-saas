@@ -117,71 +117,49 @@ class Job(models.Model):
 
 class JobCheckEvent(models.Model):
     """
-    События чек-ин / чек-аут с GPS.
+    Событие check-in / check-out для job.
+    Нужно для аудита: кто, когда, с какими координатами.
     """
 
-    EVENT_CHECK_IN = "check_in"
-    EVENT_CHECK_OUT = "check_out"
+    TYPE_CHECK_IN = "check_in"
+    TYPE_CHECK_OUT = "check_out"
 
-    EVENT_CHOICES = [
-        (EVENT_CHECK_IN, "Check-in"),
-        (EVENT_CHECK_OUT, "Check-out"),
-    ]
+    EVENT_TYPES = (
+        (TYPE_CHECK_IN, "Check-in"),
+        (TYPE_CHECK_OUT, "Check-out"),
+    )
 
     job = models.ForeignKey(
         Job,
         on_delete=models.CASCADE,
         related_name="check_events",
     )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="job_check_events",
+    )
 
-    event_type = models.CharField(max_length=20, choices=EVENT_CHOICES)
-    event_time = models.DateTimeField(default=timezone.now)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
 
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    distance_m = models.FloatField(null=True, blank=True)
 
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = "job_check_events"
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.job} – {self.event_type} at {self.event_time}"
-
-    def clean(self):
-        # Нельзя добавлять события к завершённой задаче
-        if self.job.status == Job.STATUS_COMPLETED:
-            raise ValidationError("Job is already completed. No more events allowed.")
-
-        # Check-in только из scheduled
-        if self.event_type == self.EVENT_CHECK_IN:
-            if self.job.status != Job.STATUS_SCHEDULED:
-                raise ValidationError("Cannot check in: job must be in 'scheduled' status.")
-
-        # Check-out только из in_progress
-        if self.event_type == self.EVENT_CHECK_OUT:
-            if self.job.status != Job.STATUS_IN_PROGRESS:
-                raise ValidationError("Cannot check out: job must be in 'in_progress' status.")
-
-    def save(self, *args, **kwargs):
-        is_new = self.pk is None
-        # сначала валидируем
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-        if not is_new:
-            return
-
-        if self.event_type == self.EVENT_CHECK_IN:
-            self.job.check_in()
-
-        if self.event_type == self.EVENT_CHECK_OUT:
-            self.job.check_out()
+        return f"{self.job_id} {self.event_type} at {self.created_at}"
 
 
-class JobChecklistItem(models.Model):
+class JobCheckListItem(models.Model):
     """
-    Снапшот пункта чек-листа на момент создания задания.
+    Снимок пункта чек-листа на момент создания задания.
+    Эти записи привязаны к Job, а не к шаблону.
     """
 
     job = models.ForeignKey(
@@ -193,14 +171,13 @@ class JobChecklistItem(models.Model):
     order = models.PositiveIntegerField(default=1)
     text = models.CharField(max_length=255)
     is_required = models.BooleanField(default=True)
-
     is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        db_table = "job_checklist_items"
+        db_table = "job_checklist_items"   # ← другое имя таблицы, НЕ job_check_events
         ordering = ["order", "id"]
 
     def __str__(self) -> str:
-        return f"{self.job} – {self.order}. {self.text}"
+        return f"{self.job_id} — {self.order}. {self.text}"
