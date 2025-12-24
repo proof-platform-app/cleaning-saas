@@ -12,6 +12,8 @@ from apps.accounts.models import User
 from apps.jobs.models import Job
 
 from apps.jobs.utils import distance_m
+from .serializers import JobCheckInSerializer
+
 
 
 class LoginView(APIView):
@@ -118,30 +120,35 @@ class JobCheckInView(APIView):
     def post(self, request, pk: int):
         user = request.user
 
+        # 1) Только клинер может делать check-in
         if user.role != User.ROLE_CLEANER:
             return Response(
                 {"detail": "Only cleaners can check in."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # 2) Находим job, которая принадлежит этому клинеру
         job = get_object_or_404(
             Job.objects.select_related("location"),
             pk=pk,
             cleaner=user,
         )
 
+        # 3) Check-in только из статуса scheduled
         if job.status != "scheduled":
             return Response(
                 {"detail": "Check-in allowed only for scheduled jobs."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 4) Валидируем координаты через сериализатор
         serializer = JobCheckInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         lat = serializer.validated_data["latitude"]
         lon = serializer.validated_data["longitude"]
 
+        # 5) Проверяем, что у локации есть координаты
         location = job.location
         if location.latitude is None or location.longitude is None:
             return Response(
@@ -149,6 +156,7 @@ class JobCheckInView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 6) Считаем дистанцию
         distance = distance_m(
             lat,
             lon,
@@ -165,6 +173,7 @@ class JobCheckInView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 7) Обновляем job
         job.actual_start_time = timezone.now()
         job.status = "in_progress"
         job.save(update_fields=["actual_start_time", "status"])

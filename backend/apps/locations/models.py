@@ -15,9 +15,13 @@ class Location(models.Model):
         related_name="locations",
     )
 
-    name = models.CharField(max_length=100)  # название локации
-    address = models.TextField(blank=True)   # адрес как простой текст
-    notes = models.TextField(blank=True)     # любые заметки менеджера
+    name = models.CharField(max_length=100)   # название локации
+    address = models.TextField(blank=True)    # адрес как простой текст
+    notes = models.TextField(blank=True)      # любые заметки менеджера
+
+    # координаты локации (для check-in)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
 
     is_active = models.BooleanField(default=True)
 
@@ -29,6 +33,7 @@ class Location(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.company.name})"
+
 
 
 class ChecklistTemplate(models.Model):
