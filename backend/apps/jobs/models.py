@@ -1,5 +1,6 @@
+# backend/apps/jobs/models.py
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import Company, User
@@ -37,7 +38,7 @@ class Job(models.Model):
 
     cleaner = models.ForeignKey(
         User,
-        on_delete=models.PROTECT,  # не даём удалить клинера с историей
+        on_delete=models.PROTECT,
         related_name="jobs",
     )
 
@@ -49,7 +50,7 @@ class Job(models.Model):
         related_name="jobs",
     )
 
-    scheduled_date = models.DateField()  # дата уборки
+    scheduled_date = models.DateField()
     scheduled_start_time = models.TimeField(null=True, blank=True)
     scheduled_end_time = models.TimeField(null=True, blank=True)
 
@@ -65,8 +66,8 @@ class Job(models.Model):
     manager_notes = models.TextField(blank=True)
     cleaner_notes = models.TextField(blank=True)
 
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "jobs"
@@ -74,51 +75,82 @@ class Job(models.Model):
     def __str__(self) -> str:
         return f"Job #{self.id} – {self.location} – {self.scheduled_date}"
 
+    def clean(self):
+        if self.scheduled_start_time and self.scheduled_end_time:
+            if self.scheduled_end_time <= self.scheduled_start_time:
+                raise ValidationError("scheduled_end_time must be after scheduled_start_time")
+
+    @classmethod
+    def create_with_checklist(
+        cls,
+        *,
+        company: Company,
+        location: Location,
+        cleaner: User,
+        scheduled_date,
+        scheduled_start_time=None,
+        scheduled_end_time=None,
+        checklist_template: ChecklistTemplate | None = None,
+        manager_notes: str = "",
+    ) -> "Job":
+        """
+        Создаёт Job и копирует пункты checklist_template в JobChecklistItem.
+        """
+        with transaction.atomic():
+            job = cls.objects.create(
+                company=company,
+                location=location,
+                cleaner=cleaner,
+                checklist_template=checklist_template,
+                scheduled_date=scheduled_date,
+                scheduled_start_time=scheduled_start_time,
+                scheduled_end_time=scheduled_end_time,
+                manager_notes=manager_notes,
+            )
+
+            if checklist_template:
+                items_qs = checklist_template.items.all()
+
+                for item in items_qs:
+                    order_val = getattr(item, "order", None)
+                    if order_val is None:
+                        order_val = getattr(item, "order_index", 1)
+
+                    is_required_val = getattr(item, "is_required", True)
+
+                    JobChecklistItem.objects.create(
+                        job=job,
+                        order=int(order_val),
+                        text=item.text,
+                        is_required=bool(is_required_val),
+                    )
+
+            return job
+
     def check_in(self):
-        """
-        Начало работы клинера.
-        """
         if self.status != self.STATUS_SCHEDULED:
-            return
+            raise ValidationError("Job is not in scheduled state")
 
         self.status = self.STATUS_IN_PROGRESS
         self.actual_start_time = timezone.now()
         self.save(update_fields=["status", "actual_start_time"])
 
     def check_out(self):
-        """
-        Завершение работы клинера.
-        """
         if self.status != self.STATUS_IN_PROGRESS:
-            return
+            raise ValidationError("Job is not in progress")
+
+        required_qs = self.checklist_items.filter(is_required=True)
+        if required_qs.exists() and required_qs.filter(is_completed=False).exists():
+            raise ValidationError("Cannot check out: required checklist items are not completed")
 
         self.status = self.STATUS_COMPLETED
         self.actual_end_time = timezone.now()
         self.save(update_fields=["status", "actual_end_time"])
 
-    def save(self, *args, **kwargs):
-        """
-        При создании нового Job автоматически копируем пункты
-        из checklist_template в JobChecklistItem.
-        """
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-
-        if is_new and self.checklist_template:
-            items = self.checklist_template.items.all()
-            for item in items:
-                JobChecklistItem.objects.create(
-                    job=self,
-                    order=item.order,
-                    text=item.text,
-                    is_required=item.is_required,
-                )
-
 
 class JobCheckEvent(models.Model):
     """
     Событие check-in / check-out для job.
-    Нужно для аудита: кто, когда, с какими координатами.
     """
 
     TYPE_CHECK_IN = "check_in"
@@ -134,10 +166,13 @@ class JobCheckEvent(models.Model):
         on_delete=models.CASCADE,
         related_name="check_events",
     )
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name="job_check_events",
+        related_name="job_check_events_events",
+        null=True,
+        blank=True,
     )
 
     event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
@@ -146,7 +181,7 @@ class JobCheckEvent(models.Model):
     longitude = models.FloatField(null=True, blank=True)
     distance_m = models.FloatField(null=True, blank=True)
 
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "job_check_events"
@@ -156,16 +191,18 @@ class JobCheckEvent(models.Model):
         return f"{self.job_id} {self.event_type} at {self.created_at}"
 
 
-class JobCheckListItem(models.Model):
+class JobChecklistItem(models.Model):
     """
     Снимок пункта чек-листа на момент создания задания.
-    Эти записи привязаны к Job, а не к шаблону.
+    Привязан к Job (обязательно для MVP).
     """
 
     job = models.ForeignKey(
         Job,
         on_delete=models.CASCADE,
         related_name="checklist_items",
+        null=True,
+        blank=True,
     )
 
     order = models.PositiveIntegerField(default=1)
@@ -173,10 +210,14 @@ class JobCheckListItem(models.Model):
     is_required = models.BooleanField(default=True)
     is_completed = models.BooleanField(default=False)
 
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+        blank=True,
+    )
 
     class Meta:
-        db_table = "job_checklist_items"   # ← другое имя таблицы, НЕ job_check_events
+        db_table = "job_checklist_items"
         ordering = ["order", "id"]
 
     def __str__(self) -> str:

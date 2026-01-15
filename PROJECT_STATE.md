@@ -24,3 +24,19 @@
 - Phase 9: Photos (before / after)
 - File storage
 - EXIF validation
+
+## Project Status (MVP)
+
+Current state:
+- Django backend (API-first)
+- Auth via Token (cleaner login)
+- Jobs:
+  - today jobs list
+  - check-in / check-out with geo validation
+  - checklist (per job)
+- PDF job report generation (ReportLab)
+
+Status:
+- Core MVP functionality implemented
+- Tests passing
+- API tested via curl
