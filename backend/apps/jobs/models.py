@@ -222,3 +222,72 @@ class JobChecklistItem(models.Model):
 
     def __str__(self) -> str:
         return f"{self.job_id} — {self.order}. {self.text}"
+
+    # --- Photos (Phase 9) ---
+
+class File(models.Model):
+    """
+    Метаданные загруженного файла.
+    Хранение: file_url — источник правды (локально или S3/Spaces).
+    """
+    file_url = models.URLField(max_length=1000)
+    original_name = models.CharField(max_length=255, blank=True)
+    content_type = models.CharField(max_length=100, blank=True)
+    size_bytes = models.PositiveIntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "files"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.original_name or self.file_url
+
+
+class JobPhoto(models.Model):
+    """
+    Фото до/после уборки, привязано к Job.
+    EXIF поля — если есть, сохраняем.
+    """
+    TYPE_BEFORE = "before"
+    TYPE_AFTER = "after"
+
+    PHOTO_TYPES = (
+        (TYPE_BEFORE, "Before"),
+        (TYPE_AFTER, "After"),
+    )
+
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name="photos",
+    )
+
+    file = models.OneToOneField(
+        File,
+        on_delete=models.CASCADE,
+        related_name="job_photo",
+    )
+
+    photo_type = models.CharField(max_length=10, choices=PHOTO_TYPES)
+
+    # EXIF (optional)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    photo_timestamp = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "job_photos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "photo_type"],
+                name="uniq_job_photo_type",
+            )
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Job {self.job_id} {self.photo_type}"

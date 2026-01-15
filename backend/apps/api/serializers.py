@@ -83,3 +83,22 @@ class ChecklistBulkUpdateSerializer(serializers.Serializer):
         if not items:
             raise serializers.ValidationError("items must be a non-empty list")
         return items
+
+
+class JobPhotoUploadSerializer(serializers.Serializer):
+    """
+    Upload job photo (before / after).
+    На уровне сериализатора принимаем любой файл.
+    Валидация "это картинка + EXIF + расстояние" — в доменной логике.
+    """
+    photo_type = serializers.ChoiceField(choices=["before", "after"])
+    file = serializers.FileField()
+
+
+class JobPhotoSerializer(serializers.Serializer):
+    photo_type = serializers.CharField()
+    file_url = serializers.CharField()
+    latitude = serializers.FloatField(allow_null=True)
+    longitude = serializers.FloatField(allow_null=True)
+    photo_timestamp = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField()
