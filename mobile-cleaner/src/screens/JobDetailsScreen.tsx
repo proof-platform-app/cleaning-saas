@@ -12,6 +12,8 @@ import {
   Pressable,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 import {
   fetchJobDetail,
@@ -21,6 +23,7 @@ import {
   checkOutJob,
   updateJobChecklistBulk,
   toggleJobChecklistItem, // fallback
+  fetchJobReportPdf,
   JobChecklistItem,
 } from "../api/client";
 
@@ -148,7 +151,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   const handleCheckIn = async () => {
     if (!isScheduled) {
-      Alert.alert("Check-in failed", "Check-in allowed only for scheduled jobs.");
+      Alert.alert(
+        "Check-in failed",
+        "Check-in allowed only for scheduled jobs."
+      );
       return;
     }
 
@@ -330,11 +336,54 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     }
   };
 
+  // ----- Handler: Share PDF report -----
+
+  const handleSharePdf = async () => {
+    try {
+      setSubmitting(true);
+
+      const buf = await fetchJobReportPdf(jobId);
+      const base64 = arrayBufferToBase64(buf);
+
+      // cacheDirectory в тайпингах может не быть, поэтому берём через any
+      const cacheDir =
+        ((FileSystem as any).cacheDirectory as string | undefined) ||
+        ((FileSystem as any).documentDirectory as string | undefined) ||
+        "";
+
+      const fileUri = `${cacheDir}job-${jobId}-report.pdf`;
+
+      // тут тоже плюём на тайпинги и шлём encoding как any
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: "base64" as any,
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert("Not available", "Sharing is not available on this device.");
+        return;
+      }
+
+      await Sharing.shareAsync(fileUri, {
+        mimeType: "application/pdf",
+        dialogTitle: `Job #${jobId} report`,
+        UTI: "com.adobe.pdf",
+      });
+    } catch (e: any) {
+      Alert.alert("PDF failed", e?.message || "Failed to generate PDF");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ----- derived flags для UI -----
 
   const canCheckIn = isScheduled;
   const canCheckOut =
-    isInProgress && progress.beforePhoto && progress.afterPhoto && progress.checklist;
+    isInProgress &&
+    progress.beforePhoto &&
+    progress.afterPhoto &&
+    progress.checklist;
 
   // ----- Render -----
 
@@ -502,7 +551,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                     isDone && styles.checklistMetaDone,
                   ]}
                 >
-                  {isChecklistSaving ? "Saving..." : isDone ? "Completed" : "Pending"}
+                  {isChecklistSaving
+                    ? "Saving..."
+                    : isDone
+                    ? "Completed"
+                    : "Pending"}
                 </Text>
               </Pressable>
             );
@@ -540,14 +593,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
               To check out, finish these steps:
             </Text>
             {!beforePhoto && (
-              <Text style={styles.placeholder}>
-                • Upload the before photo.
-              </Text>
+              <Text style={styles.placeholder}>• Upload the before photo.</Text>
             )}
             {!afterPhoto && (
-              <Text style={styles.placeholder}>
-                • Upload the after photo.
-              </Text>
+              <Text style={styles.placeholder}>• Upload the after photo.</Text>
             )}
             {checklistState.hasRequired && !checklistState.requiredCompleted && (
               <Text style={styles.placeholder}>
@@ -556,6 +605,14 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             )}
           </View>
         )}
+
+        <View style={styles.buttonWrapper}>
+          <Button
+            title="Share PDF report"
+            onPress={handleSharePdf}
+            disabled={submitting}
+          />
+        </View>
 
         {isCompleted && (
           <Text style={styles.placeholder}>
@@ -621,12 +678,8 @@ function deriveJobProgress(params: {
   const { status, timelineEvents, beforePhoto, afterPhoto, checklistState } =
     params;
 
-  const hasCheckIn = timelineEvents.some(
-    (e) => e.event_type === "check_in"
-  );
-  const hasCheckOut = timelineEvents.some(
-    (e) => e.event_type === "check_out"
-  );
+  const hasCheckIn = timelineEvents.some((e) => e.event_type === "check_in");
+  const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
 
   return {
     // Сам факт наличия job = Scheduled done
@@ -674,6 +727,29 @@ function normalizeAndSortEvents(events: any[]) {
 function formatTime(iso: string) {
   const match = iso.match(/T(\d{2}:\d{2})/);
   return match ? match[1] : iso;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  const btoaFn =
+    // @ts-ignore
+    globalThis.btoa ||
+    // @ts-ignore
+    (global as any).btoa;
+
+  if (!btoaFn) {
+    // fallback, если вдруг нет btoa
+    // @ts-ignore
+    return Buffer.from(binary, "binary").toString("base64");
+  }
+
+  return btoaFn(binary);
 }
 
 // ----- styles -----

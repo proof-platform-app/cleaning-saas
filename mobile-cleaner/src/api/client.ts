@@ -405,3 +405,25 @@ export async function uploadJobPhoto(
   console.log("[uploadJobPhoto] response:", data);
   return data;
 }
+
+// ===== PDF report =====
+
+export async function fetchJobReportPdf(jobId: number): Promise<ArrayBuffer> {
+  const url = `${API_BASE_URL}/api/jobs/${jobId}/report/pdf/`;
+
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Token ${token}`;
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers,
+  });
+
+  if (!resp.ok) {
+    const raw = await resp.text().catch(() => "");
+    throw new Error(raw || `Failed to fetch PDF report (HTTP ${resp.status})`);
+  }
+
+  return await resp.arrayBuffer();
+}
