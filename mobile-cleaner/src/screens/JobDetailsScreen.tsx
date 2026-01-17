@@ -130,8 +130,17 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     checklist.length > 0 &&
     checklist.every((item) => item.is_completed === true);
 
-  // чеклист считается «ок», если либо его нет, либо все пункты выполнены
-  const checklistOk = checklist.length === 0 || checklistDone;
+  // Phase 11: обязательные пункты как гейт
+  const requiredItems = checklist.filter((i) => i.is_required);
+  const requiredDone =
+    requiredItems.length === 0 ||
+    requiredItems.every((i) => i.is_completed);
+  const hasMissingRequired =
+    requiredItems.length > 0 &&
+    requiredItems.some((i) => !i.is_completed);
+
+  // чеклист считается «ок», если либо его нет, либо все обязательные пункты выполнены
+  const checklistOk = checklist.length === 0 || requiredDone;
 
   // dev-GPS: фиксированная точка возле Dubai Marina
   const getDevGpsPayload = () => ({
@@ -188,8 +197,9 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setJob(jobData);
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Check-out request failed";
+    } catch (e: any) {
+      const msg =
+        e instanceof Error ? e.message : "Check-out request failed";
       Alert.alert("Check-out failed", msg);
     } finally {
       setSubmitting(false);
@@ -240,8 +250,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       const baseMsg =
         e instanceof Error ? e.message : "Checklist update request failed";
 
-      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx),
-      // когда есть смысл дернуть второй endpoint
+      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx)
       const shouldTryFallback =
         typeof e?.status === "number" &&
         e.status >= 400 &&
@@ -258,7 +267,6 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             isCompleted
           );
 
-          // обновляем только один пункт по результату toggle
           setChecklist((currentList) =>
             currentList.map((it) =>
               it.id === toggled.id
@@ -266,10 +274,8 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                 : it
             )
           );
-          // здесь rollback не нужен — toggle принял финальное решение
           setChecklistError(null);
         } catch (fallbackErr: any) {
-          // fallback тоже не помог — откатываем
           setChecklist(prev);
           const msg =
             fallbackErr instanceof Error
@@ -278,7 +284,6 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           setChecklistError(msg);
         }
       } else {
-        // серверная ошибка 5xx или что-то совсем странное — просто откатываем
         setChecklist(prev);
         setChecklistError(baseMsg);
       }
@@ -523,20 +528,33 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           </View>
         )}
 
-        {canCheckOut && (
+        {isInProgress && (
           <View style={styles.buttonWrapper}>
             <Button
               title="Check out"
               onPress={handleCheckOut}
-              disabled={submitting}
+              disabled={submitting || !canCheckOut}
             />
           </View>
         )}
 
         {isInProgress && !canCheckOut && (
-          <Text style={styles.placeholder}>
-            To check out, upload both photos and complete the checklist.
-          </Text>
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.placeholder}>
+              To check out, finish these steps:
+            </Text>
+            {!beforePhoto && (
+              <Text style={styles.placeholder}>• Upload the before photo.</Text>
+            )}
+            {!afterPhoto && (
+              <Text style={styles.placeholder}>• Upload the after photo.</Text>
+            )}
+            {hasMissingRequired && (
+              <Text style={styles.placeholder}>
+                • Complete all required checklist items (*).
+              </Text>
+            )}
+          </View>
         )}
 
         {isCompleted && (
