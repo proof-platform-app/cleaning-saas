@@ -116,31 +116,27 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   const timelineEvents = normalizeAndSortEvents(job.check_events ?? []);
 
-  const beforePhoto = photos.find((p) => p.photo_type === "before");
-  const afterPhoto = photos.find((p) => p.photo_type === "after");
+  const beforePhoto = photos.find((p) => p.photo_type === "before") || null;
+  const afterPhoto = photos.find((p) => p.photo_type === "after") || null;
 
   const actualStart: string | null = job.actual_start_time ?? null;
   const actualEnd: string | null = job.actual_end_time ?? null;
 
-  const hasCheckIn = timelineEvents.some((e) => e.event_type === "check_in");
-  const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
+  // состояние чеклиста считается один раз и переиспользуется
+  const checklistState = computeChecklistState(checklist);
 
-  // Прогресс чеклиста — из локального стейта (чтобы обновлялось без refetch job)
-  const checklistDone =
-    checklist.length > 0 &&
-    checklist.every((item) => item.is_completed === true);
+  // Прогресс чеклиста для подсказок в UI
+  const checklistDone = checklistState.allCompleted;
+  const checklistOk = checklistState.checklistOk;
 
-  // Phase 11: обязательные пункты как гейт
-  const requiredItems = checklist.filter((i) => i.is_required);
-  const requiredDone =
-    requiredItems.length === 0 ||
-    requiredItems.every((i) => i.is_completed);
-  const hasMissingRequired =
-    requiredItems.length > 0 &&
-    requiredItems.some((i) => !i.is_completed);
-
-  // чеклист считается «ок», если либо его нет, либо все обязательные пункты выполнены
-  const checklistOk = checklist.length === 0 || requiredDone;
+  // Единый источник истины для Progress
+  const progress = deriveJobProgress({
+    status,
+    timelineEvents,
+    beforePhoto,
+    afterPhoto,
+    checklistState,
+  });
 
   // dev-GPS: фиксированная точка возле Dubai Marina
   const getDevGpsPayload = () => ({
@@ -197,9 +193,8 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setJob(jobData);
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
-    } catch (e: any) {
-      const msg =
-        e instanceof Error ? e.message : "Check-out request failed";
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Check-out request failed";
       Alert.alert("Check-out failed", msg);
     } finally {
       setSubmitting(false);
@@ -250,11 +245,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       const baseMsg =
         e instanceof Error ? e.message : "Checklist update request failed";
 
-      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx)
+      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx),
+      // когда есть смысл дернуть второй endpoint
       const shouldTryFallback =
-        typeof e?.status === "number" &&
-        e.status >= 400 &&
-        e.status < 500;
+        typeof e?.status === "number" && e.status >= 400 && e.status < 500;
 
       if (shouldTryFallback) {
         try {
@@ -267,6 +261,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             isCompleted
           );
 
+          // обновляем только один пункт по результату toggle
           setChecklist((currentList) =>
             currentList.map((it) =>
               it.id === toggled.id
@@ -274,16 +269,17 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                 : it
             )
           );
+          // здесь rollback не нужен — toggle принял финальное решение
           setChecklistError(null);
         } catch (fallbackErr: any) {
+          // fallback тоже не помог — откатываем
           setChecklist(prev);
           const msg =
-            fallbackErr instanceof Error
-              ? fallbackErr.message
-              : baseMsg;
+            fallbackErr instanceof Error ? fallbackErr.message : baseMsg;
           setChecklistError(msg);
         }
       } else {
+        // серверная ошибка 5xx или что-то совсем странное — просто откатываем
         setChecklist(prev);
         setChecklistError(baseMsg);
       }
@@ -338,7 +334,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   const canCheckIn = isScheduled;
   const canCheckOut =
-    isInProgress && !!beforePhoto && !!afterPhoto && checklistOk;
+    isInProgress && progress.beforePhoto && progress.afterPhoto && progress.checklist;
 
   // ----- Render -----
 
@@ -362,27 +358,27 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         <Text style={styles.sectionTitle}>Progress</Text>
 
         <Text style={styles.progressItem}>
-          {status !== "scheduled" ? "✓" : "—"} Scheduled
+          {progress.scheduled ? "✓" : "—"} Scheduled
         </Text>
 
         <Text style={styles.progressItem}>
-          {hasCheckIn ? "✓" : "—"} Check-in
+          {progress.checkIn ? "✓" : "—"} Check-in
         </Text>
 
         <Text style={styles.progressItem}>
-          {beforePhoto ? "✓" : "—"} Before photo
+          {progress.beforePhoto ? "✓" : "—"} Before photo
         </Text>
 
         <Text style={styles.progressItem}>
-          {checklistOk ? "✓" : "—"} Checklist
+          {progress.checklist ? "✓" : "—"} Checklist
         </Text>
 
         <Text style={styles.progressItem}>
-          {afterPhoto ? "✓" : "—"} After photo
+          {progress.afterPhoto ? "✓" : "—"} After photo
         </Text>
 
         <Text style={styles.progressItem}>
-          {hasCheckOut ? "✓" : "—"} Check-out
+          {progress.checkOut ? "✓" : "—"} Check-out
         </Text>
       </View>
 
@@ -544,12 +540,16 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
               To check out, finish these steps:
             </Text>
             {!beforePhoto && (
-              <Text style={styles.placeholder}>• Upload the before photo.</Text>
+              <Text style={styles.placeholder}>
+                • Upload the before photo.
+              </Text>
             )}
             {!afterPhoto && (
-              <Text style={styles.placeholder}>• Upload the after photo.</Text>
+              <Text style={styles.placeholder}>
+                • Upload the after photo.
+              </Text>
             )}
-            {hasMissingRequired && (
+            {checklistState.hasRequired && !checklistState.requiredCompleted && (
               <Text style={styles.placeholder}>
                 • Complete all required checklist items (*).
               </Text>
@@ -568,6 +568,76 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 }
 
 // ----- helpers -----
+
+type ChecklistState = {
+  hasAny: boolean;
+  hasRequired: boolean;
+  allCompleted: boolean;
+  requiredCompleted: boolean;
+  checklistOk: boolean;
+};
+
+function computeChecklistState(checklist: JobChecklistItem[]): ChecklistState {
+  const hasAny = checklist.length > 0;
+  const requiredItems = checklist.filter((item) => item.is_required);
+  const hasRequired = requiredItems.length > 0;
+
+  const allCompleted =
+    hasAny && checklist.every((item) => item.is_completed === true);
+
+  const requiredCompleted =
+    !hasRequired || requiredItems.every((item) => item.is_completed === true);
+
+  // чеклист «ок» для прогресса / check-out:
+  // - если вообще нет пунктов
+  // - или все обязательные завершены
+  const checklistOk = !hasAny || requiredCompleted;
+
+  return {
+    hasAny,
+    hasRequired,
+    allCompleted,
+    requiredCompleted,
+    checklistOk,
+  };
+}
+
+type ProgressState = {
+  scheduled: boolean;
+  checkIn: boolean;
+  beforePhoto: boolean;
+  checklist: boolean;
+  afterPhoto: boolean;
+  checkOut: boolean;
+};
+
+function deriveJobProgress(params: {
+  status: string;
+  timelineEvents: any[];
+  beforePhoto: any | null;
+  afterPhoto: any | null;
+  checklistState: ChecklistState;
+}): ProgressState {
+  const { status, timelineEvents, beforePhoto, afterPhoto, checklistState } =
+    params;
+
+  const hasCheckIn = timelineEvents.some(
+    (e) => e.event_type === "check_in"
+  );
+  const hasCheckOut = timelineEvents.some(
+    (e) => e.event_type === "check_out"
+  );
+
+  return {
+    // Сам факт наличия job = Scheduled done
+    scheduled: true,
+    checkIn: hasCheckIn || status === "in_progress" || status === "completed",
+    beforePhoto: !!beforePhoto,
+    checklist: checklistState.checklistOk,
+    afterPhoto: !!afterPhoto,
+    checkOut: hasCheckOut || status === "completed",
+  };
+}
 
 function normalizeAndSortEvents(events: any[]) {
   const mapped = events
