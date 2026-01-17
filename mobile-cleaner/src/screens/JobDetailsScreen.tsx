@@ -19,7 +19,9 @@ import {
   uploadJobPhoto,
   checkInJob,
   checkOutJob,
-  toggleChecklistItem,
+  updateJobChecklistBulk,
+  toggleJobChecklistItem, // fallback
+  JobChecklistItem,
 } from "../api/client";
 
 type RawJob = any;
@@ -45,6 +47,13 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
 
+  // Phase 10: локальный стейт чеклиста
+  const [checklist, setChecklist] = React.useState<JobChecklistItem[]>([]);
+  const [isChecklistSaving, setIsChecklistSaving] = React.useState(false);
+  const [checklistError, setChecklistError] = React.useState<string | null>(
+    null
+  );
+
   // ----- загрузка job + photos -----
   React.useEffect(() => {
     let cancelled = false;
@@ -59,6 +68,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         if (!cancelled) {
           setJob(jobData);
           setPhotos(photosData ?? []);
+          setChecklist(jobData?.checklist_items ?? []);
         }
       } catch (e) {
         const msg =
@@ -78,6 +88,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     };
   }, [jobId]);
 
+  // если job обновился (например, check-in/out), подтянем чеклист в локальный стейт
+  React.useEffect(() => {
+    if (!job) return;
+    setChecklist(job.checklist_items ?? []);
+  }, [job?.id, job?.status]);
+
   if (loading || !job) {
     return (
       <View style={styles.center}>
@@ -96,7 +112,8 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const isInProgress = status === "in_progress";
   const isCompleted = status === "completed";
 
-  const checklist: any[] = job.checklist_items ?? [];
+  const canEditChecklist = isInProgress;
+
   const timelineEvents = normalizeAndSortEvents(job.check_events ?? []);
 
   const beforePhoto = photos.find((p) => p.photo_type === "before");
@@ -108,6 +125,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const hasCheckIn = timelineEvents.some((e) => e.event_type === "check_in");
   const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
 
+  // Прогресс чеклиста — из локального стейта (чтобы обновлялось без refetch job)
   const checklistDone =
     checklist.length > 0 &&
     checklist.every((item) => item.is_completed === true);
@@ -140,6 +158,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       ]);
       setJob(jobData);
       setPhotos(photosData ?? []);
+      setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Check-in request failed";
       Alert.alert("Check-in failed", msg);
@@ -168,6 +187,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       ]);
       setJob(jobData);
       setPhotos(photosData ?? []);
+      setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Check-out request failed";
       Alert.alert("Check-out failed", msg);
@@ -176,10 +196,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     }
   };
 
-  // ----- Handlers: Checklist -----
+  // ----- Handlers: Checklist (Phase 10, bulk + fallback toggle) -----
 
-  const handleToggleChecklistItem = async (itemId: number, current: boolean) => {
-    if (!isInProgress) {
+  const handleToggleChecklistItem = async (itemId: number) => {
+    if (!canEditChecklist) {
       Alert.alert(
         "Not allowed",
         "Checklist can be updated only when job is in progress."
@@ -187,17 +207,83 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       return;
     }
 
-    setSubmitting(true);
+    if (isChecklistSaving || submitting) {
+      return;
+    }
+
+    setChecklistError(null);
+
+    // optimistic update
+    const prev = checklist;
+    const next = checklist.map((it) =>
+      it.id === itemId ? { ...it, is_completed: !it.is_completed } : it
+    );
+    setChecklist(next);
+
+    setIsChecklistSaving(true);
     try {
-      await toggleChecklistItem(jobId, itemId, !current);
-      const jobData = await fetchJobDetail(jobId);
-      setJob(jobData);
-    } catch (e) {
-      const msg =
+      const payloadItems = next.map((it) => ({
+        id: it.id,
+        is_completed: it.is_completed,
+      }));
+
+      const updated = await updateJobChecklistBulk(jobId, payloadItems);
+
+      // если backend вернул полный список пунктов — обновим им
+      if (Array.isArray(updated) && updated.length > 0) {
+        setChecklist(updated);
+      } else {
+        // иначе оставим оптимистичное
+        setChecklist(next);
+      }
+    } catch (e: any) {
+      const baseMsg =
         e instanceof Error ? e.message : "Checklist update request failed";
-      Alert.alert("Checklist update failed", msg);
+
+      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx),
+      // когда есть смысл дернуть второй endpoint
+      const shouldTryFallback =
+        typeof e?.status === "number" &&
+        e.status >= 400 &&
+        e.status < 500;
+
+      if (shouldTryFallback) {
+        try {
+          const current = next.find((it) => it.id === itemId);
+          const isCompleted = !!current?.is_completed;
+
+          const toggled = await toggleJobChecklistItem(
+            jobId,
+            itemId,
+            isCompleted
+          );
+
+          // обновляем только один пункт по результату toggle
+          setChecklist((currentList) =>
+            currentList.map((it) =>
+              it.id === toggled.id
+                ? { ...it, is_completed: toggled.is_completed }
+                : it
+            )
+          );
+          // здесь rollback не нужен — toggle принял финальное решение
+          setChecklistError(null);
+        } catch (fallbackErr: any) {
+          // fallback тоже не помог — откатываем
+          setChecklist(prev);
+          const msg =
+            fallbackErr instanceof Error
+              ? fallbackErr.message
+              : baseMsg;
+          setChecklistError(msg);
+        }
+      } else {
+        // серверная ошибка 5xx или что-то совсем странное — просто откатываем
+        setChecklist(prev);
+        setChecklistError(baseMsg);
+      }
     } finally {
-      setSubmitting(false);
+      setIsChecklistSaving(false);
     }
   };
 
@@ -366,16 +452,26 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Checklist</Text>
 
+        {checklistError ? (
+          <Text style={styles.errorText}>{checklistError}</Text>
+        ) : null}
+
         {isInProgress && checklist.length > 0 && !checklistDone && (
           <Text style={styles.helperText}>
             Tap an item to mark it completed.
           </Text>
         )}
 
+        {!isInProgress && checklist.length > 0 && (
+          <Text style={styles.helperText}>
+            Checklist is read-only until job is in progress.
+          </Text>
+        )}
+
         {checklist.length === 0 ? (
           <Text style={styles.placeholder}>No checklist items.</Text>
         ) : (
-          checklist.map((item: any) => {
+          checklist.map((item) => {
             const isDone = !!item.is_completed;
             return (
               <Pressable
@@ -384,10 +480,8 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                   styles.checklistItem,
                   pressed && styles.checklistItemPressed,
                 ]}
-                onPress={() =>
-                  handleToggleChecklistItem(item.id, item.is_completed)
-                }
-                disabled={submitting || !isInProgress}
+                onPress={() => handleToggleChecklistItem(item.id)}
+                disabled={submitting || isChecklistSaving || !canEditChecklist}
               >
                 <Text
                   style={[
@@ -407,7 +501,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                     isDone && styles.checklistMetaDone,
                   ]}
                 >
-                  {isDone ? "Completed" : "Pending"}
+                  {isChecklistSaving ? "Saving..." : isDone ? "Completed" : "Pending"}
                 </Text>
               </Pressable>
             );
@@ -541,6 +635,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     marginBottom: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#b00020",
+    marginBottom: 6,
   },
   placeholder: {
     fontSize: 14,

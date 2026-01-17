@@ -263,7 +263,52 @@ export async function checkOutJob(
 
 // ===== Checklist API =====
 
-export async function toggleChecklistItem(
+/**
+ * Основной путь: bulk update
+ * POST /api/jobs/<job_id>/checklist/bulk/
+ * body: { items: [{id, is_completed}, ...] }
+ *
+ * Возвращаем массив JobChecklistItem[] если backend его явно отдаёт.
+ * Если нет — возвращаем [], чтобы экран использовал локальный optimistic state.
+ */
+export async function updateJobChecklistBulk(
+  jobId: number,
+  items: { id: number; is_completed: boolean }[]
+): Promise<JobChecklistItem[]> {
+  const payload = { items };
+
+  const data = await apiFetch<any>(`/api/jobs/${jobId}/checklist/bulk/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  console.log("[updateJobChecklistBulk] raw response:", data);
+
+  // backend может вернуть:
+  // - { items: [...] }
+  // - { checklist_items: [...] }
+  // - сразу массив [...]
+  const list =
+    data?.items ??
+    data?.checklist_items ??
+    (Array.isArray(data) ? data : null);
+
+  if (Array.isArray(list)) {
+    return list as JobChecklistItem[];
+  }
+
+  // Если формат не распознали — ничего не меняем на основе ответа
+  // и позволяем экрану оставить свой локальный `next`
+  return [];
+}
+
+/**
+ * Fallback: toggle одного пункта
+ * POST /api/jobs/<job_id>/checklist/<item_id>/toggle/
+ *
+ * Оставляем поддержку payload с is_completed (даже если backend его не требует).
+ */
+export async function toggleJobChecklistItem(
   jobId: number,
   itemId: number,
   isCompleted: boolean
@@ -279,8 +324,17 @@ export async function toggleChecklistItem(
     body: JSON.stringify(payload),
   });
 
-  console.log("[toggleChecklistItem] response:", data);
+  console.log("[toggleJobChecklistItem] response:", data);
   return data;
+}
+
+// backward-compatible export (чтобы старый импорт не ломался)
+export async function toggleChecklistItem(
+  jobId: number,
+  itemId: number,
+  isCompleted: boolean
+): Promise<{ id: number; job_id: number; is_completed: boolean }> {
+  return toggleJobChecklistItem(jobId, itemId, isCompleted);
 }
 
 // ===== Фото before / after =====
