@@ -80,6 +80,95 @@ class Job(models.Model):
             if self.scheduled_end_time <= self.scheduled_start_time:
                 raise ValidationError("scheduled_end_time must be after scheduled_start_time")
 
+        # Шаблон чеклиста должен быть из той же компании, что и job
+        if self.checklist_template and self.company_id:
+            if self.checklist_template.company_id != self.company_id:
+                raise ValidationError("Checklist template must belong to the same company as the job")
+
+    def _get_template_items_qs(self):
+        """
+        Пытаемся найти связанные пункты шаблона чеклиста, не зная точный related_name.
+        Поддерживаем несколько вариантов, чтобы не утыкаться в странный related_name.
+        """
+        template = self.checklist_template
+        if template is None:
+            return None
+
+        # самые вероятные варианты
+        candidates = [
+            "items",
+            "template_items",
+            "checklist_items",
+            "checklisttemplateitem_set",
+        ]
+
+        for attr in candidates:
+            if hasattr(template, attr):
+                qs = getattr(template, attr)
+                try:
+                    # manager / related manager
+                    return qs.all()
+                except Exception:
+                    continue
+
+        print(f"[Job.save] No related items manager found on ChecklistTemplate(id={template.id})")
+        return None
+
+    def save(self, *args, **kwargs):
+        """
+        ВАЖНО для MVP:
+        - Django admin создаёт Job через обычный save()
+        - create_with_checklist() может не использоваться
+        Поэтому: если у Job есть checklist_template и нет checklist_items,
+        автоматически делаем snapshot в JobChecklistItem.
+        """
+        is_new = self.pk is None
+
+        super().save(*args, **kwargs)
+
+        # Если шаблон не задан — нечего снимать
+        if not self.checklist_template_id:
+            return
+
+        # Уже есть checklist_items — ничего не делаем
+        if self.checklist_items.exists():
+            return
+
+        # На всякий случай ещё раз проверим company
+        if self.company_id and self.checklist_template.company_id != self.company_id:
+            print(
+                f"[Job.save] ChecklistTemplate(id={self.checklist_template_id}) "
+                f"company mismatch for Job(id={self.id})"
+            )
+            return
+
+        items_qs = self._get_template_items_qs()
+        if items_qs is None:
+            print(f"[Job.save] No template items for checklist_template={self.checklist_template_id}")
+            return
+
+        with transaction.atomic():
+            created_count = 0
+            for item in items_qs:
+                order_val = getattr(item, "order", None)
+                if order_val is None:
+                    order_val = getattr(item, "order_index", 1)
+
+                is_required_val = getattr(item, "is_required", True)
+
+                JobChecklistItem.objects.create(
+                    job=self,
+                    order=int(order_val),
+                    text=item.text,
+                    is_required=bool(is_required_val),
+                )
+                created_count += 1
+
+        print(
+            f"[Job.save] Created {created_count} checklist items for Job(id={self.id}), "
+            f"template={self.checklist_template_id}"
+        )
+
     @classmethod
     def create_with_checklist(
         cls,
@@ -95,6 +184,8 @@ class Job(models.Model):
     ) -> "Job":
         """
         Создаёт Job и копирует пункты checklist_template в JobChecklistItem.
+        Теперь snapshot гарантирован в save(), но метод оставляем
+        для явного использования из API/сервисов.
         """
         with transaction.atomic():
             job = cls.objects.create(
@@ -107,24 +198,6 @@ class Job(models.Model):
                 scheduled_end_time=scheduled_end_time,
                 manager_notes=manager_notes,
             )
-
-            if checklist_template:
-                items_qs = checklist_template.items.all()
-
-                for item in items_qs:
-                    order_val = getattr(item, "order", None)
-                    if order_val is None:
-                        order_val = getattr(item, "order_index", 1)
-
-                    is_required_val = getattr(item, "is_required", True)
-
-                    JobChecklistItem.objects.create(
-                        job=job,
-                        order=int(order_val),
-                        text=item.text,
-                        is_required=bool(is_required_val),
-                    )
-
             return job
 
     def check_in(self):
@@ -139,6 +212,13 @@ class Job(models.Model):
         if self.status != self.STATUS_IN_PROGRESS:
             raise ValidationError("Job is not in progress")
 
+        # 1) Фото до/после обязательны
+        has_before = self.photos.filter(photo_type=JobPhoto.TYPE_BEFORE).exists()
+        has_after = self.photos.filter(photo_type=JobPhoto.TYPE_AFTER).exists()
+        if not has_before or not has_after:
+            raise ValidationError("Cannot check out: before and after photos are required")
+
+        # 2) Обязательные пункты чек-листа должны быть выполнены
         required_qs = self.checklist_items.filter(is_required=True)
         if required_qs.exists() and required_qs.filter(is_completed=False).exists():
             raise ValidationError("Cannot check out: required checklist items are not completed")
@@ -223,7 +303,9 @@ class JobChecklistItem(models.Model):
     def __str__(self) -> str:
         return f"{self.job_id} — {self.order}. {self.text}"
 
-    # --- Photos (Phase 9) ---
+
+# --- Photos (Phase 9) ---
+
 
 class File(models.Model):
     """

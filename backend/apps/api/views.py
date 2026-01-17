@@ -32,6 +32,22 @@ from .serializers import (
 )
 
 
+def _get_job_for_cleaner_with_details(pk: int, user: User) -> Job:
+    """
+    Общий helper: job для клинера + все нужные префетчи
+    (то же самое, что нужно для JobDetailSerializer).
+    """
+    return get_object_or_404(
+        Job.objects.select_related("location").prefetch_related(
+            "checklist_items",
+            "check_events",
+            "photos__file",
+        ),
+        pk=pk,
+        cleaner=user,
+    )
+
+
 class LoginView(APIView):
     """
     MVP Login.
@@ -189,15 +205,7 @@ class JobDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = get_object_or_404(
-            Job.objects.select_related("location").prefetch_related(
-                "checklist_items",
-                "check_events",
-            ),
-            pk=pk,
-            cleaner=user,
-        )
-
+        job = _get_job_for_cleaner_with_details(pk, user)
         return Response(JobDetailSerializer(job).data, status=status.HTTP_200_OK)
 
 
@@ -221,11 +229,7 @@ class JobCheckInView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = get_object_or_404(
-            Job.objects.select_related("location"),
-            pk=pk,
-            cleaner=user,
-        )
+        job = _get_job_for_cleaner_with_details(pk, user)
 
         if job.status != Job.STATUS_SCHEDULED:
             return Response(
@@ -265,10 +269,8 @@ class JobCheckInView(APIView):
             distance_m=dist,
         )
 
-        return Response(
-            {"detail": "Check-in successful.", "job_id": job.id, "job_status": job.status},
-            status=status.HTTP_200_OK,
-        )
+        job = _get_job_for_cleaner_with_details(pk, user)
+        return Response(JobDetailSerializer(job).data, status=status.HTTP_200_OK)
 
 
 class JobCheckOutView(APIView):
@@ -291,11 +293,7 @@ class JobCheckOutView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = get_object_or_404(
-            Job.objects.select_related("location").prefetch_related("checklist_items"),
-            pk=pk,
-            cleaner=user,
-        )
+        job = _get_job_for_cleaner_with_details(pk, user)
 
         if job.status != Job.STATUS_IN_PROGRESS:
             return Response(
@@ -338,10 +336,8 @@ class JobCheckOutView(APIView):
             distance_m=dist,
         )
 
-        return Response(
-            {"detail": "Check-out successful.", "job_id": job.id, "job_status": job.status},
-            status=status.HTTP_200_OK,
-        )
+        job = _get_job_for_cleaner_with_details(pk, user)
+        return Response(JobDetailSerializer(job).data, status=status.HTTP_200_OK)
 
 
 class ChecklistItemToggleView(APIView):
@@ -525,7 +521,7 @@ class JobPhotosView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = get_object_or_404(Job.objects.select_related("location"), pk=pk, cleaner=user)
+        job = _get_job_for_cleaner_with_details(pk, user)
 
         if job.status != Job.STATUS_IN_PROGRESS:
             return Response(
@@ -588,7 +584,7 @@ class JobPhotosView(APIView):
             size_bytes=getattr(uploaded, "size", None),
         )
 
-        job_photo = JobPhoto.objects.create(
+        JobPhoto.objects.create(
             job=job,
             file=db_file,
             photo_type=photo_type,
@@ -597,17 +593,11 @@ class JobPhotosView(APIView):
             photo_timestamp=exif_dt,
         )
 
-        out = {
-            "photo_type": job_photo.photo_type,
-            "file_url": db_file.file_url,
-            "latitude": job_photo.latitude,
-            "longitude": job_photo.longitude,
-            "photo_timestamp": job_photo.photo_timestamp,
-            "created_at": job_photo.created_at,
-            "exif_missing": bool(exif_missing),
-        }
-
-        return Response(out, status=status.HTTP_201_CREATED)
+        job = _get_job_for_cleaner_with_details(pk, user)
+        return Response(
+            JobDetailSerializer(job).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class JobPhotoDeleteView(APIView):

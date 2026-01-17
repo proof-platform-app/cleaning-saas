@@ -30,6 +30,35 @@ export interface ManagerJobSummary {
   [key: string]: any;
 }
 
+// ---------- Timeline types ----------
+
+export type JobTimelineStepKey =
+  | "scheduled"
+  | "check_in"
+  | "before_photo"
+  | "checklist"
+  | "after_photo"
+  | "check_out";
+
+export type JobTimelineStepStatus = "done" | "pending";
+
+export interface JobTimelineStep {
+  key: JobTimelineStepKey;
+  label: string;
+  status: JobTimelineStepStatus;
+  timestamp?: string | null;
+}
+
+// ---------- Check events ----------
+
+export interface ManagerJobCheckEvent {
+  id: number;
+  event_type: "check_in" | "check_out" | string;
+  created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export interface ManagerJobDetail extends ManagerJobSummary {
   photos?:
     | {
@@ -51,8 +80,13 @@ export interface ManagerJobDetail extends ManagerJobSummary {
           | null;
       }
     | null;
-  check_events?: any[];
+  check_events?: ManagerJobCheckEvent[];
   notes?: string | null;
+
+  // нормализованный таймлайн для UI
+  timeline?: JobTimelineStep[];
+
+  checklist?: { item: string; completed: boolean }[];
 }
 
 type AuthState = {
@@ -120,6 +154,15 @@ export async function loginManager(): Promise<void> {
   console.log("[api] Logged in as manager", data.email);
 }
 
+// ---------- Helpers ----------
+
+function extractTimeFromISO(iso?: string | null): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 // ---------- Normalization ----------
 
 // сюда прилетает "сырой" объект из Django, мы руками приводим к плоскому виду
@@ -127,22 +170,40 @@ function normalizeJob(raw: any): ManagerJobSummary {
   const scheduled_date: string | undefined =
     raw.scheduled_date ?? raw.date ?? undefined;
 
-  const start_time: string =
+  // логика времени: сначала scheduled, если нет — actual_* (как минимум время)
+  let start_time: string;
+  let end_time: string;
+
+  const scheduled_start: string | null =
     raw.scheduled_start_time ??
     raw.scheduled_start ??
     raw.start_time ??
-    "--:--";
+    null;
 
-  const end_time: string =
+  const scheduled_end: string | null =
     raw.scheduled_end_time ??
     raw.scheduled_end ??
     raw.end_time ??
-    "--:--";
+    null;
+
+  if (scheduled_start) {
+    start_time = scheduled_start;
+  } else if (raw.actual_start_time) {
+    start_time = extractTimeFromISO(raw.actual_start_time) ?? "--:--";
+  } else {
+    start_time = "--:--";
+  }
+
+  if (scheduled_end) {
+    end_time = scheduled_end;
+  } else if (raw.actual_end_time) {
+    end_time = extractTimeFromISO(raw.actual_end_time) ?? "--:--";
+  } else {
+    end_time = "--:--";
+  }
 
   const locationObj =
-    typeof raw.location === "object" && raw.location !== null
-      ? raw.location
-      : null;
+    typeof raw.location === "object" && raw.location !== null ? raw.location : null;
 
   const location_name: string =
     raw.location_name ??
@@ -189,6 +250,199 @@ function normalizeJob(raw: any): ManagerJobSummary {
   };
 }
 
+function normalizeChecklist(raw: any): { item: string; completed: boolean }[] {
+  const items = Array.isArray(raw?.checklist_items) ? raw.checklist_items : [];
+
+  return items
+    .map((it: any) => {
+      const item =
+        it?.item ??
+        it?.title ??
+        it?.name ??
+        it?.label ??
+        it?.text ??
+        "";
+
+      // разные варианты булевого поля
+      const completed =
+        !!it?.completed ||
+        !!it?.is_completed ||
+        !!it?.done ||
+        it?.status === "completed" ||
+        it?.status === "done";
+
+      return { item, completed };
+    })
+    .filter((x: any) => typeof x.item === "string" && x.item.trim().length > 0);
+}
+
+// ---------- Timeline ----------
+
+// Строим "Job Timeline" из сырого объекта job
+function buildJobTimeline(raw: any): JobTimelineStep[] {
+  const events: ManagerJobCheckEvent[] = Array.isArray(raw.check_events)
+    ? raw.check_events
+    : [];
+
+  const checkInEvent = events.find((e) => e.event_type === "check_in");
+  const checkOutEvent = events.find((e) => e.event_type === "check_out");
+
+  const hasBefore =
+    !!raw.has_before_photo || !!raw.before_photo_url || !!raw.before_photo;
+  const hasAfter =
+    !!raw.has_after_photo || !!raw.after_photo_url || !!raw.after_photo;
+
+  const checklist = normalizeChecklist(raw);
+  const checklistCompleted =
+    checklist.length > 0 && checklist.every((x) => x.completed);
+
+  const scheduledTimestamp: string | null =
+    raw.scheduled_start_time ??
+    raw.scheduled_start ??
+    raw.scheduled_datetime ??
+    raw.scheduled_date ??
+    null;
+
+  // время для чек-инов/аутов — из событий, если есть,
+  // иначе можно подсветить actual_* (но только для времени, не для статуса)
+  const checkInTimestamp: string | null =
+    checkInEvent?.created_at ?? raw.actual_start_time ?? null;
+
+  const checkOutTimestamp: string | null =
+    checkOutEvent?.created_at ?? raw.actual_end_time ?? null;
+
+  const steps: JobTimelineStep[] = [
+    {
+      key: "scheduled",
+      label: "Scheduled",
+      status: "done",
+      timestamp: scheduledTimestamp,
+    },
+    {
+      key: "check_in",
+      label: "Check-in",
+      // done ТОЛЬКО если есть событие check_in
+      status: checkInEvent ? "done" : "pending",
+      timestamp: checkInTimestamp,
+    },
+    {
+      key: "before_photo",
+      label: "Before photo",
+      status: hasBefore ? "done" : "pending",
+      timestamp: null,
+    },
+    {
+      key: "checklist",
+      label: "Checklist",
+      status: checklistCompleted ? "done" : "pending",
+      timestamp: null,
+    },
+    {
+      key: "after_photo",
+      label: "After photo",
+      status: hasAfter ? "done" : "pending",
+      timestamp: null,
+    },
+    {
+      key: "check_out",
+      label: "Check-out",
+      // done ТОЛЬКО если есть событие check_out
+      status: checkOutEvent ? "done" : "pending",
+      timestamp: checkOutTimestamp,
+    },
+  ];
+
+  return steps;
+}
+
+function normalizePhotos(
+  raw: any
+):
+  | {
+      before?: {
+        id: number;
+        type: string;
+        url: string;
+        uploaded_at?: string;
+      } | null;
+      after?: {
+        id: number;
+        type: string;
+        url: string;
+        uploaded_at?: string;
+      } | null;
+    }
+  | null {
+  // 1) Новый формат: raw.photos — массив job_photos
+  const arr = Array.isArray(raw.photos) ? raw.photos : [];
+
+  let before: any = null;
+  let after: any = null;
+
+  if (arr.length > 0) {
+    for (const p of arr) {
+      const rawType = (p.photo_type || p.type || "").toString().toLowerCase();
+      const type = rawType === "after" ? "after" : "before";
+
+      const url =
+        p.url ||
+        p.file_url ||
+        (p.file && (p.file.url || p.file.download_url)) ||
+        null;
+
+      if (!url) continue;
+
+      const photo = {
+        id: typeof p.id === "number" ? p.id : 0,
+        type,
+        url,
+        uploaded_at: p.uploaded_at || p.photo_timestamp || p.created_at || undefined,
+      };
+
+      if (type === "before" && !before) {
+        before = photo;
+      }
+      if (type === "after" && !after) {
+        after = photo;
+      }
+    }
+  }
+
+  // 2) Если из массива ничего не вытащили — падаем на legacy-поля
+  if (!before && !after) {
+    const hasLegacyBefore = !!raw.before_photo_url;
+    const hasLegacyAfter = !!raw.after_photo_url;
+
+    if (!hasLegacyBefore && !hasLegacyAfter) {
+      return null;
+    }
+
+    return {
+      before: hasLegacyBefore
+        ? {
+            id: 1,
+            type: "before",
+            url: raw.before_photo_url,
+            uploaded_at: raw.before_photo_uploaded_at,
+          }
+        : null,
+      after: hasLegacyAfter
+        ? {
+            id: 2,
+            type: "after",
+            url: raw.after_photo_url,
+            uploaded_at: raw.after_photo_uploaded_at,
+          }
+        : null,
+    };
+  }
+
+  return {
+    before,
+    after,
+  };
+}
+
 // ---------- Jobs: today ----------
 
 export async function getManagerTodayJobs(): Promise<ManagerJobSummary[]> {
@@ -212,34 +466,20 @@ export async function fetchManagerJobDetail(
 
   const base = normalizeJob(raw);
 
-  const photos =
-    raw.photos ||
-    (raw.before_photo_url || raw.after_photo_url
-      ? {
-          before: raw.before_photo_url
-            ? {
-                id: 1,
-                type: "before",
-                url: raw.before_photo_url,
-                uploaded_at: raw.before_photo_uploaded_at,
-              }
-            : null,
-          after: raw.after_photo_url
-            ? {
-                id: 2,
-                type: "after",
-                url: raw.after_photo_url,
-                uploaded_at: raw.after_photo_uploaded_at,
-              }
-            : null,
-        }
-      : null);
+  const photos = normalizePhotos(raw);
+  const timeline = buildJobTimeline(raw);
+  const checklist = normalizeChecklist(raw);
 
   return {
     ...base,
     photos,
-    check_events: raw.check_events || [],
-    notes: raw.notes ?? null,
+    check_events: Array.isArray(raw.check_events)
+      ? (raw.check_events as ManagerJobCheckEvent[])
+      : [],
+    // пока берём только одно поле notes; если появятся manager/cleaner_notes — придумаем маппинг
+    notes: raw.notes ?? raw.manager_notes ?? null,
+    checklist,
+    timeline,
   };
 }
 

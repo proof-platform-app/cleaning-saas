@@ -16,7 +16,11 @@ SECRET_KEY = 'django-insecure-$0)sh*%kzp&vmq(o%!24hz$#-1t$#dst*h(pcs*p_jlen)_xyi
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "192.168.0.162",  # IP твоего Mac в локальной сети (Expo Go ходит сюда)
+]
 
 
 # Application definition

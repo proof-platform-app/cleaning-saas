@@ -1,0 +1,616 @@
+// mobile-cleaner/src/screens/JobDetailsScreen.tsx
+
+import React from "react";
+import {
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Button,
+  Alert,
+  Pressable,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+
+import {
+  fetchJobDetail,
+  fetchJobPhotos,
+  uploadJobPhoto,
+  checkInJob,
+  checkOutJob,
+  toggleChecklistItem,
+} from "../api/client";
+
+type RawJob = any;
+
+type JobDetailsScreenProps = {
+  route: {
+    params: {
+      jobId: number;
+    };
+  };
+};
+
+function formatDateTime(value: string) {
+  const d = new Date(value);
+  return d.toLocaleString();
+}
+
+export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
+  const { jobId } = route.params;
+
+  const [job, setJob] = React.useState<RawJob | null>(null);
+  const [photos, setPhotos] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  // ----- загрузка job + photos -----
+  React.useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [jobData, photosData] = await Promise.all([
+          fetchJobDetail(jobId),
+          fetchJobPhotos(jobId),
+        ]);
+
+        if (!cancelled) {
+          setJob(jobData);
+          setPhotos(photosData ?? []);
+        }
+      } catch (e) {
+        const msg =
+          e instanceof Error ? e.message : "Failed to load job details";
+        if (!cancelled) {
+          Alert.alert("Error", msg);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
+  if (loading || !job) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator />
+        <Text style={styles.loadingText}>Loading job details...</Text>
+      </View>
+    );
+  }
+
+  // ----- нормализация данных из backend -----
+
+  const locationName: string = job.location_name ?? "Unknown location";
+
+  const status: string = job.status ?? "scheduled";
+  const isScheduled = status === "scheduled";
+  const isInProgress = status === "in_progress";
+  const isCompleted = status === "completed";
+
+  const checklist: any[] = job.checklist_items ?? [];
+  const timelineEvents = normalizeAndSortEvents(job.check_events ?? []);
+
+  const beforePhoto = photos.find((p) => p.photo_type === "before");
+  const afterPhoto = photos.find((p) => p.photo_type === "after");
+
+  const actualStart: string | null = job.actual_start_time ?? null;
+  const actualEnd: string | null = job.actual_end_time ?? null;
+
+  const hasCheckIn = timelineEvents.some((e) => e.event_type === "check_in");
+  const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
+
+  const checklistDone =
+    checklist.length > 0 &&
+    checklist.every((item) => item.is_completed === true);
+
+  // чеклист считается «ок», если либо его нет, либо все пункты выполнены
+  const checklistOk = checklist.length === 0 || checklistDone;
+
+  // dev-GPS: фиксированная точка возле Dubai Marina
+  const getDevGpsPayload = () => ({
+    latitude: 25.0763,
+    longitude: 55.1345,
+  });
+
+  // ----- Handlers: Check-in / Check-out -----
+
+  const handleCheckIn = async () => {
+    if (!isScheduled) {
+      Alert.alert("Check-in failed", "Check-in allowed only for scheduled jobs.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { latitude, longitude } = getDevGpsPayload();
+      await checkInJob(jobId, latitude, longitude);
+
+      const [jobData, photosData] = await Promise.all([
+        fetchJobDetail(jobId),
+        fetchJobPhotos(jobId),
+      ]);
+      setJob(jobData);
+      setPhotos(photosData ?? []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Check-in request failed";
+      Alert.alert("Check-in failed", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!isInProgress) {
+      Alert.alert(
+        "Check-out failed",
+        "Check-out allowed only for in_progress jobs."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { latitude, longitude } = getDevGpsPayload();
+      await checkOutJob(jobId, latitude, longitude);
+
+      const [jobData, photosData] = await Promise.all([
+        fetchJobDetail(jobId),
+        fetchJobPhotos(jobId),
+      ]);
+      setJob(jobData);
+      setPhotos(photosData ?? []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Check-out request failed";
+      Alert.alert("Check-out failed", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ----- Handlers: Checklist -----
+
+  const handleToggleChecklistItem = async (itemId: number, current: boolean) => {
+    if (!isInProgress) {
+      Alert.alert(
+        "Not allowed",
+        "Checklist can be updated only when job is in progress."
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await toggleChecklistItem(jobId, itemId, !current);
+      const jobData = await fetchJobDetail(jobId);
+      setJob(jobData);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Checklist update request failed";
+      Alert.alert("Checklist update failed", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ----- Handlers: Photos upload -----
+
+  const pickAndUpload = async (type: "before" | "after") => {
+    if (!isInProgress) {
+      Alert.alert(
+        "Not allowed",
+        "Photos can be uploaded only while job is in progress."
+      );
+      return;
+    }
+
+    if (type === "after" && !beforePhoto) {
+      Alert.alert("Not allowed", "Upload the before photo first.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets?.[0];
+    if (!asset?.uri) return;
+
+    setSubmitting(true);
+    try {
+      await uploadJobPhoto(jobId, type, asset.uri);
+
+      const refreshed = await fetchJobPhotos(jobId);
+      setPhotos(refreshed ?? []);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Photo upload request failed";
+      console.error("[JobDetails] photo upload error:", msg);
+      Alert.alert("Upload failed", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ----- derived flags для UI -----
+
+  const canCheckIn = isScheduled;
+  const canCheckOut =
+    isInProgress && !!beforePhoto && !!afterPhoto && checklistOk;
+
+  // ----- Render -----
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>{locationName}</Text>
+        <Text style={styles.subtitle}>Date: {job.scheduled_date}</Text>
+        <Text style={styles.status}>Status: {status}</Text>
+      </View>
+
+      {/* Address */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Address</Text>
+        <Text style={styles.sectionText}>—</Text>
+      </View>
+
+      {/* Progress */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Progress</Text>
+
+        <Text style={styles.progressItem}>
+          {status !== "scheduled" ? "✓" : "—"} Scheduled
+        </Text>
+
+        <Text style={styles.progressItem}>
+          {hasCheckIn ? "✓" : "—"} Check-in
+        </Text>
+
+        <Text style={styles.progressItem}>
+          {beforePhoto ? "✓" : "—"} Before photo
+        </Text>
+
+        <Text style={styles.progressItem}>
+          {checklistOk ? "✓" : "—"} Checklist
+        </Text>
+
+        <Text style={styles.progressItem}>
+          {afterPhoto ? "✓" : "—"} After photo
+        </Text>
+
+        <Text style={styles.progressItem}>
+          {hasCheckOut ? "✓" : "—"} Check-out
+        </Text>
+      </View>
+
+      {/* Timeline */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Timeline</Text>
+        {timelineEvents.length === 0 ? (
+          <Text style={styles.placeholder}>No events yet.</Text>
+        ) : (
+          timelineEvents.map((e) => (
+            <View key={e.id} style={styles.timelineRow}>
+              <Text style={styles.timelineMain}>
+                {e.label} — {formatTime(e.createdAt)}
+              </Text>
+              <Text style={styles.timelineMeta}>
+                {e.userName ? `${e.userName} • ` : ""}
+                {typeof e.distanceM === "number" ? `${e.distanceM} m` : ""}
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      {/* Photos */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Photos</Text>
+
+        <View style={styles.photoRow}>
+          <View style={styles.photoSlot}>
+            <Text style={styles.photoLabel}>Before</Text>
+
+            {beforePhoto ? (
+              <Text style={styles.sectionText}>Photo uploaded</Text>
+            ) : (
+              <Text style={styles.placeholder}>No photo yet.</Text>
+            )}
+
+            {isInProgress && !beforePhoto && (
+              <View style={styles.photoButton}>
+                <Button
+                  title="Upload Before"
+                  onPress={() => pickAndUpload("before")}
+                  disabled={submitting}
+                />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.photoSlot}>
+            <Text style={styles.photoLabel}>After</Text>
+
+            {afterPhoto ? (
+              <Text style={styles.sectionText}>Photo uploaded</Text>
+            ) : (
+              <Text style={styles.placeholder}>No photo yet.</Text>
+            )}
+
+            {isInProgress && beforePhoto && !afterPhoto && (
+              <View style={styles.photoButton}>
+                <Button
+                  title="Upload After"
+                  onPress={() => pickAndUpload("after")}
+                  disabled={submitting}
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      {/* Checklist */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Checklist</Text>
+
+        {isInProgress && checklist.length > 0 && !checklistDone && (
+          <Text style={styles.helperText}>
+            Tap an item to mark it completed.
+          </Text>
+        )}
+
+        {checklist.length === 0 ? (
+          <Text style={styles.placeholder}>No checklist items.</Text>
+        ) : (
+          checklist.map((item: any) => {
+            const isDone = !!item.is_completed;
+            return (
+              <Pressable
+                key={item.id ?? item.text}
+                style={({ pressed }) => [
+                  styles.checklistItem,
+                  pressed && styles.checklistItemPressed,
+                ]}
+                onPress={() =>
+                  handleToggleChecklistItem(item.id, item.is_completed)
+                }
+                disabled={submitting || !isInProgress}
+              >
+                <Text
+                  style={[
+                    styles.checklistStatusIcon,
+                    isDone && styles.checklistStatusIconDone,
+                  ]}
+                >
+                  {isDone ? "✓" : "○"}
+                </Text>
+                <Text style={styles.checklistText}>
+                  {item.text}
+                  {item.is_required ? " *" : ""}
+                </Text>
+                <Text
+                  style={[
+                    styles.checklistMeta,
+                    isDone && styles.checklistMetaDone,
+                  ]}
+                >
+                  {isDone ? "Completed" : "Pending"}
+                </Text>
+              </Pressable>
+            );
+          })
+        )}
+      </View>
+
+      {/* Actions */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Actions</Text>
+
+        {canCheckIn && (
+          <View style={styles.buttonWrapper}>
+            <Button
+              title="Check in"
+              onPress={handleCheckIn}
+              disabled={submitting}
+            />
+          </View>
+        )}
+
+        {canCheckOut && (
+          <View style={styles.buttonWrapper}>
+            <Button
+              title="Check out"
+              onPress={handleCheckOut}
+              disabled={submitting}
+            />
+          </View>
+        )}
+
+        {isInProgress && !canCheckOut && (
+          <Text style={styles.placeholder}>
+            To check out, upload both photos and complete the checklist.
+          </Text>
+        )}
+
+        {isCompleted && (
+          <Text style={styles.placeholder}>
+            Job is completed. No more actions available.
+          </Text>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ----- helpers -----
+
+function normalizeAndSortEvents(events: any[]) {
+  const mapped = events
+    .map((e) => {
+      const createdAt = e.created_at ?? e.event_timestamp ?? e.createdAt ?? "";
+      const type = e.event_type ?? e.type ?? "";
+      const label =
+        type === "check_in"
+          ? "Checked in"
+          : type === "check_out"
+          ? "Checked out"
+          : type || "Event";
+
+      return {
+        id: String(e.id ?? `${type}-${createdAt}`),
+        createdAt,
+        label,
+        userName: e.user_name ?? e.userName ?? "",
+        distanceM:
+          typeof e.distance_m === "number"
+            ? e.distance_m
+            : typeof e.distanceM === "number"
+            ? e.distanceM
+            : undefined,
+        event_type: type,
+      };
+    })
+    .filter((e) => e.createdAt);
+
+  mapped.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  return mapped;
+}
+
+function formatTime(iso: string) {
+  const match = iso.match(/T(\d{2}:\d{2})/);
+  return match ? match[1] : iso;
+}
+
+// ----- styles -----
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    marginTop: 8,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#555",
+  },
+  status: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  section: {
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  sectionText: {
+    fontSize: 14,
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
+  },
+  placeholder: {
+    fontSize: 14,
+    color: "#888",
+  },
+  buttonWrapper: {
+    marginTop: 8,
+  },
+  checklistItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  checklistItemPressed: {
+    opacity: 0.6,
+  },
+  checklistStatusIcon: {
+    width: 20,
+    fontSize: 16,
+    marginRight: 8,
+    color: "#888",
+  },
+  checklistStatusIconDone: {
+    color: "#0a7f42",
+  },
+  checklistText: {
+    fontSize: 14,
+    flexShrink: 1,
+    flex: 1,
+  },
+  checklistMeta: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 8,
+  },
+  checklistMetaDone: {
+    color: "#0a7f42",
+    fontWeight: "600",
+  },
+  // photos
+  photoRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  photoSlot: {
+    flex: 1,
+  },
+  photoLabel: {
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  photoButton: {
+    marginTop: 8,
+  },
+  // timeline
+  timelineRow: {
+    paddingVertical: 6,
+  },
+  timelineMain: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  timelineMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#666",
+  },
+  // progress
+  progressItem: {
+    fontSize: 15,
+    marginTop: 4,
+  },
+});
