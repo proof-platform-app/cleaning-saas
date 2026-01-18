@@ -53,6 +53,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   // Phase 10: локальный стейт чеклиста
   const [checklist, setChecklist] = React.useState<JobChecklistItem[]>([]);
   const [isChecklistSaving, setIsChecklistSaving] = React.useState(false);
+  const [savingItemId, setSavingItemId] = React.useState<number | null>(null);
   const [checklistError, setChecklistError] = React.useState<string | null>(
     null
   );
@@ -218,20 +219,21 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       return;
     }
 
-    if (isChecklistSaving || submitting) {
-      return;
-    }
+    if (isChecklistSaving || submitting) return;
 
     setChecklistError(null);
+    setSavingItemId(itemId);
+
+    const prev = checklist;
 
     // optimistic update
-    const prev = checklist;
     const next = checklist.map((it) =>
       it.id === itemId ? { ...it, is_completed: !it.is_completed } : it
     );
     setChecklist(next);
 
     setIsChecklistSaving(true);
+
     try {
       const payloadItems = next.map((it) => ({
         id: it.id,
@@ -240,19 +242,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
       const updated = await updateJobChecklistBulk(jobId, payloadItems);
 
-      // если backend вернул полный список пунктов — обновим им
       if (Array.isArray(updated) && updated.length > 0) {
         setChecklist(updated);
-      } else {
-        // иначе оставим оптимистичное
-        setChecklist(next);
       }
     } catch (e: any) {
-      const baseMsg =
-        e instanceof Error ? e.message : "Checklist update request failed";
+      const baseMsg = e instanceof Error ? e.message : "Checklist update failed";
 
-      // "умный" fallback: пробуем toggle только для клиентских ошибок (4xx),
-      // когда есть смысл дернуть второй endpoint
       const shouldTryFallback =
         typeof e?.status === "number" && e.status >= 400 && e.status < 500;
 
@@ -261,36 +256,28 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           const current = next.find((it) => it.id === itemId);
           const isCompleted = !!current?.is_completed;
 
-          const toggled = await toggleJobChecklistItem(
-            jobId,
-            itemId,
-            isCompleted
-          );
+          const toggled = await toggleJobChecklistItem(jobId, itemId, isCompleted);
 
-          // обновляем только один пункт по результату toggle
-          setChecklist((currentList) =>
-            currentList.map((it) =>
+          setChecklist((list) =>
+            list.map((it) =>
               it.id === toggled.id
                 ? { ...it, is_completed: toggled.is_completed }
                 : it
             )
           );
-          // здесь rollback не нужен — toggle принял финальное решение
-          setChecklistError(null);
         } catch (fallbackErr: any) {
-          // fallback тоже не помог — откатываем
           setChecklist(prev);
-          const msg =
-            fallbackErr instanceof Error ? fallbackErr.message : baseMsg;
-          setChecklistError(msg);
+          setChecklistError(
+            fallbackErr instanceof Error ? fallbackErr.message : baseMsg
+          );
         }
       } else {
-        // серверная ошибка 5xx или что-то совсем странное — просто откатываем
         setChecklist(prev);
         setChecklistError(baseMsg);
       }
     } finally {
       setIsChecklistSaving(false);
+      setSavingItemId(null);
     }
   };
 
@@ -502,14 +489,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Checklist</Text>
 
-        {checklistError ? (
+        {checklistError && (
           <Text style={styles.errorText}>{checklistError}</Text>
-        ) : null}
+        )}
 
         {isInProgress && checklist.length > 0 && !checklistDone && (
-          <Text style={styles.helperText}>
-            Tap an item to mark it completed.
-          </Text>
+          <Text style={styles.helperText}>Tap an item to mark it completed.</Text>
         )}
 
         {!isInProgress && checklist.length > 0 && (
@@ -525,10 +510,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             const isDone = !!item.is_completed;
             return (
               <Pressable
-                key={item.id ?? item.text}
+                key={item.id}
                 style={({ pressed }) => [
                   styles.checklistItem,
-                  pressed && styles.checklistItemPressed,
+                  !canEditChecklist && styles.checklistItemDisabled,
+                  pressed && canEditChecklist && styles.checklistItemPressed,
                 ]}
                 onPress={() => handleToggleChecklistItem(item.id)}
                 disabled={submitting || isChecklistSaving || !canEditChecklist}
@@ -546,12 +532,9 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                   {item.is_required ? " *" : ""}
                 </Text>
                 <Text
-                  style={[
-                    styles.checklistMeta,
-                    isDone && styles.checklistMetaDone,
-                  ]}
+                  style={[styles.checklistMeta, isDone && styles.checklistMetaDone]}
                 >
-                  {isChecklistSaving
+                  {savingItemId === item.id
                     ? "Saving..."
                     : isDone
                     ? "Completed"
@@ -682,7 +665,6 @@ function deriveJobProgress(params: {
   const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
 
   return {
-    // Сам факт наличия job = Scheduled done
     scheduled: true,
     checkIn: hasCheckIn || status === "in_progress" || status === "completed",
     beforePhoto: !!beforePhoto,
@@ -819,6 +801,9 @@ const styles = StyleSheet.create({
   },
   checklistItemPressed: {
     opacity: 0.6,
+  },
+  checklistItemDisabled: {
+    opacity: 0.5,
   },
   checklistStatusIcon: {
     width: 20,

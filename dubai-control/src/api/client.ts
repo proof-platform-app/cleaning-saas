@@ -130,7 +130,10 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 }
 
 // Для бинарных (PDF) ответов — отдельный helper
-async function apiFetchBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+async function apiFetchBlob(
+  path: string,
+  options: RequestInit = {}
+): Promise<Blob> {
   const url = `${API_BASE_URL}${path}`;
 
   const headers: HeadersInit = {
@@ -191,6 +194,16 @@ function extractTimeFromISO(iso?: string | null): string | undefined {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function toAbsoluteUrl(
+  u: string | null | undefined
+): string | null | undefined {
+  if (!u) return u;
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+  // гарантируем ровно один "/" между base и path
+  if (u.startsWith("/")) return `${API_BASE_URL}${u}`;
+  return `${API_BASE_URL}/${u}`;
+}
+
 // ---------- Normalization ----------
 
 // сюда прилетает "сырой" объект из Django, мы руками приводим к плоскому виду
@@ -203,16 +216,10 @@ function normalizeJob(raw: any): ManagerJobSummary {
   let end_time: string;
 
   const scheduled_start: string | null =
-    raw.scheduled_start_time ??
-    raw.scheduled_start ??
-    raw.start_time ??
-    null;
+    raw.scheduled_start_time ?? raw.scheduled_start ?? raw.start_time ?? null;
 
   const scheduled_end: string | null =
-    raw.scheduled_end_time ??
-    raw.scheduled_end ??
-    raw.end_time ??
-    null;
+    raw.scheduled_end_time ?? raw.scheduled_end ?? raw.end_time ?? null;
 
   if (scheduled_start) {
     start_time = scheduled_start;
@@ -231,7 +238,9 @@ function normalizeJob(raw: any): ManagerJobSummary {
   }
 
   const locationObj =
-    typeof raw.location === "object" && raw.location !== null ? raw.location : null;
+    typeof raw.location === "object" && raw.location !== null
+      ? raw.location
+      : null;
 
   const location_name: string =
     raw.location_name ??
@@ -240,10 +249,7 @@ function normalizeJob(raw: any): ManagerJobSummary {
     "";
 
   const location_address: string =
-    raw.location_address ??
-    locationObj?.address ??
-    raw.address ??
-    "";
+    raw.location_address ?? locationObj?.address ?? raw.address ?? "";
 
   const cleaner_name: string =
     raw.cleaner_name ??
@@ -315,10 +321,13 @@ function buildJobTimeline(raw: any): JobTimelineStep[] {
   const checkInEvent = events.find((e) => e.event_type === "check_in");
   const checkOutEvent = events.find((e) => e.event_type === "check_out");
 
-  const hasBefore =
-    !!raw.has_before_photo || !!raw.before_photo_url || !!raw.before_photo;
-  const hasAfter =
-    !!raw.has_after_photo || !!raw.after_photo_url || !!raw.after_photo;
+  const photosArr = Array.isArray(raw.photos) ? raw.photos : [];
+  const beforePhoto =
+    photosArr.find((p: any) => (p.photo_type || "").toString().toLowerCase() === "before") ||
+    null;
+  const afterPhoto =
+    photosArr.find((p: any) => (p.photo_type || "").toString().toLowerCase() === "after") ||
+    null;
 
   const checklist = normalizeChecklist(raw);
   const checklistCompleted =
@@ -331,13 +340,17 @@ function buildJobTimeline(raw: any): JobTimelineStep[] {
     raw.scheduled_date ??
     null;
 
-  // время для чек-инов/аутов — из событий, если есть,
-  // иначе можно подсветить actual_* (но только для времени, не для статуса)
   const checkInTimestamp: string | null =
     checkInEvent?.created_at ?? raw.actual_start_time ?? null;
 
   const checkOutTimestamp: string | null =
     checkOutEvent?.created_at ?? raw.actual_end_time ?? null;
+
+  const beforeTimestamp: string | null =
+    beforePhoto?.photo_timestamp ?? beforePhoto?.created_at ?? null;
+
+  const afterTimestamp: string | null =
+    afterPhoto?.photo_timestamp ?? afterPhoto?.created_at ?? null;
 
   const steps: JobTimelineStep[] = [
     {
@@ -356,8 +369,8 @@ function buildJobTimeline(raw: any): JobTimelineStep[] {
     {
       key: "before_photo",
       label: "Before photo",
-      status: hasBefore ? "done" : "pending",
-      timestamp: null,
+      status: beforePhoto ? "done" : "pending",
+      timestamp: beforeTimestamp,
     },
     {
       key: "checklist",
@@ -368,8 +381,8 @@ function buildJobTimeline(raw: any): JobTimelineStep[] {
     {
       key: "after_photo",
       label: "After photo",
-      status: hasAfter ? "done" : "pending",
-      timestamp: null,
+      status: afterPhoto ? "done" : "pending",
+      timestamp: afterTimestamp,
     },
     {
       key: "check_out",
@@ -412,19 +425,23 @@ function normalizePhotos(
       const rawType = (p.photo_type || p.type || "").toString().toLowerCase();
       const type = rawType === "after" ? "after" : "before";
 
-      const url =
+      let url =
         p.url ||
         p.file_url ||
-        (p.file && (p.file.url || p.file.download_url)) ||
+        (p.file && (p.file.file_url || p.file.url || p.file.download_url)) ||
         null;
 
       if (!url) continue;
+
+      // делаем абсолютный URL для фронта
+      url = toAbsoluteUrl(url) as string;
 
       const photo = {
         id: typeof p.id === "number" ? p.id : 0,
         type,
         url,
-        uploaded_at: p.uploaded_at || p.photo_timestamp || p.created_at || undefined,
+        uploaded_at:
+          p.uploaded_at || p.photo_timestamp || p.created_at || undefined,
       };
 
       if (type === "before" && !before) {
@@ -445,12 +462,14 @@ function normalizePhotos(
       return null;
     }
 
+    const makeAbsolute = toAbsoluteUrl;
+
     return {
       before: hasLegacyBefore
         ? {
             id: 1,
             type: "before",
-            url: raw.before_photo_url,
+            url: makeAbsolute(raw.before_photo_url) as string,
             uploaded_at: raw.before_photo_uploaded_at,
           }
         : null,
@@ -458,7 +477,7 @@ function normalizePhotos(
         ? {
             id: 2,
             type: "after",
-            url: raw.after_photo_url,
+            url: makeAbsolute(raw.after_photo_url) as string,
             uploaded_at: raw.after_photo_uploaded_at,
           }
         : null,

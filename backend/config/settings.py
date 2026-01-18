@@ -121,10 +121,11 @@ USE_TZ = True
 
 # Static files
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 
 # Media (uploads)
+# ВАЖНО: media лежит в backend/media, без вложенных директорий по умолчанию
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
