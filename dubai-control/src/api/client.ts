@@ -129,6 +129,34 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   return (await resp.json()) as T;
 }
 
+// Для бинарных (PDF) ответов — отдельный helper
+async function apiFetchBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const url = `${API_BASE_URL}${path}`;
+
+  const headers: HeadersInit = {
+    ...(options.headers || {}),
+  };
+
+  if (auth.token && !("Authorization" in headers)) {
+    headers["Authorization"] = `Token ${auth.token}`;
+  }
+
+  const resp = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error("API blob error", resp.status, resp.statusText, text);
+    throw new Error(
+      `API ${resp.status} ${resp.statusText}: ${text || "Unknown error"}`
+    );
+  }
+
+  return await resp.blob();
+}
+
 // ---------- Auth ----------
 
 export async function loginManager(): Promise<void> {
@@ -481,6 +509,17 @@ export async function fetchManagerJobDetail(
     checklist,
     timeline,
   };
+}
+
+// ---- PDF report (binary) ----
+
+export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
+  await loginManager();
+  // используем общий jobs-эндпоинт, он уже реализован для mobile
+  const blob = await apiFetchBlob(`/api/jobs/${jobId}/report/pdf/`, {
+    method: "POST",
+  });
+  return blob;
 }
 
 // ---- Backward-compatible exports ----

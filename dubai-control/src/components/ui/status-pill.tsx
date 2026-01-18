@@ -1,41 +1,79 @@
+// dubai-control/src/components/ui/status-pill.tsx
+
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export type JobStatus = "scheduled" | "in-progress" | "completed" | "issue";
+export type StatusPillStatus =
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | "canceled"
+  | "pending"
+  | string;
 
-interface StatusPillProps {
-  status: JobStatus;
-  className?: string;
-}
+type StatusConfig = {
+  label: string;
+  className: string;
+};
 
-const statusConfig: Record<JobStatus, { label: string; className: string }> = {
+const STATUS_CONFIG: Record<string, StatusConfig> = {
   scheduled: {
     label: "Scheduled",
-    className: "bg-status-scheduled-bg text-status-scheduled",
+    className:
+      "bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700",
   },
-  "in-progress": {
-    label: "In Progress",
-    className: "bg-status-inprogress-bg text-status-inprogress",
+  in_progress: {
+    label: "In progress",
+    className:
+      "bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-700",
   },
   completed: {
     label: "Completed",
-    className: "bg-status-completed-bg text-status-completed",
+    className:
+      "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-100 dark:border-emerald-700",
   },
-  issue: {
-    label: "Issue",
-    className: "bg-status-issue-bg text-status-issue",
+  cancelled: {
+    label: "Cancelled",
+    className:
+      "bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-100 dark:border-red-700",
+  },
+  canceled: {
+    label: "Cancelled",
+    className:
+      "bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-100 dark:border-red-700",
+  },
+  pending: {
+    label: "Pending",
+    className:
+      "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700",
   },
 };
 
-export function StatusPill({ status, className }: StatusPillProps) {
-  const config = statusConfig[status];
+export interface StatusPillProps
+  extends React.HTMLAttributes<HTMLSpanElement> {
+  status: StatusPillStatus;
+}
+
+export function StatusPill({ status, className, ...props }: StatusPillProps) {
+  const key = (status || "").toString().toLowerCase();
+
+  const fallback: StatusConfig = {
+    label: status ? String(status) : "Unknown",
+    className:
+      "bg-muted text-muted-foreground border border-border dark:bg-slate-900/40 dark:border-slate-800",
+  };
+
+  const config = STATUS_CONFIG[key] ?? fallback;
 
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium tracking-wide",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
         config.className,
         className
       )}
+      {...props}
     >
       {config.label}
     </span>

@@ -21,6 +21,7 @@ import {
   fetchManagerJobDetail,
   ManagerJobDetail,
   JobTimelineStep,
+  downloadJobReportPdf,
 } from "@/api/client";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,9 @@ export default function JobDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [hasGeneratedPdf, setHasGeneratedPdf] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -129,7 +133,11 @@ export default function JobDetails() {
         setLoading(true);
         setError(null);
         const data = await fetchManagerJobDetail(id);
-        if (!cancelled) setJob(data);
+        if (!cancelled) {
+          setJob(data);
+          // при открытии страницы считаем, что PDF ещё не генерился в этой сессии
+          setHasGeneratedPdf(false);
+        }
       } catch (e) {
         console.error("[JobDetails] Failed to load job", e);
         if (!cancelled) {
@@ -146,6 +154,42 @@ export default function JobDetails() {
       cancelled = true;
     };
   }, [id]);
+
+  async function handlePdfAction(reason: "generate" | "download") {
+    if (!job || pdfLoading) return;
+    const jobIdNumber = typeof job.id === "number" ? job.id : Number(job.id);
+    if (!Number.isFinite(jobIdNumber)) return;
+
+    try {
+      setPdfLoading(true);
+      const blob = await downloadJobReportPdf(jobIdNumber);
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `job-${jobIdNumber}-report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      // чуть позже очищаем URL, чтобы не держать в памяти
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 10000);
+
+      // после первого успешного генератора считаем, что PDF "есть"
+      if (reason === "generate") {
+        setHasGeneratedPdf(true);
+      }
+    } catch (e) {
+      console.error("[JobDetails] PDF download failed", e);
+      const msg =
+        e instanceof Error ? e.message : "Failed to generate/download PDF";
+      window.alert(msg);
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   // базовые состояния
 
@@ -251,6 +295,9 @@ export default function JobDetails() {
   const hourlyRate = (job as any).hourlyRate ?? (job as any).hourly_rate;
   const flatRate = (job as any).flatRate ?? (job as any).flat_rate;
 
+  const canGeneratePdf = job.status !== "scheduled";
+  const canDownloadPdf = canGeneratePdf && hasGeneratedPdf;
+
   return (
     <div className="p-8 animate-fade-in">
       {/* Header */}
@@ -275,17 +322,30 @@ export default function JobDetails() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="border-border">
+            <Button
+              variant="outline"
+              className="border-border"
+              onClick={() => handlePdfAction("download")}
+              disabled={!canDownloadPdf || pdfLoading}
+            >
               <Download className="w-4 h-4 mr-2" />
               Download PDF
             </Button>
-            <Button variant="outline" className="border-border">
+            <Button
+              variant="outline"
+              className="border-border"
+              disabled={true}
+            >
               <Mail className="w-4 h-4 mr-2" />
               Email PDF
             </Button>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
+              onClick={() => handlePdfAction("generate")}
+              disabled={!canGeneratePdf || pdfLoading}
+            >
               <FileText className="w-4 h-4 mr-2" />
-              Generate PDF Report
+              {pdfLoading ? "Generating…" : "Generate PDF Report"}
             </Button>
           </div>
         </div>
