@@ -541,6 +541,22 @@ export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
   return blob;
 }
 
+// ---- Email PDF report (stub) ----
+
+export async function emailJobReportPdf(
+  jobId: number,
+  email?: string
+): Promise<void> {
+  await loginManager();
+
+  const body = email ? { email } : {};
+
+  await apiFetch(`/api/manager/jobs/${jobId}/report/email/`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // ---- Backward-compatible exports ----
 export const fetchManagerJobsToday = getManagerTodayJobs;
 
@@ -549,7 +565,10 @@ export const fetchManagerJobsToday = getManagerTodayJobs;
 type ApiClientOptions = Omit<RequestInit, "method" | "body">;
 
 export const apiClient = {
-  async get<T = any>(path: string, options: ApiClientOptions = {}): Promise<{ data: T }> {
+  async get<T = any>(
+    path: string,
+    options: ApiClientOptions = {}
+  ): Promise<{ data: T }> {
     await loginManager();
     const data = await apiFetch<T>(path, { ...options, method: "GET" });
     return { data };

@@ -22,6 +22,7 @@ import {
   ManagerJobDetail,
   JobTimelineStep,
   downloadJobReportPdf,
+  emailJobReportPdf,
 } from "@/api/client";
 import { cn } from "@/lib/utils";
 
@@ -123,6 +124,7 @@ export default function JobDetails() {
 
   const [pdfLoading, setPdfLoading] = useState(false);
   const [hasGeneratedPdf, setHasGeneratedPdf] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -135,8 +137,6 @@ export default function JobDetails() {
         const data = await fetchManagerJobDetail(id);
         if (!cancelled) {
           setJob(data);
-          // при открытии страницы считаем, что PDF ещё не генерился в этой сессии
-          setHasGeneratedPdf(false);
         }
       } catch (e) {
         console.error("[JobDetails] Failed to load job", e);
@@ -155,7 +155,7 @@ export default function JobDetails() {
     };
   }, [id]);
 
-  async function handlePdfAction(reason: "generate" | "download") {
+  async function handlePdfAction(mode: "generate" | "download") {
     if (!job || pdfLoading) return;
     const jobIdNumber = typeof job.id === "number" ? job.id : Number(job.id);
     if (!Number.isFinite(jobIdNumber)) return;
@@ -163,31 +163,57 @@ export default function JobDetails() {
     try {
       setPdfLoading(true);
       const blob = await downloadJobReportPdf(jobIdNumber);
+      setHasGeneratedPdf(true);
 
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `job-${jobIdNumber}-report.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      if (mode === "download") {
+        // реальное скачивание
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `job-${jobIdNumber}-report.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
 
-      // чуть позже очищаем URL, чтобы не держать в памяти
-      window.setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 10000);
-
-      // после первого успешного генератора считаем, что PDF "есть"
-      if (reason === "generate") {
-        setHasGeneratedPdf(true);
+        window.setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 10000);
+      } else {
+        // "Generate" — просто дергаем backend без открытия диалога
+        console.log(
+          `[JobDetails] PDF generated for job ${jobIdNumber}, size=${blob.size} bytes`
+        );
       }
     } catch (e) {
-      console.error("[JobDetails] PDF download failed", e);
+      console.error("[JobDetails] PDF action failed", e);
       const msg =
         e instanceof Error ? e.message : "Failed to generate/download PDF";
       window.alert(msg);
     } finally {
       setPdfLoading(false);
+    }
+  }
+
+  async function handleEmailPdf() {
+    if (!job || emailLoading) return;
+
+    const jobIdNumber =
+      typeof job.id === "number" ? job.id : Number(job.id);
+    if (!Number.isFinite(jobIdNumber)) return;
+
+    try {
+      setEmailLoading(true);
+      // В MVP email можно не передавать — backend возьмёт user.email
+      await emailJobReportPdf(jobIdNumber);
+
+      window.alert("PDF report email has been scheduled (stub).");
+    } catch (e) {
+      console.error("[JobDetails] Email PDF failed", e);
+      const msg =
+        e instanceof Error ? e.message : "Failed to schedule email";
+      window.alert(msg);
+    } finally {
+      setEmailLoading(false);
     }
   }
 
@@ -297,6 +323,7 @@ export default function JobDetails() {
 
   const canGeneratePdf = job.status !== "scheduled";
   const canDownloadPdf = canGeneratePdf && hasGeneratedPdf;
+  const canEmailPdf = canGeneratePdf;
 
   return (
     <div className="p-8 animate-fade-in">
@@ -329,15 +356,16 @@ export default function JobDetails() {
               disabled={!canDownloadPdf || pdfLoading}
             >
               <Download className="w-4 h-4 mr-2" />
-              Download PDF
+              {pdfLoading ? "Preparing…" : "Download PDF"}
             </Button>
             <Button
               variant="outline"
               className="border-border"
-              disabled={true}
+              onClick={handleEmailPdf}
+              disabled={!canEmailPdf || emailLoading}
             >
               <Mail className="w-4 h-4 mr-2" />
-              Email PDF
+              {emailLoading ? "Sending…" : "Email PDF"}
             </Button>
             <Button
               className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"

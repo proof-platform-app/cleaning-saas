@@ -488,6 +488,57 @@ class JobPdfReportView(APIView):
         return resp
 
 
+class ManagerJobPdfEmailView(APIView):
+    """
+    Stub-эндпоинт для отправки PDF-отчёта на email менеджера.
+
+    POST /api/manager/jobs/<id>/report/email/
+    Body (опционально): { "email": "manager@example.com" }
+
+    В MVP НИЧЕГО не шлёт, только возвращает 202 Accepted.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        user = request.user
+
+        if user.role != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can email PDF reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        job = get_object_or_404(
+            Job.objects.filter(company=user.company),
+            pk=pk,
+        )
+
+        # email можно явно передать в body, иначе берём email текущего юзера
+        email = (request.data.get("email") or user.email or "").strip()
+        if not email:
+            return Response(
+                {"detail": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ⚠️ ВАЖНО: реальную отправку письма в MVP НЕ делаем.
+        # Здесь можно было бы:
+        #   - сгенерировать PDF,
+        #   - положить в очередь,
+        #   - или отправить напрямую.
+        # Сейчас просто возвращаем "ок, запланировали".
+        return Response(
+            {
+                "detail": "Email scheduled (MVP stub, not actually sent).",
+                "job_id": job.id,
+                "target_email": email,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
 class JobPhotosView(APIView):
     """
     Upload + list job photos (before/after).

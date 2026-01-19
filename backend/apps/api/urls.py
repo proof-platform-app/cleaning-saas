@@ -12,6 +12,7 @@ from apps.api.views import (
     JobPhotosView,
     JobPhotoDeleteView,
     JobPdfReportView,
+    ManagerJobPdfEmailView,
     ManagerJobsTodayView,
     ManagerJobDetailView,
     ManagerPlanningJobsView,
@@ -51,7 +52,18 @@ urlpatterns = [
     ),
 
     # PDF report
-    path("jobs/<int:pk>/report/pdf/", JobPdfReportView.as_view(), name="job-pdf-report"),
+    path(
+        "jobs/<int:pk>/report/pdf/",
+        JobPdfReportView.as_view(),
+        name="job-pdf-report",
+    ),
+
+    # Manager: email PDF (MVP stub)
+    path(
+        "manager/jobs/<int:pk>/report/email/",
+        ManagerJobPdfEmailView.as_view(),
+        name="manager-job-report-email",
+    ),
 
     # ===== Manager =====
     path("manager/jobs/today/", ManagerJobsTodayView.as_view(), name="manager-jobs-today"),
