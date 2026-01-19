@@ -21,6 +21,7 @@ from apps.accounts.models import User
 from apps.jobs.models import File, Job, JobCheckEvent, JobChecklistItem, JobPhoto
 from apps.jobs.utils import distance_m, extract_exif_data
 from apps.jobs.image_utils import normalize_job_photo_to_jpeg
+from apps.locations.models import Location, ChecklistTemplate
 
 from .pdf import generate_job_report_pdf
 from .serializers import (
@@ -31,6 +32,8 @@ from .serializers import (
     JobCheckEventSerializer,
     JobDetailSerializer,
     JobPhotoUploadSerializer,
+    ManagerJobCreateSerializer,
+    PlanningJobSerializer,
 )
 
 
@@ -130,6 +133,83 @@ class ManagerLoginView(APIView):
                 "email": user.email,
                 "full_name": user.full_name,
                 "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ManagerMetaView(APIView):
+    """
+    Справочники для Create Job Drawer (одним запросом).
+
+    GET /api/manager/meta/
+
+    Response:
+    {
+      "cleaners": [{ "id": 2, "full_name": "...", "phone": "+971..." }],
+      "locations": [{ "id": 1, "name": "...", "address": "..." }],
+      "checklist_templates": [{ "id": 1, "name": "Standard Cleaning" }]
+    }
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if user.role != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access meta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = user.company
+        if not company:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cleaners_qs = User.objects.filter(
+            company=company,
+            role=User.ROLE_CLEANER,
+            is_active=True,
+        ).order_by("id")
+
+        locations_qs = Location.objects.filter(
+            company=company,
+        ).order_by("id")
+
+        templates_qs = ChecklistTemplate.objects.filter(
+            company=company,
+        ).order_by("id")
+
+        return Response(
+            {
+                "cleaners": [
+                    {
+                        "id": c.id,
+                        "full_name": c.full_name,
+                        "phone": c.phone,
+                    }
+                    for c in cleaners_qs
+                ],
+                "locations": [
+                    {
+                        "id": l.id,
+                        "name": l.name,
+                        "address": getattr(l, "address", "") or "",
+                    }
+                    for l in locations_qs
+                ],
+                "checklist_templates": [
+                    {
+                        "id": t.id,
+                        "name": getattr(t, "name", "") or "",
+                    }
+                    for t in templates_qs
+                ],
             },
             status=status.HTTP_200_OK,
         )
@@ -834,6 +914,47 @@ class ManagerJobsTodayView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+class ManagerJobsCreateView(APIView):
+    """
+    Создание job менеджером.
+
+    POST /api/manager/jobs/
+
+    Request:
+    {
+      "scheduled_date": "2026-01-19",
+      "scheduled_start_time": "09:00:00",
+      "scheduled_end_time": "12:00:00",
+      "location_id": 1,
+      "cleaner_id": 2,
+      "checklist_template_id": 1
+    }
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if user.role != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can create jobs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ManagerJobCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        job = serializer.save()
+
+        out = PlanningJobSerializer(job).data
+        return Response(out, status=status.HTTP_201_CREATED)
+
+
 class ManagerJobDetailView(APIView):
     """
     Детали job для менеджера + фото, чеклист, события.
@@ -1002,37 +1123,38 @@ class ManagerPlanningJobsView(APIView):
                     after_uploaded = True
 
             # proof: checklist (required)
-            checklist_completed = True
+            checklist_completed = False  # ✅ по умолчанию НЕ ок, пока не докажем обратное
             try:
                 items = list(job.checklist_items.all())
             except Exception:
                 items = []
 
-            # Поле required в модели может называться по-разному или отсутствовать.
-            # Если required нет — считаем "все пункты как required" (самый безопасный вариант для proof).
-            required_attr = None
-            if items:
+            if not items:
+                checklist_completed = False
+            else:
+                # Поле required в модели может называться по-разному или отсутствовать.
+                required_attr = None
                 sample = items[0]
                 if hasattr(sample, "required"):
                     required_attr = "required"
                 elif hasattr(sample, "is_required"):
                     required_attr = "is_required"
 
-            if items:
                 if required_attr:
                     required_items = [
-                        it for it in items if bool(getattr(it, required_attr, False))
+                        it
+                        for it in items
+                        if bool(getattr(it, required_attr, False))
                     ]
+                    # ✅ Если required_items пустой (все required-флаги False) — считаем required ВСЕ
+                    if not required_items:
+                        required_items = items
                 else:
                     required_items = items
 
-                # Если required_items пустой — считаем, что checklist ок
-                if required_items:
-                    checklist_completed = all(
-                        bool(getattr(it, "is_completed", False)) for it in required_items
-                    )
-                else:
-                    checklist_completed = True
+                checklist_completed = all(
+                    bool(getattr(it, "is_completed", False)) for it in required_items
+                )
 
             data.append(
                 {
@@ -1051,9 +1173,15 @@ class ManagerPlanningJobsView(APIView):
                         "full_name": getattr(cleaner, "full_name", None),
                     },
                     "proof": {
+                        # текущие (как сейчас)
                         "before_uploaded": bool(before_uploaded),
                         "after_uploaded": bool(after_uploaded),
                         "checklist_completed": bool(checklist_completed),
+
+                        # ✅ алиасы под UI / lovable
+                        "before_photo": bool(before_uploaded),
+                        "after_photo": bool(after_uploaded),
+                        "checklist": bool(checklist_completed),
                     },
                 }
             )

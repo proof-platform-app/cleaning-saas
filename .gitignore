@@ -29,3 +29,4 @@ logs/
 .idea/
 *.pdf
 backend/media/
+backend/apps/accounts/admin_auth.py

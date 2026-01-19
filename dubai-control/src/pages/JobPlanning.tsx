@@ -7,7 +7,7 @@ import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
 import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
 import { CreateJobDrawer } from "@/components/planning/CreateJobDrawer";
-import type { PlanningJob, PlanningFilters } from "@/types/planning";
+import { PlanningJob, PlanningFilters } from "@/types/planning";
 import { fetchPlanningJobs } from "@/api/planning";
 
 export default function JobPlanning() {
@@ -27,12 +27,9 @@ export default function JobPlanning() {
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
-    try {
-      const data = await fetchPlanningJobs(filters);
-      setJobs(data);
-    } finally {
-      setLoading(false);
-    }
+    const data = await fetchPlanningJobs(filters);
+    setJobs(data);
+    setLoading(false);
   }, [filters]);
 
   useEffect(() => {
@@ -58,8 +55,12 @@ export default function JobPlanning() {
         <div className="px-6 py-6 max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Job Planning</h1>
-              <p className="text-muted-foreground mt-1">Plan and manage jobs for cleaners</p>
+              <h1 className="text-2xl font-semibold text-foreground">
+                Job Planning
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Plan and manage jobs for cleaners
+              </p>
             </div>
             <Button onClick={() => setCreateDrawerOpen(true)} size="lg">
               <Plus className="w-4 h-4 mr-2" />
@@ -74,7 +75,10 @@ export default function JobPlanning() {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Filters - Left Column */}
           <div className="w-full lg:w-72 flex-shrink-0">
-            <PlanningFiltersPanel filters={filters} onFiltersChange={setFilters} />
+            <PlanningFiltersPanel
+              filters={filters}
+              onFiltersChange={setFilters}
+            />
           </div>
 
           {/* Jobs Table - Right Column */}
@@ -88,7 +92,11 @@ export default function JobPlanning() {
                 (GST UTC+4)
               </p>
             </div>
-            <JobsTable jobs={jobs} loading={loading} onJobClick={setSelectedJob} />
+            <JobsTable
+              jobs={jobs}
+              loading={loading}
+              onJobClick={setSelectedJob}
+            />
           </div>
         </div>
       </div>

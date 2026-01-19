@@ -16,6 +16,9 @@ from apps.api.views import (
     ManagerJobsTodayView,
     ManagerJobDetailView,
     ManagerPlanningJobsView,
+    # ✅ NEW
+    ManagerMetaView,
+    ManagerJobsCreateView,
 )
 
 urlpatterns = [
@@ -66,7 +69,24 @@ urlpatterns = [
     ),
 
     # ===== Manager =====
-    path("manager/jobs/today/", ManagerJobsTodayView.as_view(), name="manager-jobs-today"),
-    path("manager/jobs/<int:pk>/", ManagerJobDetailView.as_view(), name="manager-job-detail"),
-    path("manager/jobs/planning/", ManagerPlanningJobsView.as_view(), name="manager-jobs-planning"),
+    # ✅ Meta for Create Job Drawer
+    path("manager/meta/", ManagerMetaView.as_view(), name="manager-meta"),
+    # ✅ Create job
+    path("manager/jobs/", ManagerJobsCreateView.as_view(), name="manager-jobs-create"),
+
+    path(
+        "manager/jobs/today/",
+        ManagerJobsTodayView.as_view(),
+        name="manager-jobs-today",
+    ),
+    path(
+        "manager/jobs/<int:pk>/",
+        ManagerJobDetailView.as_view(),
+        name="manager-job-detail",
+    ),
+    path(
+        "manager/jobs/planning/",
+        ManagerPlanningJobsView.as_view(),
+        name="manager-jobs-planning",
+    ),
 ]

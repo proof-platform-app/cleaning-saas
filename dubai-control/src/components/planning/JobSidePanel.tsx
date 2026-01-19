@@ -1,39 +1,10 @@
 // dubai-control/src/components/planning/JobSidePanel.tsx
 import React from "react";
 import type { PlanningJob } from "@/types/planning";
-import { Camera, ListChecks, ArrowRight } from "lucide-react";
+import { Camera, MapPin, Clock3, User, CheckSquare, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-
-function ProofRow({
-  label,
-  ok,
-  icon,
-  okText,
-  noText,
-}: {
-  label: string;
-  ok: boolean;
-  icon: React.ReactNode;
-  okText: string;
-  noText: string;
-}) {
-  return (
-    <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground">{icon}</span>
-        <span>{label}</span>
-      </div>
-      <div
-        className={
-          ok ? "text-emerald-600 text-sm font-medium" : "text-muted-foreground text-sm"
-        }
-      >
-        {ok ? okText : noText}
-      </div>
-    </div>
-  );
-}
+import { cn } from "@/lib/utils";
 
 export function JobSidePanel({
   job,
@@ -42,10 +13,11 @@ export function JobSidePanel({
   job: PlanningJob;
   onClose: () => void;
 }) {
-  const proof = job.proof ?? {};
-  const before = Boolean(proof.before_photo);
-  const after = Boolean(proof.after_photo);
-  const checklist = Boolean(proof.checklist);
+  const proof = job.proof;
+  const before = proof.before_photo;
+  const after = proof.after_photo;
+  const checklist = proof.checklist;
+
 
   const timeFrom = (job.scheduled_start_time ?? "").slice(0, 5);
   const timeTo = (job.scheduled_end_time ?? "").slice(0, 5);
@@ -53,16 +25,15 @@ export function JobSidePanel({
   const statusLabel =
     job.status === "in_progress"
       ? "In Progress"
-      : job.status.charAt(0).toUpperCase() + job.status.slice(1).replace("_", " ");
+      : job.status.charAt(0).toUpperCase() +
+        job.status.slice(1).replace("_", " ");
 
   const statusClass =
-    job.status === "completed"
-      ? "bg-emerald-100 text-emerald-700"
-      : job.status === "in_progress"
-      ? "bg-blue-100 text-blue-700"
-      : job.status === "issue"
-      ? "bg-red-100 text-red-700"
-      : "bg-slate-100 text-slate-700";
+  job.status === "completed"
+    ? "bg-emerald-100 text-emerald-700"
+    : job.status === "in_progress"
+    ? "bg-blue-100 text-blue-700"
+    : "bg-slate-100 text-slate-700";
 
   return (
     <div className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l border-border z-50">
@@ -80,6 +51,7 @@ export function JobSidePanel({
       <div className="p-5 flex flex-col gap-5 h-[calc(100%-72px)]">
         {/* Scrollable content */}
         <div className="space-y-5 overflow-y-auto pr-1">
+          {/* Status pill */}
           <div>
             <span
               className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${statusClass}`}
@@ -88,9 +60,11 @@ export function JobSidePanel({
             </span>
           </div>
 
+          {/* Location */}
           <div className="space-y-1">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              Location
+            <div className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+              <MapPin className="w-3 h-3" />
+              <span>Location</span>
             </div>
             <div className="font-medium">{job.location.name ?? "—"}</div>
             <div className="text-sm text-muted-foreground">
@@ -98,21 +72,25 @@ export function JobSidePanel({
             </div>
           </div>
 
+          {/* Schedule */}
           <div className="space-y-1">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              Schedule
+            <div className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+              <Clock3 className="w-3 h-3" />
+              <span>Schedule</span>
             </div>
             <div className="font-medium">
-              {timeFrom} – {timeTo}
+              {timeFrom && timeTo ? `${timeFrom} – ${timeTo}` : "—"}
             </div>
             <div className="text-sm text-muted-foreground">
               {job.scheduled_date} (GST UTC+4)
             </div>
           </div>
 
+          {/* Cleaner */}
           <div className="space-y-1">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              Cleaner
+            <div className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+              <User className="w-3 h-3" />
+              <span>Cleaner</span>
             </div>
             <div className="font-medium">{job.cleaner.full_name ?? "—"}</div>
             {job.cleaner.phone ? (
@@ -122,45 +100,80 @@ export function JobSidePanel({
             ) : null}
           </div>
 
-          <div className="pt-2">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+          {/* Proof of work */}
+          <div className="mt-4">
+            <div className="text-xs font-medium tracking-wide uppercase text-muted-foreground mb-3">
               Proof of work
             </div>
 
-            <div className="divide-y divide-border rounded-lg border border-border px-3">
-              <ProofRow
-                label="Before Photo"
-                ok={before}
-                icon={<Camera className="h-4 w-4" />}
-                okText="Captured"
-                noText="Missing"
-              />
-              <ProofRow
-                label="After Photo"
-                ok={after}
-                icon={<Camera className="h-4 w-4" />}
-                okText="Captured"
-                noText="Missing"
-              />
-              <ProofRow
-                label="Checklist"
-                ok={checklist}
-                icon={<ListChecks className="h-4 w-4" />}
-                okText="Complete"
-                noText="Incomplete"
-              />
+            <div className="rounded-2xl border border-border bg-muted/40 divide-y divide-border/60">
+              {/* Before Photo */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <Camera className="w-4 h-4 text-muted-foreground" />
+                  <span>Before Photo</span>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    before ? "text-emerald-500" : "text-muted-foreground"
+                  )}
+                >
+                  {before ? "Captured" : "Pending"}
+                </span>
+              </div>
+
+              {/* After Photo */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <Camera className="w-4 h-4 text-muted-foreground" />
+                  <span>After Photo</span>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    after ? "text-emerald-500" : "text-muted-foreground"
+                  )}
+                >
+                  {after ? "Captured" : "Pending"}
+                </span>
+              </div>
+
+              {/* Checklist */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckSquare className="w-4 h-4 text-muted-foreground" />
+                  <span>Checklist</span>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    checklist ? "text-emerald-500" : "text-muted-foreground"
+                  )}
+                >
+                  {checklist ? "Complete" : "Pending"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Bottom action */}
+        {/* Bottom actions */}
         <div className="pt-2 border-t border-border">
-          <Link to={`/jobs/${job.id}`} className="block">
-            <Button className="w-full">
-              Open Job Details
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
+          <div className="pt-2 flex gap-2">
+            <Link to={`/jobs/${job.id}`} className="flex-1">
+              <Button className="w-full" variant="default">
+                Open Job Details
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
+
+            <Link to={`/jobs/${job.id}`} className="flex-1">
+              <Button className="w-full" variant="outline">
+                Generate PDF
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

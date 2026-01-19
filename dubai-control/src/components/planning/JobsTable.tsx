@@ -1,144 +1,179 @@
 // dubai-control/src/components/planning/JobsTable.tsx
-import React from "react";
+
+import { Link } from "react-router-dom";
+import { ChevronRight, Camera, CameraOff, ListChecks } from "lucide-react";
+
+import { StatusPill } from "@/components/ui/status-pill";
 import type { PlanningJob } from "@/types/planning";
-import { Camera, ListChecks } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type Props = {
-  jobs: PlanningJob[];
-  loading: boolean;
-  onJobClick: (job: PlanningJob) => void;
-};
+function ProofBadges({ job }: { job: PlanningJob }) {
+  // здесь уже приходят нормализованные флаги из API-планнинга
+  const before = Boolean(job.proof?.before_photo);
+  const after = Boolean(job.proof?.after_photo);
+  const list = Boolean(job.proof?.checklist);
 
-function StatusPill({ status }: { status: PlanningJob["status"] }) {
-  const map: Record<string, string> = {
-    scheduled: "bg-slate-100 text-slate-700",
-    in_progress: "bg-blue-100 text-blue-700",
-    completed: "bg-green-100 text-green-700",
-    issue: "bg-red-100 text-red-700",
-  };
-
-  const label =
-    status === "in_progress"
-      ? "In Progress"
-      : status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ");
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-        map[status] ?? "bg-slate-100 text-slate-700"
-      }`}
-    >
-      {label}
-    </span>
-  );
-}
-
-function ProofItem({
-  label,
-  ok,
-  icon,
-}: {
-  label: string;
-  ok: boolean;
-  icon: React.ReactNode;
-}) {
-  return (
-    <span
-      className={[
-        "inline-flex items-center gap-1 text-xs",
-        ok ? "text-emerald-600" : "text-muted-foreground",
-      ].join(" ")}
-    >
-      {icon}
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function ProofCell({ job }: { job: PlanningJob }) {
-  const proof = job.proof ?? {};
-  const before = Boolean(proof.before_photo);
-  const after = Boolean(proof.after_photo);
-  const list = Boolean(proof.checklist);
-
+  // если вообще нет пруфов — показываем просто "—"
   if (!before && !after && !list) {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-sm text-muted-foreground">—</span>;
   }
 
+  const base = "inline-flex items-center gap-1 text-xs font-medium";
+
+  const onCls = "text-emerald-600";
+  const offCls = "text-muted-foreground";
+
+  const BeforeIcon = before ? Camera : CameraOff;
+  const AfterIcon = after ? Camera : CameraOff;
+
   return (
-    <div className="flex items-center gap-3">
-      <ProofItem
-        label="Before"
-        ok={before}
-        icon={<Camera className="h-4 w-4" />}
-      />
-      <ProofItem
-        label="After"
-        ok={after}
-        icon={<Camera className="h-4 w-4" />}
-      />
-      <ProofItem
-        label="List"
-        ok={list}
-        icon={<ListChecks className="h-4 w-4" />}
-      />
+    <div className="flex items-center gap-4">
+      {/* Before */}
+      <span className={cn(base, before ? onCls : offCls)}>
+        <BeforeIcon className="w-4 h-4" />
+        <span>Before</span>
+      </span>
+
+      {/* After */}
+      <span className={cn(base, after ? onCls : offCls)}>
+        <AfterIcon className="w-4 h-4" />
+        <span>After</span>
+      </span>
+
+      {/* Checklist */}
+      <span className={cn(base, list ? onCls : offCls)}>
+        <ListChecks className="w-4 h-4" />
+        <span>List</span>
+      </span>
     </div>
   );
 }
 
-export function JobsTable({ jobs, loading, onJobClick }: Props) {
+type Props = {
+  jobs: PlanningJob[];
+  loading?: boolean;
+  onJobClick?: (job: PlanningJob) => void;
+};
+
+export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted/30">
             <tr>
-              <th className="text-left px-4 py-3">TIME</th>
-              <th className="text-left px-4 py-3">LOCATION</th>
-              <th className="text-left px-4 py-3">CLEANER</th>
-              <th className="text-left px-4 py-3">STATUS</th>
-              <th className="text-left px-4 py-3">PROOF</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Job
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Location
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Cleaner
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Time
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Proof
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Action
+              </th>
             </tr>
           </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td className="px-4 py-6 text-muted-foreground" colSpan={5}>
-                  Loading…
+
+          <tbody className="bg-card divide-y divide-border">
+            {jobs.map((job) => (
+              <tr
+                key={job.id}
+                className="hover:bg-muted/20 cursor-pointer"
+                onClick={() => onJobClick?.(job)}
+              >
+                <td className="px-4 py-4">
+                  <div className="font-medium text-foreground">
+                    JOB-{String(job.id).padStart(3, "0")}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {job.scheduled_date}
+                  </div>
+                </td>
+
+                <td className="px-4 py-4">
+                  <div className="font-medium text-foreground">
+                    {job.location?.name || "—"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {job.location?.address || "—"}
+                  </div>
+                </td>
+
+                <td className="px-4 py-4">
+                  <div className="font-medium text-foreground">
+                    {job.cleaner?.full_name || "—"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {job.cleaner?.phone || "—"}
+                  </div>
+                </td>
+
+                <td className="px-4 py-4 text-foreground">
+                  {job.scheduled_start_time && job.scheduled_end_time
+                    ? `${job.scheduled_start_time} - ${job.scheduled_end_time}`
+                    : "—"}
+                </td>
+
+                <td className="px-4 py-4">
+                  <StatusPill status={job.status as any} />
+                </td>
+
+                <td className="px-4 py-4">
+                  <ProofBadges job={job} />
+                </td>
+
+                <td className="px-4 py-4 text-right">
+                  <Link
+                    to={`/jobs/${job.id}`}
+                    onClick={(e) => {
+                      if (onJobClick) {
+                        e.preventDefault();
+                        onJobClick(job);
+                      }
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                    )}
+                  >
+                    View
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
                 </td>
               </tr>
-            ) : jobs.length === 0 ? (
+            ))}
+
+            {loading && (
               <tr>
-                <td className="px-4 py-6 text-muted-foreground" colSpan={5}>
-                  No jobs.
-                </td>
-              </tr>
-            ) : (
-              jobs.map((job) => (
-                <tr
-                  key={job.id}
-                  className="border-t border-border hover:bg-muted/30 cursor-pointer"
-                  onClick={() => onJobClick(job)}
+                <td
+                  colSpan={7}
+                  className="px-4 py-10 text-center text-muted-foreground"
                 >
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {(job.scheduled_start_time ?? "").slice(0, 5)} –{" "}
-                    {(job.scheduled_end_time ?? "").slice(0, 5)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="font-medium">{job.location.name ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {job.location.address ?? ""}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">{job.cleaner.full_name ?? "—"}</td>
-                  <td className="px-4 py-4">
-                    <StatusPill status={job.status} />
-                  </td>
-                  <td className="px-4 py-4">
-                    <ProofCell job={job} />
-                  </td>
-                </tr>
-              ))
+                  Loading jobs…
+                </td>
+              </tr>
+            )}
+
+            {!loading && jobs.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-4 py-10 text-center text-muted-foreground"
+                >
+                  No jobs
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

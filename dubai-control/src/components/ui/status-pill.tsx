@@ -10,6 +10,7 @@ export type StatusPillStatus =
   | "cancelled"
   | "canceled"
   | "pending"
+  | "issue"
   | string;
 
 type StatusConfig = {
@@ -21,32 +22,37 @@ const STATUS_CONFIG: Record<string, StatusConfig> = {
   scheduled: {
     label: "Scheduled",
     className:
-      "bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700",
+      "bg-slate-50 text-slate-700 border border-slate-200 dark:bg-slate-900/40 dark:text-slate-100 dark:border-slate-700",
   },
   in_progress: {
-    label: "In progress",
+    label: "In Progress",
     className:
-      "bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-700",
+      "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-700",
   },
   completed: {
     label: "Completed",
     className:
-      "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-100 dark:border-emerald-700",
+      "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-100 dark:border-emerald-700",
+  },
+  issue: {
+    label: "Issue",
+    className:
+      "bg-red-50 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-100 dark:border-red-700",
   },
   cancelled: {
     label: "Cancelled",
     className:
-      "bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-100 dark:border-red-700",
+      "bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-100 dark:border-rose-700",
   },
   canceled: {
     label: "Cancelled",
     className:
-      "bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/30 dark:text-red-100 dark:border-red-700",
+      "bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-100 dark:border-rose-700",
   },
   pending: {
     label: "Pending",
     className:
-      "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700",
+      "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700",
   },
 };
 
@@ -69,7 +75,7 @@ export function StatusPill({ status, className, ...props }: StatusPillProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap",
         config.className,
         className
       )}
