@@ -1,38 +1,38 @@
-# API Contracts (DEV) — Cleaning SaaS
+API Contracts (DEV) — Cleaning SaaS
 
-Этот документ фиксирует контракт между Backend (Django / DRF) и Frontend (React / Lovable).  
-Контракт считается источником правды для фронтенда.
+Документ фиксирует контракт между Backend (Django / DRF) и Frontend (React / Vite / Mobile).
+Считаем его источником правды для фронта.
 
-Backend: Django REST Framework  
-Base URL (dev): `http://127.0.0.1:8001`  
+Backend: Django REST Framework
 
-Auth header (везде после логина):  
-`Authorization: Token <TOKEN>`
+Base URL (dev): http://127.0.0.1:8001
 
-DEV users:
+Во всех запросах после логина:
+Authorization: Token <TOKEN>
 
-- Cleaner: `cleaner@test.com` / `Test1234!`
-- Manager: `manager@test.com` / `Test1234!`
+DEV-пользователи
 
----
+Cleaner: cleaner@test.com / Test1234!
 
-## 1. Auth
+Manager: manager@test.com / Test1234!
 
-### 1.1 Cleaner login
+(Эти же данные зашиты в dev-конфиг фронтов.)
 
-**POST** `/api/auth/login/`  
+1. Auth
+1.1. Логин (общий эндпоинт, используется cleaner)
 
-Request (JSON):
+POST /api/auth/login/
 
-```json
+Request (JSON)
+
 {
   "email": "cleaner@test.com",
   "password": "Test1234!"
 }
-Response 200 OK:
 
-json
-Копировать код
+
+Response 200 OK
+
 {
   "token": "string",
   "user_id": 3,
@@ -40,29 +40,43 @@ json
   "full_name": "Dev Cleaner",
   "role": "cleaner"
 }
-Общие правила:
 
-При пустом email или password → 400 с { "detail": "Email and password are required." }
 
-При неверном логине/пароле → 401 с { "detail": "User not found" } или { "detail": "Invalid credentials" }
+Правила / ошибки
 
-Все последующие запросы идут с заголовком Authorization: Token <token>
+Пустой email или password → 400
 
-1.2 Manager login
+{ "detail": "Email and password are required." }
+
+
+Неверная пара логин/пароль → 401
+
+{ "detail": "User not found" }
+
+
+или
+
+{ "detail": "Invalid credentials" }
+
+
+Все последующие запросы идут с заголовком:
+
+Authorization: Token <token>
+
+1.2. Логин менеджера
+
 POST /api/manager/auth/login/
 
-Request (JSON):
+Request (JSON)
 
-json
-Копировать код
 {
   "email": "manager@test.com",
   "password": "Test1234!"
 }
-Response 200 OK:
 
-json
-Копировать код
+
+Response 200 OK
+
 {
   "token": "string",
   "user_id": 2,
@@ -70,18 +84,26 @@ json
   "full_name": "Dev Manager",
   "role": "manager"
 }
+
+
+Правила / ошибки — те же, что и для /api/auth/login/.
+
 2. Cleaner API
+
 Все cleaner-эндпоинты требуют:
+
 Authorization: Token <CLEANER_TOKEN>
-и роль пользователя role = "cleaner".
 
-2.1 GET /api/jobs/today/
-Описание: список сегодняшних job для залогиненного клинера.
+role = "cleaner"
 
-Response 200 OK (array, ПЛОСКИЙ контракт):
+2.1. Today Jobs (список задач клинера на сегодня)
 
-json
-Копировать код
+GET /api/jobs/today/
+
+Список сегодняшних job для залогиненного клинера.
+
+Response 200 OK (ПЛОСКИЙ контракт):
+
 [
   {
     "id": 5,
@@ -92,39 +114,44 @@ json
     "status": "scheduled"
   }
 ]
-Замечания по контракту:
 
-поле location__name приходит строкой, без вложенного объекта location;
 
-дополнительных полей (checklist / photos / cleaner и т.п.) тут нет;
+Фиксация:
 
-фронт / мобильное приложение не должны ожидать location.id, address и т.п. в этом эндпоинте;
+location__name — строка, нет вложенного location.
 
-подробная информация по job берётся только из GET /api/jobs/<id>/.
+НЕТ checklist, photos, cleaner, location.id, address и т.п.
 
-Минимум, на что может опираться фронт:
+Подробная инфа по job — только из GET /api/jobs/<id>/.
 
-id — идентификатор job, уходит в GET /api/jobs/<id>/
+Фронт/мобилка могут опираться минимум на:
 
-location__name — заголовок карточки
+id — идентификатор, уходит в GET /api/jobs/<id>/.
 
-scheduled_date, scheduled_start_time, scheduled_end_time — отображение даты/времени
+location__name — заголовок карточки.
 
-status (scheduled / in_progress / completed)
+scheduled_date, scheduled_start_time, scheduled_end_time — дата/время.
 
-2.2 GET /api/jobs/<id>/
-Детали конкретного job.
+status — "scheduled" | "in_progress" | "completed".
 
-Response 200 OK:
+2.2. Job Detail (детали задачи для клинера)
 
-json
-Копировать код
+GET /api/jobs/<id>/
+
+Детальная информация по конкретной job.
+
+Response 200 OK (концептуальная форма):
+
 {
   "id": 10,
   "status": "in_progress",
   "scheduled_date": "2026-01-15",
   "scheduled_start_time": "09:00:00",
   "scheduled_end_time": "11:00:00",
+
+  "actual_start_time": "2026-01-15T09:05:12+04:00",
+  "actual_end_time": null,
+
   "location": {
     "id": 5,
     "name": "Marina Heights Tower",
@@ -132,247 +159,348 @@ json
     "latitude": 25.089123,
     "longitude": 55.145678
   },
+
   "cleaner": {
     "id": 3,
     "full_name": "Dev Cleaner",
     "phone": "+10000000000"
   },
+
   "check_events": [
     {
       "event_type": "check_in",
-      "event_timestamp": "2026-01-15T09:05:12+04:00",
+      "created_at": "2026-01-15T09:05:12+04:00",
       "latitude": 25.08912,
       "longitude": 55.14567
     }
   ],
-  "photos": {
-    "before": {
-      "url": "https://cdn.example.com/.../before.jpg",
+
+  "photos": [
+    {
+      "id": 12,
+      "photo_type": "before",
+      "file_url": "https://cdn.example.com/.../before.jpg",
       "latitude": 25.08912,
       "longitude": 55.14567,
-      "photo_timestamp": "2026-01-15T09:06:00+04:00"
-    },
-    "after": null
-  },
+      "photo_timestamp": "2026-01-15T09:06:00+04:00",
+      "exif_missing": false
+    }
+  ],
+
   "checklist_items": [
     {
       "id": 101,
       "text": "Vacuum living room",
       "order_index": 0,
-      "is_completed": false
+      "is_completed": false,
+      "is_required": true
     },
     {
       "id": 102,
       "text": "Clean bathroom",
       "order_index": 1,
-      "is_completed": true
+      "is_completed": true,
+      "is_required": false
     }
   ]
 }
+
+
+Гарантии / особенности:
+
+actual_start_time, actual_end_time могут быть null — это нормально.
+
+photos может быть пустым массивом.
+
+check_events может быть пустым массивом.
+
+check_events возвращаются отсортированными по created_at ASC — фронт порядок не меняет.
+
 Фронту важно:
 
-status — контролировать доступность кнопок (check-in/out, photos)
+status — управляет доступностью кнопок (check-in/out, upload photo).
 
-checklist_items — рисовать чеклист
+checklist_items — источник чек-листа.
 
-photos.before / photos.after — показывать превью
+photos — массив; фронт сам мапит в слоты before / after по photo_type.
 
-check_events — показывать факт check-in/out (опционально)
+check_events — можно строить таймлайн check-in/out.
 
-2.3 POST /api/jobs/<id>/check-in/
-Body (JSON):
+2.3. Check-in
 
-json
-Копировать код
+POST /api/jobs/<id>/check-in/
+
+Request (JSON):
+
 {
   "latitude": 25.08912,
   "longitude": 55.14567
 }
-Response 200 OK (пример целевого контракта):
 
-json
-Копировать код
+
+Response 200 OK (пример):
+
 {
   "status": "in_progress",
   "check_in": {
-    "event_timestamp": "2026-01-15T09:05:12+04:00",
+    "created_at": "2026-01-15T09:05:12+04:00",
     "latitude": 25.08912,
     "longitude": 55.14567
   }
 }
-Правила:
 
-Только при status = "scheduled".
 
-GPS расстояние ≤ 100 м от локации.
+Правила (backend):
 
-При ошибке — 400 / 403 с понятным текстом в поле detail (фронт показывает как alert/toast).
+Роль — только cleaner.
 
-2.4 POST /api/jobs/<id>/check-out/
-Body (JSON):
+job принадлежит этому cleaner.
 
-json
-Копировать код
+status до вызова — только "scheduled".
+
+Расстояние до location ≤ 100 м.
+
+Ошибки:
+
+400 — далеко от точки / нет координат / другой бизнес-чек.
+
+403 — чужая job / неверная роль.
+
+409 — неверный статус (например, уже in_progress или completed).
+
+Фронт: показывает detail как toast/alert, статус локально не меняет.
+
+2.4. Check-out
+
+POST /api/jobs/<id>/check-out/
+
+Request (JSON):
+
 {
   "latitude": 25.08913,
   "longitude": 55.14568
 }
+
+
 Response 200 OK (пример):
 
-json
-Копировать код
 {
   "status": "completed",
   "check_out": {
-    "event_timestamp": "2026-01-15T10:58:03+04:00",
+    "created_at": "2026-01-15T10:58:03+04:00",
     "latitude": 25.08913,
     "longitude": 55.14568
   }
 }
-Правила:
 
-Только при status = "in_progress".
 
-Все обязательные checklist-пункты должны быть is_completed = true.
+Правила (backend):
 
-GPS расстояние ≤ 100 м.
+status до вызова — строго "in_progress".
 
-2.5 Checklist toggle
+Все required пункты чеклиста — is_completed = true.
+
+Есть и before, и after фото.
+
+Расстояние до location ≤ 100 м.
+
+Ошибки аналогичны: 400 (бизнес-ошибка), 403, 409.
+
+2.5. Checklist toggle (побитовая правка одного пункта)
+
 POST /api/jobs/<job_id>/checklist/<item_id>/toggle/
 
-Body может быть пустым {} или:
+Body:
 
-json
-Копировать код
+{}
+
+
+или
+
 {
   "is_completed": true
 }
+
+
 Response 200 OK:
 
-json
-Копировать код
 {
   "id": 101,
   "is_completed": true
 }
-Фронту достаточно обновить чекбокс по id.
 
-2.6 Checklist bulk
+
+Фронту достаточно по id обновить состояние чекбокса.
+
+2.6. Checklist bulk (массовое обновление)
+
 POST /api/jobs/<job_id>/checklist/bulk/
 
-Body:
+Request:
 
-json
-Копировать код
 {
   "items": [
     { "id": 101, "is_completed": true },
     { "id": 102, "is_completed": true }
   ]
 }
+
+
 Response 200 OK:
 
-json
-Копировать код
 {
   "updated_count": 2
 }
-2.7 Photos
-2.7.1 GET /api/jobs/<id>/photos/
-Целевой контракт (удобный для фронта):
 
-json
-Копировать код
-{
-  "before": {
-    "url": "https://cdn.example.com/.../before.jpg",
+2.7. Photos
+2.7.1. Чтение фото job
+
+На практике фронту достаточно того, что GET /api/jobs/<id>/ уже отдаёт массив photos (см. 2.2). Отдельный GET /api/jobs/<id>/photos/ не обязателен для работы UI.
+
+Форма в ответе job detail:
+
+"photos": [
+  {
+    "id": 12,
+    "photo_type": "before",
+    "file_url": "https://cdn.example.com/.../before.jpg",
     "latitude": 25.08912,
     "longitude": 55.14567,
-    "photo_timestamp": "2026-01-15T09:06:00+04:00"
+    "photo_timestamp": "2026-01-15T09:06:00+04:00",
+    "exif_missing": false
   },
-  "after": {
-    "url": "https://cdn.example.com/.../after.jpg",
+  {
+    "id": 13,
+    "photo_type": "after",
+    "file_url": "https://cdn.example.com/.../after.jpg",
     "latitude": 25.08913,
     "longitude": 55.14568,
-    "photo_timestamp": "2026-01-15T10:57:00+04:00"
+    "photo_timestamp": "2026-01-15T10:57:00+04:00",
+    "exif_missing": true
   }
-}
-Текущая реализация может возвращать массив объектов; контракт фиксирует, что фронту достаточно привести это к виду before/after.
+]
 
-2.7.2 POST /api/jobs/<id>/photos/
-Multipart form-data:
+
+Фронт:
+
+фильтрует по photo_type → слоты before / after;
+
+использует file_url для превью;
+
+может показывать индикатор exif_missing.
+
+2.7.2. Загрузка фото
+
+POST /api/jobs/<id>/photos/
+Content-Type: multipart/form-data
+
+Поля формы:
 
 photo_type: "before" или "after"
 
 file: бинарник (image)
 
-Response 201 Created:
+Response 201 Created (пример):
 
-json
-Копировать код
 {
+  "id": 12,
   "photo_type": "before",
-  "url": "https://cdn.example.com/.../before.jpg"
+  "file_url": "https://cdn.example.com/.../before.jpg",
+  "latitude": 25.08912,
+  "longitude": 55.14567,
+  "photo_timestamp": "2026-01-15T09:06:00+04:00",
+  "exif_missing": false
 }
-Правила:
 
-Только при status = "in_progress".
-
-"after" только если "before" уже есть.
-
-Максимум по одному фото каждого типа.
-
-Если в EXIF есть координаты — они должны быть в радиусе ≤ 100 м от локации.
-
-При попытке загрузить второе фото того же типа → 409 с { "detail": "<type> photo already exists for this job." }.
-
-2.7.3 DELETE /api/jobs/<id>/photos/<photo_type>/
-photo_type = before | after.
-
-Response 204 No Content (empty body).
 
 Правила:
 
 Только при status = "in_progress".
 
-Нельзя удалить before, если есть after.
+"after" можно загрузить только если уже есть "before".
 
-При некорректном photo_type → 400 с { "detail": "Invalid photo_type. Use 'before' or 'after'." }.
+Максимум 1 before и 1 after на job.
 
-2.8 PDF report
+Если в EXIF есть координаты:
+
+они проверяются на расстояние ≤ 100 м от location.
+
+Если EXIF нет:
+
+загрузка разрешена,
+
+в ответе может быть exif_missing = true.
+
+Ошибки:
+
+409 — попытка загрузить второе фото того же типа, или after без before.
+
+400 — слишком далеко по EXIF.
+
+403 — не тот cleaner / не та роль.
+
+2.7.3. Удаление фото
+
+DELETE /api/jobs/<id>/photos/<photo_type>/
+где photo_type = "before" | "after"
+
+Response 204 No Content
+
+Правила:
+
+Только при status = "in_progress".
+
+Нельзя удалить before, если уже есть after.
+
+Некорректный photo_type → 400:
+
+{ "detail": "Invalid photo_type. Use 'before' or 'after'." }
+
+
+(Удаление сейчас используется минимально, но контракт зафиксирован.)
+
+2.8. PDF report (факт, как сейчас)
+
 POST /api/jobs/<id>/report/pdf/
 
-Body — может быть пустым {}.
+Body — пустой {} или вообще без тела.
 
-Response (целевой контракт, удобный для фронта):
+Фактическое поведение:
 
-json
-Копировать код
-{
-  "file_id": 55,
-  "url": "https://cdn.example.com/.../job-10-report.pdf",
-  "generated_at": "2026-01-15T11:00:00+04:00"
-}
-Фронт может:
+Backend возвращает PDF-файл как бинарный ответ:
 
-открыть url в новой вкладке,
+Content-Type: application/pdf
 
-или показать кнопку “Download PDF”.
+часто с Content-Disposition: attachment; filename="job-<id>-report.pdf"
 
-(Текущая реализация может сразу отдавать PDF-стрим; этот контракт фиксирует желаемый формат для API-ответа.)
+Фронт:
+
+Mobile — открывает / шарит PDF через нативные механизмы.
+
+Web (Manager Portal) — через Blob создаёт ссылку и триггерит загрузку.
+
+Важно:
+
+Эндпоинт идемпотентный — можно вызывать многократно.
+
+Сейчас нет JSON-обёртки (file_id, url, generated_at), это может появиться в будущем как отдельный слой, но не часть текущего контракта.
 
 3. Manager API
-Все manager-эндпоинты требуют:
-Authorization: Token <MANAGER_TOKEN>
-и роль пользователя role = "manager".
 
-3.1 GET /api/manager/jobs/today/
+Все manager-эндпоинты требуют:
+
+Authorization: Token <MANAGER_TOKEN>
+
+role = "manager"
+
+3.1. Today Jobs (менеджер)
+
+GET /api/manager/jobs/today/
+
 Список job по компании менеджера.
 
-Response 200 OK:
+Response 200 OK (концептуально):
 
-json
-Копировать код
 [
   {
     "id": 10,
@@ -380,35 +508,55 @@ json
     "scheduled_date": "2026-01-15",
     "scheduled_start_time": "09:00:00",
     "scheduled_end_time": "11:00:00",
+
     "location": {
       "id": 5,
       "name": "Marina Heights Tower",
       "address": "Dubai Marina, Dubai, UAE"
     },
+
     "cleaner": {
       "id": 3,
       "full_name": "Dev Cleaner"
     },
+
     "has_before_photo": true,
-    "has_after_photo": false,
-    "all_checklist_completed": false
+    "has_after_photo": false
   }
 ]
-Менеджерский фронт может строить дашборд по статусам на этом ответе.
 
-3.2 GET /api/manager/jobs/<id>/
-Детали job для менеджера (похоже на cleaner detail + немного больше инфы).
 
-Response 200 OK:
+Фронт (Manager Portal):
 
-json
-Копировать код
+строит список задач с полями:
+
+объект,
+
+дата,
+
+время,
+
+клинер,
+
+статус,
+
+факт наличия фото.
+
+3.2. Job Detail (менеджер)
+
+GET /api/manager/jobs/<id>/
+
+Детали job для менеджера (аналог cleaner detail + акценты под контроль).
+
+Response 200 OK (концептуально):
+
 {
   "id": 10,
   "status": "completed",
   "scheduled_date": "2026-01-15",
   "scheduled_start_time": "09:00:00",
   "scheduled_end_time": "11:00:00",
+
   "location": {
     "id": 5,
     "name": "Marina Heights Tower",
@@ -416,67 +564,123 @@ json
     "latitude": 25.089123,
     "longitude": 55.145678
   },
+
   "cleaner": {
     "id": 3,
     "full_name": "Dev Cleaner",
     "phone": "+10000000000"
   },
+
   "check_events": [
     {
       "event_type": "check_in",
-      "event_timestamp": "2026-01-15T09:05:12+04:00",
+      "created_at": "2026-01-15T09:05:12+04:00",
       "latitude": 25.08912,
       "longitude": 55.14567
     },
     {
       "event_type": "check_out",
-      "event_timestamp": "2026-01-15T10:58:03+04:00",
+      "created_at": "2026-01-15T10:58:03+04:00",
       "latitude": 25.08913,
       "longitude": 55.14568
     }
   ],
-  "photos": {
-    "before": {
-      "url": "https://cdn.example.com/.../before.jpg"
+
+  "photos": [
+    {
+      "id": 12,
+      "photo_type": "before",
+      "file_url": "https://cdn.example.com/.../before.jpg",
+      "photo_timestamp": "2026-01-15T09:06:00+04:00"
     },
-    "after": {
-      "url": "https://cdn.example.com/.../after.jpg"
+    {
+      "id": 13,
+      "photo_type": "after",
+      "file_url": "https://cdn.example.com/.../after.jpg",
+      "photo_timestamp": "2026-01-15T10:57:00+04:00"
     }
-  },
+  ],
+
   "checklist_items": [
     {
       "id": 101,
       "text": "Vacuum living room",
       "order_index": 0,
-      "is_completed": true
+      "is_completed": true,
+      "is_required": true
     }
-  ]
+  ],
+
+  "notes": null
 }
-Менеджерский фронт может на этом строить:
 
-дашборд по status,
 
-detail view с фотками и чеклистом,
+Manager Portal на этом:
 
-кнопку “Generate PDF” (см. 2.8).
+показывает:
+
+статус,
+
+расписание,
+
+объект,
+
+клинера,
+
+чек-лист,
+
+фото (before/after),
+
+таймлайн.
+
+даёт кнопки:
+
+Generate PDF / Download PDF (через POST /api/jobs/<id>/report/pdf/).
 
 4. Ошибки (общий паттерн)
-В случае ошибок API возвращает:
 
-json
-Копировать код
+Во всех эндпоинтах ошибки отдаются в едином формате:
+
 {
   "detail": "Error message here"
 }
+
+
+Типичные коды:
+
+400 Bad Request — бизнес-ошибка (GPS далеко, не все пункты чеклиста закрыты и т.п.).
+
+401 Unauthorized — нет токена / токен неверен.
+
+403 Forbidden — не та роль / чужая job.
+
+404 Not Found — job не найдена / не принадлежит пользователю.
+
+409 Conflict — неверный статус для операции (double check-in, double photo upload и т.п.).
+
 Фронт:
 
 читает detail,
 
-показывает как toast / баннер.
+показывает пользователю,
 
-5. Notes for Frontend
-Все даты/время в ответах — ISO 8601. Часть полей может быть с таймзоной (например, +04:00), часть — в локальном формате (HH:MM:SS).
+не пытается парсить текст на бизнес-логику.
 
-Backend может добавлять новые поля в ответы, но существующие поля и их смысл считаются стабильными.
+5. Общие заметки для фронта
 
-Любое ломающее изменение в структуре ответа должно сначала попасть в этот документ и только потом — в код.
+Все даты/время — ISO 8601 (2026-01-15, 2026-01-15T09:05:12+04:00)
+Время без TZ (HH:MM:SS) интерпретируем как локальное для компании.
+
+Backend может добавлять новые поля, но:
+
+существующие поля и их смысл считаются стабильными,
+
+ломающие изменения должны сперва попасть в этот документ.
+
+Backend = истина:
+
+фронт не меняет статусы сам,
+
+не пересчитывает бизнес-правила,
+
+всё делает через API.
