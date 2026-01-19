@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Briefcase,
+  CalendarDays,
   PlusCircle,
   Settings,
   LogOut,
@@ -11,6 +12,7 @@ import {
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Jobs", href: "/jobs", icon: Briefcase },
+  { name: "Job Planning", href: "/planning", icon: CalendarDays },
   { name: "Create Job", href: "/create-job", icon: PlusCircle },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -24,9 +26,13 @@ export function AppSidebar() {
       <div className="flex h-16 items-center px-6 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-semibold text-sm">SC</span>
+            <span className="text-primary-foreground font-semibold text-sm">
+              SC
+            </span>
           </div>
-          <span className="font-semibold text-foreground tracking-tight">SparkClean</span>
+          <span className="font-semibold text-foreground tracking-tight">
+            SparkClean
+          </span>
         </div>
       </div>
 

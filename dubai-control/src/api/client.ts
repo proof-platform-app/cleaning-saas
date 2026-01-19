@@ -1,5 +1,3 @@
-// dubai-control/src/api/client.ts
-
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
 
@@ -323,11 +321,13 @@ function buildJobTimeline(raw: any): JobTimelineStep[] {
 
   const photosArr = Array.isArray(raw.photos) ? raw.photos : [];
   const beforePhoto =
-    photosArr.find((p: any) => (p.photo_type || "").toString().toLowerCase() === "before") ||
-    null;
+    photosArr.find(
+      (p: any) => (p.photo_type || "").toString().toLowerCase() === "before"
+    ) || null;
   const afterPhoto =
-    photosArr.find((p: any) => (p.photo_type || "").toString().toLowerCase() === "after") ||
-    null;
+    photosArr.find(
+      (p: any) => (p.photo_type || "").toString().toLowerCase() === "after"
+    ) || null;
 
   const checklist = normalizeChecklist(raw);
   const checklistCompleted =
@@ -543,3 +543,30 @@ export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
 
 // ---- Backward-compatible exports ----
 export const fetchManagerJobsToday = getManagerTodayJobs;
+
+// ---- apiClient facade для нового кода (JobPlanning и т.п.) ----
+
+type ApiClientOptions = Omit<RequestInit, "method" | "body">;
+
+export const apiClient = {
+  async get<T = any>(path: string, options: ApiClientOptions = {}): Promise<{ data: T }> {
+    await loginManager();
+    const data = await apiFetch<T>(path, { ...options, method: "GET" });
+    return { data };
+  },
+
+  async post<T = any>(
+    path: string,
+    body?: any,
+    options: ApiClientOptions = {}
+  ): Promise<{ data: T }> {
+    await loginManager();
+    const init: RequestInit = {
+      ...options,
+      method: "POST",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    };
+    const data = await apiFetch<T>(path, init);
+    return { data };
+  },
+};
