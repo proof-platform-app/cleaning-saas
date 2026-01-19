@@ -10,6 +10,8 @@ import {
   Button,
   Alert,
   Pressable,
+  Platform,
+  Linking,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -110,6 +112,30 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   // ----- нормализация данных из backend -----
 
   const locationName: string = job.location_name ?? "Unknown location";
+
+  const handleNavigate = async () => {
+    try {
+      const query = encodeURIComponent(locationName || "Job location");
+
+      const url =
+        Platform.OS === "ios"
+          ? `maps:0,0?q=${query}`
+          : `https://www.google.com/maps/search/?api=1&query=${query}`;
+
+      const canOpen = await Linking.canOpenURL(url);
+      if (!canOpen) {
+        Alert.alert("Navigation", "Cannot open maps on this device.");
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch (e: any) {
+      Alert.alert(
+        "Navigation",
+        e?.message || "Failed to open maps application."
+      );
+    }
+  };
 
   const status: string = job.status ?? "scheduled";
   const isScheduled = status === "scheduled";
@@ -256,7 +282,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           const current = next.find((it) => it.id === itemId);
           const isCompleted = !!current?.is_completed;
 
-          const toggled = await toggleJobChecklistItem(jobId, itemId, isCompleted);
+          const toggled = await toggleJobChecklistItem(
+            jobId,
+            itemId,
+            isCompleted
+          );
 
           setChecklist((list) =>
             list.map((it) =>
@@ -297,23 +327,46 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-
-    if (result.canceled) return;
-
-    const asset = result.assets?.[0];
-    if (!asset?.uri) return;
-
-    setSubmitting(true);
     try {
+      // 1) Права на галерею
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission denied",
+          "Permission to access photos was denied."
+        );
+        return;
+      }
+
+      // 2) Выбор фото
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: false,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset?.uri) {
+        Alert.alert("Upload failed", "No image selected.");
+        return;
+      }
+
+      setSubmitting(true);
+
+      // 3) Вызов нашего API-обёртки
       await uploadJobPhoto(jobId, type, asset.uri);
 
+      // 4) Обновляем фотки в UI
       const refreshed = await fetchJobPhotos(jobId);
       setPhotos(refreshed ?? []);
-    } catch (e) {
+    } catch (e: any) {
       const msg =
         e instanceof Error ? e.message : "Photo upload request failed";
       console.error("[JobDetails] photo upload error:", msg);
@@ -386,7 +439,16 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       {/* Address */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Address</Text>
-        <Text style={styles.sectionText}>—</Text>
+
+        <Text style={styles.sectionText}>{locationName}</Text>
+
+        <View style={{ marginTop: 8 }}>
+          <Button
+            title="Navigate"
+            onPress={handleNavigate}
+            disabled={submitting}
+          />
+        </View>
       </View>
 
       {/* Progress */}
@@ -532,7 +594,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
                   {item.is_required ? " *" : ""}
                 </Text>
                 <Text
-                  style={[styles.checklistMeta, isDone && styles.checklistMetaDone]}
+                  style={[
+                    styles.checklistMeta,
+                    isDone && styles.checklistMetaDone,
+                  ]}
                 >
                   {savingItemId === item.id
                     ? "Saving..."

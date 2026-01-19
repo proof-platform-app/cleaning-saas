@@ -10,6 +10,13 @@
 - не городить костыли при будущем росте продукта.
 
 ---
+## 0. Analytics — UI first, backend later
+
+This analytics dashboard is a semantic reference.
+Metrics are not implemented yet.
+Backend endpoints will be designed strictly based on these semantics.
+No premature optimization or event tracking.
+
 
 ## 1. Цель аналитики
 
