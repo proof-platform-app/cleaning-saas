@@ -1,3 +1,4 @@
+// dubai-control/src/components/planning/CreateJobDrawer.tsx
 import React, { useEffect, useState, FormEvent } from "react";
 import type { PlanningJob } from "@/types/planning";
 import {
@@ -14,7 +15,12 @@ type Props = {
   onJobCreated: (job: PlanningJob) => void;
 };
 
-export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Props) {
+export function CreateJobDrawer({
+  open,
+  onClose,
+  defaultDate,
+  onJobCreated,
+}: Props) {
   const [meta, setMeta] = useState<PlanningMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -24,46 +30,14 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
   const [endTime, setEndTime] = useState("12:00");
   const [locationId, setLocationId] = useState<number | null>(null);
   const [cleanerId, setCleanerId] = useState<number | null>(null);
-  const [checklistTemplateId, setChecklistTemplateId] = useState<number | null>(null);
+  const [checklistTemplateId, setChecklistTemplateId] = useState<number | null>(
+    null,
+  );
 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Когда открываем дровер — подгружаем мету и сбрасываем форму
-  useEffect(() => {
-    if (!open) return;
-
-    setDate(defaultDate);
-    setSubmitError(null);
-
-    if (!meta && !metaLoading) {
-      setMetaLoading(true);
-      setMetaError(null);
-      fetchPlanningMeta()
-        .then((data) => {
-          setMeta(data);
-          // авто-проставим первые значения, чтобы не кликать лишний раз
-          if (data.locations.length > 0) {
-            setLocationId(data.locations[0].id);
-          }
-          if (data.cleaners.length > 0) {
-            setCleanerId(data.cleaners[0].id);
-          }
-          if (data.checklist_templates.length > 0) {
-            setChecklistTemplateId(data.checklist_templates[0].id);
-          } else {
-            setChecklistTemplateId(null);
-          }
-        })
-        .catch((err: any) => {
-          console.error("Failed to load planning meta", err);
-          setMetaError("Failed to load options. Please try again later.");
-        })
-        .finally(() => setMetaLoading(false));
-    }
-  }, [open, defaultDate, meta, metaLoading]);
-
-  if (!open) return null;
+  const canInteract = !metaLoading && !submitting;
 
   function normalizeTimeToSeconds(value: string): string {
     // "09:00" -> "09:00:00"
@@ -73,12 +47,105 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
     return value;
   }
 
+  function parseTimeToMinutes(value: string): number | null {
+    if (!value || !value.includes(":")) return null;
+    const [h, m] = value.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    return h * 60 + m;
+  }
+
+  const loadMeta = () => {
+    if (metaLoading) return;
+
+    setMetaLoading(true);
+    setMetaError(null);
+
+    fetchPlanningMeta()
+      .then((data) => {
+        setMeta(data);
+
+        // авто-проставим первые значения, чтобы не кликать лишний раз
+        if (data.locations.length > 0) {
+          setLocationId(data.locations[0].id);
+        } else {
+          setLocationId(null);
+        }
+
+        if (data.cleaners.length > 0) {
+          setCleanerId(data.cleaners[0].id);
+        } else {
+          setCleanerId(null);
+        }
+
+        if (data.checklist_templates.length > 0) {
+          setChecklistTemplateId(data.checklist_templates[0].id);
+        } else {
+          setChecklistTemplateId(null);
+        }
+      })
+      .catch((err: any) => {
+        console.error("Failed to load planning meta", err);
+        setMetaError("Failed to load options. Please try again later.");
+      })
+      .finally(() => setMetaLoading(false));
+  };
+
+  // Когда открываем дровер — подгружаем мету и сбрасываем часть формы
+  useEffect(() => {
+    if (!open) return;
+
+    setDate(defaultDate);
+    setSubmitError(null);
+
+    // При каждом открытии слегка сбросим времена и ошибки,
+    // но мету не перезагружаем, если она уже есть и без ошибок.
+    setStartTime("09:00");
+    setEndTime("12:00");
+
+    if (!meta && !metaLoading && !metaError) {
+      loadMeta();
+    }
+  }, [open, defaultDate, meta, metaLoading, metaError]);
+
+  if (!open) return null;
+
+  const handleClose = () => {
+    if (submitting) return; // не даём закрыть во время сабмита
+    onClose();
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!meta || metaLoading) return;
 
-    if (!date || !locationId || !cleanerId || !startTime || !endTime) {
-      setSubmitError("Please fill in all required fields.");
+    // Базовая валидация
+    if (!date) {
+      setSubmitError("Date is required.");
+      return;
+    }
+    if (!locationId) {
+      setSubmitError("Location is required.");
+      return;
+    }
+    if (!cleanerId) {
+      setSubmitError("Cleaner is required.");
+      return;
+    }
+    if (!startTime || !endTime) {
+      setSubmitError("Start time and end time are required.");
+      return;
+    }
+
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
+
+    if (startMinutes == null || endMinutes == null) {
+      setSubmitError("Invalid time format.");
+      return;
+    }
+
+    if (endMinutes <= startMinutes) {
+      setSubmitError("End time must be later than start time.");
       return;
     }
 
@@ -111,25 +178,39 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/20" onClick={handleClose} />
       <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l border-border flex flex-col">
         <div className="p-5 border-b border-border flex items-center justify-between">
           <div className="font-semibold">Create job</div>
           <button
             className="text-sm text-muted-foreground hover:text-foreground"
-            onClick={onClose}
+            onClick={handleClose}
+            disabled={submitting}
           >
             Close
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {metaLoading && (
+          {metaLoading && !meta && (
             <p className="text-sm text-muted-foreground">Loading options…</p>
           )}
 
           {metaError && (
-            <p className="text-sm text-red-500 mb-4">{metaError}</p>
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+              <p className="text-sm text-destructive">
+                {metaError}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={loadMeta}
+                disabled={metaLoading}
+              >
+                Retry
+              </Button>
+            </div>
           )}
 
           {meta && (
@@ -144,6 +225,7 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  disabled={!canInteract}
                 />
               </div>
 
@@ -158,6 +240,7 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
+                    disabled={!canInteract}
                   />
                 </div>
                 <div className="space-y-1">
@@ -169,6 +252,7 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
+                    disabled={!canInteract}
                   />
                 </div>
               </div>
@@ -183,9 +267,10 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                   value={locationId ?? ""}
                   onChange={(e) =>
                     setLocationId(
-                      e.target.value ? Number(e.target.value) : null
+                      e.target.value ? Number(e.target.value) : null,
                     )
                   }
+                  disabled={!canInteract}
                 >
                   {meta.locations.length === 0 && (
                     <option value="">No locations available</option>
@@ -208,9 +293,10 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                   value={cleanerId ?? ""}
                   onChange={(e) =>
                     setCleanerId(
-                      e.target.value ? Number(e.target.value) : null
+                      e.target.value ? Number(e.target.value) : null,
                     )
                   }
+                  disabled={!canInteract}
                 >
                   {meta.cleaners.length === 0 && (
                     <option value="">No cleaners available</option>
@@ -233,9 +319,10 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                   value={checklistTemplateId ?? ""}
                   onChange={(e) =>
                     setChecklistTemplateId(
-                      e.target.value ? Number(e.target.value) : null
+                      e.target.value ? Number(e.target.value) : null,
                     )
                   }
+                  disabled={!canInteract}
                 >
                   {meta.checklist_templates.length === 0 && (
                     <option value="">No templates (optional)</option>
@@ -261,7 +348,7 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
               <div className="pt-2 flex gap-2">
                 <Button
                   type="submit"
-                  disabled={submitting || metaLoading}
+                  disabled={submitting || metaLoading || !meta}
                   className="flex-1"
                 >
                   {submitting ? "Creating…" : "Create job"}
@@ -269,13 +356,20 @@ export function CreateJobDrawer({ open, onClose, defaultDate, onJobCreated }: Pr
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="flex-1"
+                  disabled={submitting}
                 >
                   Cancel
                 </Button>
               </div>
             </form>
+          )}
+
+          {!meta && !metaLoading && !metaError && (
+            <p className="text-sm text-muted-foreground">
+              No meta loaded. Try re-opening drawer or press Retry.
+            </p>
           )}
         </div>
       </div>

@@ -1,5 +1,5 @@
 // dubai-control/src/pages/JobPlanning.tsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,30 +22,75 @@ export default function JobPlanning() {
 
   const [jobs, setJobs] = useState<PlanningJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
-    const data = await fetchPlanningJobs(filters);
-    setJobs(data);
-    setLoading(false);
+    setLoadError(null);
+
+    try {
+      const data = await fetchPlanningJobs(filters);
+      setJobs(data);
+
+      // Поддерживаем side panel в консистентном состоянии:
+      // если выбранная job исчезла/обновилась — обновим ссылку или закроем панель.
+      setSelectedJob((prev) => {
+        if (!prev) return prev;
+        const next = data.find((j) => j.id === prev.id);
+        return next ?? null;
+      });
+    } catch (err: any) {
+      console.error("[JobPlanning] failed to load jobs", err);
+      setLoadError(
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Failed to load jobs. Please try again.",
+      );
+      setJobs([]);
+      setSelectedJob(null);
+    } finally {
+      setLoading(false);
+    }
   }, [filters]);
 
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
 
-  const handleJobCreated = (newJob: PlanningJob) => {
-    if (newJob.scheduled_date === filters.date) {
-      setJobs((prev) =>
-        [...prev, newJob].sort((a, b) => {
-          const timeA = a.scheduled_start_time || "00:00:00";
-          const timeB = b.scheduled_start_time || "00:00:00";
-          return timeA.localeCompare(timeB);
-        })
-      );
+  // Локальная фильтрация (не ходим в бэкенд за каждым кликом)
+  const visibleJobs = useMemo(() => {
+    let out = jobs;
+
+    // cleanerIds: multi-select
+    if (filters.cleanerIds && filters.cleanerIds.length > 0) {
+      const set = new Set(filters.cleanerIds);
+      out = out.filter((j) => (j.cleaner?.id ? set.has(j.cleaner.id) : false));
     }
+
+    // locationId: single
+    if (filters.locationId) {
+      out = out.filter((j) => j.location?.id === filters.locationId);
+    }
+
+    return out;
+  }, [jobs, filters.cleanerIds, filters.locationId]);
+
+  const handleJobCreated = (newJob: PlanningJob) => {
+    if (newJob.scheduled_date !== filters.date) return;
+
+    setJobs((prev) =>
+      [...prev, newJob].sort((a, b) => {
+        const timeA = a.scheduled_start_time || "00:00:00";
+        const timeB = b.scheduled_start_time || "00:00:00";
+        return timeA.localeCompare(timeB);
+      }),
+    );
+
+    // Опционально, но очень удобно: сразу открыть созданную job
+    setSelectedJob(newJob);
   };
 
   return (
@@ -83,7 +128,7 @@ export default function JobPlanning() {
 
           {/* Jobs Table - Right Column */}
           <div className="flex-1 min-w-0">
-            <div className="mb-4">
+            <div className="mb-4 flex items-start justify-between gap-4">
               <p className="text-sm text-muted-foreground">
                 Showing jobs for{" "}
                 <span className="font-medium text-foreground">
@@ -91,9 +136,23 @@ export default function JobPlanning() {
                 </span>{" "}
                 (GST UTC+4)
               </p>
+
+              <p className="text-sm text-muted-foreground">
+                {loading ? "Loading…" : `${visibleJobs.length} jobs`}
+              </p>
             </div>
+
+            {loadError && (
+              <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 flex items-center justify-between gap-3">
+                <div className="text-sm text-destructive">{loadError}</div>
+                <Button size="sm" variant="outline" onClick={loadJobs}>
+                  Retry
+                </Button>
+              </div>
+            )}
+
             <JobsTable
-              jobs={jobs}
+              jobs={visibleJobs}
               loading={loading}
               onJobClick={setSelectedJob}
             />

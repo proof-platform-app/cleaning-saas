@@ -1,14 +1,13 @@
 // dubai-control/src/components/planning/JobsTable.tsx
 
 import { Link } from "react-router-dom";
-import { ChevronRight, Camera, CameraOff, ListChecks } from "lucide-react";
+import { ChevronRight, Camera, ListChecks } from "lucide-react";
 
 import { StatusPill } from "@/components/ui/status-pill";
 import type { PlanningJob } from "@/types/planning";
 import { cn } from "@/lib/utils";
 
 function ProofBadges({ job }: { job: PlanningJob }) {
-  // здесь уже приходят нормализованные флаги из API-планнинга
   const before = Boolean(job.proof?.before_photo);
   const after = Boolean(job.proof?.after_photo);
   const list = Boolean(job.proof?.checklist);
@@ -18,31 +17,43 @@ function ProofBadges({ job }: { job: PlanningJob }) {
     return <span className="text-sm text-muted-foreground">—</span>;
   }
 
-  const base = "inline-flex items-center gap-1 text-xs font-medium";
-
+  const base =
+    "inline-flex items-center gap-1.5 text-xs font-medium transition-colors";
   const onCls = "text-emerald-600";
   const offCls = "text-muted-foreground";
-
-  const BeforeIcon = before ? Camera : CameraOff;
-  const AfterIcon = after ? Camera : CameraOff;
 
   return (
     <div className="flex items-center gap-4">
       {/* Before */}
       <span className={cn(base, before ? onCls : offCls)}>
-        <BeforeIcon className="w-4 h-4" />
+        <Camera
+          className={cn(
+            "w-3.5 h-3.5",
+            before ? "" : "opacity-40"
+          )}
+        />
         <span>Before</span>
       </span>
 
       {/* After */}
       <span className={cn(base, after ? onCls : offCls)}>
-        <AfterIcon className="w-4 h-4" />
+        <Camera
+          className={cn(
+            "w-3.5 h-3.5",
+            after ? "" : "opacity-40"
+          )}
+        />
         <span>After</span>
       </span>
 
       {/* Checklist */}
       <span className={cn(base, list ? onCls : offCls)}>
-        <ListChecks className="w-4 h-4" />
+        <ListChecks
+          className={cn(
+            "w-3.5 h-3.5",
+            list ? "" : "opacity-40"
+          )}
+        />
         <span>List</span>
       </span>
     </div>
@@ -54,6 +65,15 @@ type Props = {
   loading?: boolean;
   onJobClick?: (job: PlanningJob) => void;
 };
+
+function formatTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  // "09:00:00" -> "09:00"
+  if (value.length >= 5) {
+    return value.slice(0, 5);
+  }
+  return value;
+}
 
 export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
   return (
@@ -87,72 +107,75 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
           </thead>
 
           <tbody className="bg-card divide-y divide-border">
-            {jobs.map((job) => (
-              <tr
-                key={job.id}
-                className="hover:bg-muted/20 cursor-pointer"
-                onClick={() => onJobClick?.(job)}
-              >
-                <td className="px-4 py-4">
-                  <div className="font-medium text-foreground">
-                    JOB-{String(job.id).padStart(3, "0")}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {job.scheduled_date}
-                  </div>
-                </td>
+            {jobs.map((job) => {
+              const start = formatTime(job.scheduled_start_time);
+              const end = formatTime(job.scheduled_end_time);
 
-                <td className="px-4 py-4">
-                  <div className="font-medium text-foreground">
-                    {job.location?.name || "—"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {job.location?.address || "—"}
-                  </div>
-                </td>
+              return (
+                <tr
+                  key={job.id}
+                  className="hover:bg-muted/20 cursor-pointer"
+                  onClick={() => onJobClick?.(job)}
+                >
+                  <td className="px-4 py-4">
+                    <div className="font-medium text-foreground">
+                      JOB-{String(job.id).padStart(3, "0")}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {job.scheduled_date}
+                    </div>
+                  </td>
 
-                <td className="px-4 py-4">
-                  <div className="font-medium text-foreground">
-                    {job.cleaner?.full_name || "—"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {job.cleaner?.phone || "—"}
-                  </div>
-                </td>
+                  <td className="px-4 py-4">
+                    <div className="font-medium text-foreground">
+                      {job.location?.name || "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {job.location?.address || "—"}
+                    </div>
+                  </td>
 
-                <td className="px-4 py-4 text-foreground">
-                  {job.scheduled_start_time && job.scheduled_end_time
-                    ? `${job.scheduled_start_time} - ${job.scheduled_end_time}`
-                    : "—"}
-                </td>
+                  <td className="px-4 py-4">
+                    <div className="font-medium text-foreground">
+                      {job.cleaner?.full_name || "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {job.cleaner?.phone || "—"}
+                    </div>
+                  </td>
 
-                <td className="px-4 py-4">
-                  <StatusPill status={job.status as any} />
-                </td>
+                  <td className="px-4 py-4 text-foreground">
+                    {start && end ? `${start} - ${end}` : "—"}
+                  </td>
 
-                <td className="px-4 py-4">
-                  <ProofBadges job={job} />
-                </td>
+                  <td className="px-4 py-4">
+                    <StatusPill status={job.status as any} />
+                  </td>
 
-                <td className="px-4 py-4 text-right">
-                  <Link
-                    to={`/jobs/${job.id}`}
-                    onClick={(e) => {
-                      if (onJobClick) {
-                        e.preventDefault();
-                        onJobClick(job);
-                      }
-                    }}
-                    className={cn(
-                      "inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                    )}
-                  >
-                    View
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+                  <td className="px-4 py-4">
+                    <ProofBadges job={job} />
+                  </td>
+
+                  <td className="px-4 py-4 text-right">
+                    <Link
+                      to={`/jobs/${job.id}`}
+                      onClick={(e) => {
+                        if (onJobClick) {
+                          e.preventDefault();
+                          onJobClick(job);
+                        }
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                      )}
+                    >
+                      View
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
 
             {loading && (
               <tr>
