@@ -1,3 +1,4 @@
+// dubai-control/src/pages/JobPlanning.tsx
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
@@ -6,12 +7,12 @@ import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
 import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
 import { CreateJobDrawer } from "@/components/planning/CreateJobDrawer";
-import { PlanningJob, PlanningFilters } from "@/types/planning";
+import type { PlanningJob, PlanningFilters } from "@/types/planning";
 import { fetchPlanningJobs } from "@/api/planning";
 
 export default function JobPlanning() {
   const today = format(new Date(), "yyyy-MM-dd");
-  
+
   const [filters, setFilters] = useState<PlanningFilters>({
     date: today,
     cleanerIds: [],
@@ -26,9 +27,12 @@ export default function JobPlanning() {
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
-    const data = await fetchPlanningJobs(filters);
-    setJobs(data);
-    setLoading(false);
+    try {
+      const data = await fetchPlanningJobs(filters);
+      setJobs(data);
+    } finally {
+      setLoading(false);
+    }
   }, [filters]);
 
   useEffect(() => {
@@ -36,13 +40,14 @@ export default function JobPlanning() {
   }, [loadJobs]);
 
   const handleJobCreated = (newJob: PlanningJob) => {
-    // If the new job matches the current filter date, add it to the list
     if (newJob.scheduled_date === filters.date) {
-      setJobs((prev) => [...prev, newJob].sort((a, b) => {
-        const timeA = a.scheduled_start_time || "00:00:00";
-        const timeB = b.scheduled_start_time || "00:00:00";
-        return timeA.localeCompare(timeB);
-      }));
+      setJobs((prev) =>
+        [...prev, newJob].sort((a, b) => {
+          const timeA = a.scheduled_start_time || "00:00:00";
+          const timeB = b.scheduled_start_time || "00:00:00";
+          return timeA.localeCompare(timeB);
+        })
+      );
     }
   };
 
@@ -79,8 +84,8 @@ export default function JobPlanning() {
                 Showing jobs for{" "}
                 <span className="font-medium text-foreground">
                   {format(new Date(filters.date), "EEEE, MMMM d, yyyy")}
-                </span>
-                {" "}(GST UTC+4)
+                </span>{" "}
+                (GST UTC+4)
               </p>
             </div>
             <JobsTable jobs={jobs} loading={loading} onJobClick={setSelectedJob} />
@@ -91,7 +96,6 @@ export default function JobPlanning() {
       {/* Side Panel */}
       {selectedJob && (
         <>
-          {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/20 z-40"
             onClick={() => setSelectedJob(null)}

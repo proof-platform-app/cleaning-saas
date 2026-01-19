@@ -1,4 +1,4 @@
-import { JobStatus } from "@/components/ui/status-pill";
+import type { StatusPillStatus } from "@/components/ui/status-pill";
 
 export interface Job {
   id: string;
@@ -9,7 +9,7 @@ export interface Job {
   date: string;
   startTime: string;
   endTime: string;
-  status: JobStatus;
+  status: StatusPillStatus;
   hasProof: boolean;
   hourlyRate?: number;
   flatRate?: number;
@@ -72,7 +72,7 @@ export const sampleJobs: Job[] = [
     date: "2026-01-16",
     startTime: "13:00",
     endTime: "16:00",
-    status: "in-progress",
+    status: "in_progress", // ✅ было "in-progress"
     hasProof: false,
     hourlyRate: 85,
     checkInTime: "12:55",
