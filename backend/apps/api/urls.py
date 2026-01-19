@@ -1,20 +1,20 @@
-# backend/apps/api/urls.py
 from django.urls import path
 
-from .views import (
+from apps.api.views import (
     LoginView,
     ManagerLoginView,
     TodayJobsView,
     JobDetailView,
     JobCheckInView,
     JobCheckOutView,
-    ChecklistItemToggleView,
     ChecklistBulkUpdateView,
-    JobPdfReportView,
+    ChecklistItemToggleView,
     JobPhotosView,
     JobPhotoDeleteView,
+    JobPdfReportView,
     ManagerJobsTodayView,
     ManagerJobDetailView,
+    ManagerPlanningJobsView,
 )
 
 urlpatterns = [
@@ -23,51 +23,38 @@ urlpatterns = [
     path("manager/auth/login/", ManagerLoginView.as_view(), name="api-manager-login"),
 
     # Cleaner jobs
-    path("jobs/today/", TodayJobsView.as_view(), name="api-jobs-today"),
-    path("jobs/<int:pk>/", JobDetailView.as_view(), name="api-job-detail"),
-    path("jobs/<int:pk>/check-in/", JobCheckInView.as_view(), name="api-job-check-in"),
-    path("jobs/<int:pk>/check-out/", JobCheckOutView.as_view(), name="api-job-check-out"),
+    path("jobs/today/", TodayJobsView.as_view(), name="jobs-today"),
+    path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
+
+    # Check-in / check-out
+    path("jobs/<int:pk>/check-in/", JobCheckInView.as_view(), name="job-check-in"),
+    path("jobs/<int:pk>/check-out/", JobCheckOutView.as_view(), name="job-check-out"),
 
     # Checklist
     path(
+        "jobs/<int:job_id>/checklist/bulk-update/",
+        ChecklistBulkUpdateView.as_view(),
+        name="job-checklist-bulk-update",
+    ),
+    path(
         "jobs/<int:job_id>/checklist/<int:item_id>/toggle/",
         ChecklistItemToggleView.as_view(),
-        name="api-job-checklist-toggle",
-    ),
-    path(
-        "jobs/<int:job_id>/checklist/bulk/",
-        ChecklistBulkUpdateView.as_view(),
-        name="api-job-checklist-bulk",
+        name="job-checklist-toggle",
     ),
 
-    # Reports
-    path(
-        "jobs/<int:pk>/report/pdf/",
-        JobPdfReportView.as_view(),
-        name="api-job-report-pdf",
-    ),
-
-    # Photos (before / after) — cleaner side
-    path(
-        "jobs/<int:pk>/photos/",
-        JobPhotosView.as_view(),
-        name="api-job-photos",
-    ),
+    # Photos
+    path("jobs/<int:pk>/photos/", JobPhotosView.as_view(), name="job-photos"),
     path(
         "jobs/<int:pk>/photos/<str:photo_type>/",
         JobPhotoDeleteView.as_view(),
-        name="api-job-photo-delete",
+        name="job-photo-delete",
     ),
 
-    # Manager dashboard
-    path(
-        "manager/jobs/today/",
-        ManagerJobsTodayView.as_view(),
-        name="api-manager-jobs-today",
-    ),
-    path(
-        "manager/jobs/<int:pk>/",
-        ManagerJobDetailView.as_view(),
-        name="api-manager-job-detail",
-    ),
+    # PDF report
+    path("jobs/<int:pk>/report/pdf/", JobPdfReportView.as_view(), name="job-pdf-report"),
+
+    # ===== Manager =====
+    path("manager/jobs/today/", ManagerJobsTodayView.as_view(), name="manager-jobs-today"),
+    path("manager/jobs/<int:pk>/", ManagerJobDetailView.as_view(), name="manager-job-detail"),
+    path("manager/jobs/planning/", ManagerPlanningJobsView.as_view(), name="manager-jobs-planning"),
 ]

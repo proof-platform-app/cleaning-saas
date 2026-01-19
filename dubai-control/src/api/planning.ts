@@ -1,3 +1,4 @@
+// dubai-control/src/api/planning.ts
 import { apiClient } from "@/api/client";
 import type { PlanningFilters, PlanningJob } from "@/types/planning";
 
@@ -5,8 +6,8 @@ type BackendManagerJob = {
   id: number;
   status: "scheduled" | "in_progress" | "completed";
   scheduled_date: string;
-  scheduled_start_time: string;
-  scheduled_end_time: string;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
   location: {
     id: number | null;
     name: string | null;
@@ -15,42 +16,55 @@ type BackendManagerJob = {
   cleaner: {
     id: number | null;
     full_name: string | null;
-    phone: string | null;
+    // на бекенде phone в planning-эндпоинте может не прилетать
+    phone?: string | null;
+  };
+  proof: {
+    before_uploaded: boolean;
+    after_uploaded: boolean;
+    checklist_completed: boolean;
   };
 };
 
-export async function fetchPlanningJobs(filters: PlanningFilters): Promise<PlanningJob[]> {
-  // MVP: бекенд пока отдаёт today. Поэтому:
-  // 1) тянем today
-  // 2) если выбрали дату не today — просто показываем пусто (или позже добавим эндпоинт по дате)
-  const res = await apiClient.get<BackendManagerJob[]>("/api/manager/jobs/today/");
+function encodeQS(params: Record<string, string>) {
+  const qs = new URLSearchParams(params);
+  return qs.toString();
+}
 
-  // Преобразуем в PlanningJob + добавим proof (пока как заглушки false)
-  // Позже расширим бэкенд, чтобы реально считать proof по данным job detail.
+export async function fetchPlanningJobs(
+  filters: PlanningFilters
+): Promise<PlanningJob[]> {
+  const qs = encodeQS({ date: filters.date });
+
+  const res = await apiClient.get<BackendManagerJob[]>(
+    `/api/manager/jobs/planning/?${qs}`
+  );
+
   const jobs: PlanningJob[] = res.data.map((j) => ({
     id: j.id,
     status: j.status,
     scheduled_date: j.scheduled_date,
-    scheduled_start_time: j.scheduled_start_time ?? null,
-    scheduled_end_time: j.scheduled_end_time ?? null,
+    scheduled_start_time: j.scheduled_start_time,
+    scheduled_end_time: j.scheduled_end_time,
     location: j.location,
-    cleaner: j.cleaner,
+    cleaner: {
+      id: j.cleaner.id,
+      full_name: j.cleaner.full_name,
+      phone: j.cleaner.phone ?? null,
+    },
     proof: {
-      check_in: false,
-      before_photo: false,
-      checklist: false,
-      after_photo: false,
-      check_out: false,
+      check_in: j.status === "in_progress" || j.status === "completed",
+      before_photo: j.proof.before_uploaded,
+      checklist: j.proof.checklist_completed,
+      after_photo: j.proof.after_uploaded,
+      check_out: j.status === "completed",
     },
   }));
 
-  // Фильтр по статусам (если выбраны)
   const byStatus =
     filters.statuses.length === 0
       ? jobs
       : jobs.filter((j) => filters.statuses.includes(j.status));
 
-  // Фильтр по дате:
-  // сейчас бекенд отдаёт только today, поэтому:
-  return byStatus.filter((j) => j.scheduled_date === filters.date);
+  return byStatus;
 }
