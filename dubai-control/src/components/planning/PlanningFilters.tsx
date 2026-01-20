@@ -12,6 +12,13 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 type Props = {
   filters: PlanningFilters;
@@ -56,20 +63,20 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
 
   // === CLEANER ===
   const handleCleanerChange = (value: string) => {
-    if (!value) {
-      onFiltersChange({ ...filters, cleanerIds: [] });
-      return;
-    }
-    const id = Number(value);
-    onFiltersChange({ ...filters, cleanerIds: [id] });
+    onFiltersChange({
+      ...filters,
+      cleanerIds: value === "all" ? [] : [Number(value)],
+    });
   };
 
-  const selectedCleanerId = filters.cleanerIds[0] ?? "";
+  const selectedCleanerId = filters.cleanerIds[0] ?? null;
 
   // === LOCATION ===
   const handleLocationChange = (value: string) => {
-    const locationId = value ? Number(value) : null;
-    onFiltersChange({ ...filters, locationId });
+    onFiltersChange({
+      ...filters,
+      locationId: value === "all" ? null : Number(value),
+    });
   };
 
   // === META LOAD ===
@@ -108,14 +115,14 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+    <div className="rounded-xl border border-border bg-card p-4 space-y-5">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-medium">Filters</div>
+        <div className="text-sm font-medium tracking-tight">Filters</div>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs"
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
           onClick={handleReset}
           disabled={
             filters.cleanerIds.length === 0 &&
@@ -139,7 +146,9 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
               <span className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                 <span>
-                  {selectedDate ? format(selectedDate, "MMMM do, yyyy") : "Pick a date"}
+                  {selectedDate
+                    ? format(selectedDate, "MMMM do, yyyy")
+                    : "Pick a date"}
                 </span>
               </span>
             </button>
@@ -162,12 +171,12 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
           {STATUSES.map((s) => (
             <label
               key={s.value}
-              className="flex items-center gap-2 text-sm cursor-pointer"
+              className="flex items-center gap-2.5 text-[13px] cursor-pointer"
             >
               <input
                 type="checkbox"
-                className="h-3.5 w-3.5 appearance-none rounded-full border border-slate-300 bg-white 
-                           outline-none ring-offset-background 
+                className="h-3.5 w-3.5 appearance-none rounded-full border border-slate-300 bg-white
+                           outline-none ring-offset-background
                            checked:bg-blue-500 checked:border-blue-500
                            focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
                            transition-colors"
@@ -205,38 +214,84 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
 
       {meta && (
         <>
-          {/* CLEANER – dropdown All / конкретный */}
+          {/* CLEANER */}
           <div>
             <div className="text-xs text-muted-foreground mb-2">Cleaner</div>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={selectedCleanerId}
-              onChange={(e) => handleCleanerChange(e.target.value)}
+
+            <Select
+              value={
+                selectedCleanerId != null
+                  ? String(selectedCleanerId)
+                  : "all"
+              }
+              onValueChange={(v) => handleCleanerChange(v)}
             >
-              <option value="">All cleaners</option>
-              {meta.cleaners.map((cl) => (
-                <option key={cl.id} value={cl.id}>
-                  {cl.full_name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                <SelectValue placeholder="All cleaners" />
+              </SelectTrigger>
+
+              <SelectContent
+                className="bg-white border border-border rounded-xl shadow-lg shadow-black/10 p-1"
+                align="start"
+              >
+                <SelectItem
+                  value="all"
+                  className="rounded-md px-3 py-2 data-[highlighted]:bg-muted/40 data-[state=checked]:bg-muted data-[state=checked]:font-medium"
+                >
+                  All cleaners
+                </SelectItem>
+
+                {meta.cleaners.map((cl) => (
+                  <SelectItem
+                    key={cl.id}
+                    value={String(cl.id)}
+                    className="rounded-md px-3 py-2 data-[highlighted]:bg-muted/40 data-[state=checked]:bg-muted data-[state=checked]:font-medium"
+                  >
+                    {cl.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* LOCATION */}
           <div>
             <div className="text-xs text-muted-foreground mb-2">Location</div>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={filters.locationId ?? ""}
-              onChange={(e) => handleLocationChange(e.target.value)}
+
+            <Select
+              value={
+                filters.locationId != null
+                  ? String(filters.locationId)
+                  : "all"
+              }
+              onValueChange={(v) => handleLocationChange(v)}
             >
-              <option value="">All locations</option>
-              {meta.locations.map((loc) => (
-                <option key={loc.id} value={loc.id ?? ""}>
-                  {loc.name || `Location #${loc.id}`}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                <SelectValue placeholder="All locations" />
+              </SelectTrigger>
+
+              <SelectContent
+                className="bg-white border border-border rounded-xl shadow-lg shadow-black/10 p-1"
+                align="start"
+              >
+                <SelectItem
+                  value="all"
+                  className="rounded-md px-3 py-2 data-[highlighted]:bg-muted/40 data-[state=checked]:bg-muted data-[state=checked]:font-medium"
+                >
+                  All locations
+                </SelectItem>
+
+                {meta.locations.map((loc) => (
+                  <SelectItem
+                    key={loc.id}
+                    value={String(loc.id)}
+                    className="rounded-md px-3 py-2 data-[highlighted]:bg-muted/40 data-[state=checked]:bg-muted data-[state=checked]:font-medium"
+                  >
+                    {loc.name || `Location #${loc.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </>
       )}
