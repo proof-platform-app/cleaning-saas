@@ -1,5 +1,4 @@
 // mobile-cleaner/src/screens/JobDetailsScreen.tsx
-
 import React from "react";
 import {
   ScrollView,
@@ -7,15 +6,14 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Button,
   Alert,
-  Pressable,
-  Platform,
   Linking,
+  Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import NetInfo from "@react-native-community/netinfo";
 
 import {
   fetchJobDetail,
@@ -24,10 +22,38 @@ import {
   checkInJob,
   checkOutJob,
   updateJobChecklistBulk,
-  toggleJobChecklistItem, // fallback
+  toggleJobChecklistItem,
   fetchJobReportPdf,
   JobChecklistItem,
 } from "../api/client";
+
+import {
+  computeChecklistState,
+  deriveJobProgress,
+  normalizeAndSortEvents,
+} from "./jobDetails.helpers";
+
+import { getStatusConfig } from "../components/job-details/statusConfig";
+import JobProgressBlock from "../components/job-details/JobProgressBlock";
+import JobPhotosBlock from "../components/job-details/JobPhotosBlock";
+import ChecklistSection from "../components/job-details/ChecklistSection";
+import JobActionsSection from "../components/job-details/JobActionsSection";
+import JobTimelineSection from "../components/job-details/JobTimelineSection";
+import LocationBlock from "../components/job-details/LocationBlock";
+
+const COLORS = {
+  bg: "#F3F4F6",
+  card: "#FFFFFF",
+  primary: "#0F766E",
+  primarySoft: "#ECFDF3",
+  warningBg: "#FFF4E5",
+  warningBorder: "#FCD9A6",
+  warningText: "#9A5B00",
+  textMain: "#111827",
+  textMuted: "#6B7280",
+  textSoft: "#9CA3AF",
+  success: "#059669",
+};
 
 type RawJob = any;
 
@@ -39,9 +65,20 @@ type JobDetailsScreenProps = {
   };
 };
 
-function formatDateTime(value: string) {
-  const d = new Date(value);
-  return d.toLocaleString();
+function parseCoordinate(value: any): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.replace(",", ".").trim();
+    if (!normalized) return null;
+
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  return null;
 }
 
 export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
@@ -52,7 +89,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
 
-  // Phase 10: локальный стейт чеклиста
+  const [uploadingType, setUploadingType] = React.useState<
+    "before" | "after" | null
+  >(null);
+
+  const [isOnline, setIsOnline] = React.useState<boolean | null>(null);
+
   const [checklist, setChecklist] = React.useState<JobChecklistItem[]>([]);
   const [isChecklistSaving, setIsChecklistSaving] = React.useState(false);
   const [savingItemId, setSavingItemId] = React.useState<number | null>(null);
@@ -60,11 +102,60 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     null
   );
 
-  // ----- загрузка job + photos -----
+  const [isSyncing, setIsSyncing] = React.useState(false);
+
+  const flushOutbox = React.useCallback(async () => {
+    if (!isOnline || isSyncing) return;
+
+    setIsSyncing(true);
+    try {
+      while (true) {
+        const item: any = await (global as any).outboxPeek?.();
+        if (!item) break;
+
+        if (item.type === "checklist_bulk") {
+          await updateJobChecklistBulk(item.jobId, item.payload);
+        } else if (item.type === "photo") {
+          await uploadJobPhoto(item.jobId, item.photoType, item.localUri);
+        }
+
+        await (global as any).outboxShift?.();
+      }
+
+      const [jobData, photosData] = await Promise.all([
+        fetchJobDetail(jobId),
+        fetchJobPhotos(jobId),
+      ]);
+
+      setJob(jobData);
+      setPhotos(photosData ?? []);
+      setChecklist(jobData?.checklist_items ?? []);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, isSyncing, jobId]);
+
   React.useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      const online = !!state.isConnected && state.isInternetReachable !== false;
+      setIsOnline(online);
+      if (online) void flushOutbox();
+    });
+
+    return () => unsub();
+  }, [flushOutbox]);
+
+  React.useEffect(() => {
+    if (isOnline === null) return;
+
     let cancelled = false;
 
-    (async () => {
+    const load = async () => {
+      if (!isOnline) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
       try {
         const [jobData, photosData] = await Promise.all([
           fetchJobDetail(jobId),
@@ -76,31 +167,28 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           setPhotos(photosData ?? []);
           setChecklist(jobData?.checklist_items ?? []);
         }
-      } catch (e) {
-        const msg =
-          e instanceof Error ? e.message : "Failed to load job details";
+      } catch (e: any) {
         if (!cancelled) {
-          Alert.alert("Error", msg);
+          Alert.alert("Error", e?.message || "Failed to load job details");
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
-    })();
+    };
 
+    load();
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, isOnline]);
 
-  // если job обновился (например, check-in/out), подтянем чеклист в локальный стейт
   React.useEffect(() => {
-    if (!job) return;
-    setChecklist(job.checklist_items ?? []);
+    if (job) {
+      setChecklist(job.checklist_items ?? []);
+    }
   }, [job?.id, job?.status]);
 
-  if (loading || !job) {
+  if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
@@ -109,57 +197,78 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     );
   }
 
-  // ----- нормализация данных из backend -----
+  if (!job) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.loadingText}>
+          {isOnline === false
+            ? "You are offline. Job details are unavailable."
+            : "Failed to load job details."}
+        </Text>
+      </View>
+    );
+  }
 
-  const locationName: string = job.location_name ?? "Unknown location";
+  const locationName =
+    job.location?.name ?? job.location_name ?? "Unknown location";
 
-  const handleNavigate = async () => {
-    try {
-      const query = encodeURIComponent(locationName || "Job location");
+  const locationAddress =
+    job.location?.address ?? job.location_address ?? locationName;
 
-      const url =
-        Platform.OS === "ios"
-          ? `maps:0,0?q=${query}`
-          : `https://www.google.com/maps/search/?api=1&query=${query}`;
+  const rawLat =
+    job.location?.latitude ?? job.location_latitude ?? job.location_lat ?? null;
+  const rawLng =
+    job.location?.longitude ??
+    job.location_longitude ??
+    job.location_lng ??
+    null;
 
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        Alert.alert("Navigation", "Cannot open maps on this device.");
-        return;
-      }
+  const locationLat = parseCoordinate(rawLat);
+  const locationLng = parseCoordinate(rawLng);
 
-      await Linking.openURL(url);
-    } catch (e: any) {
-      Alert.alert(
-        "Navigation",
-        e?.message || "Failed to open maps application."
-      );
+  const hasLocationCoords =
+    typeof locationLat === "number" && typeof locationLng === "number";
+
+  // Дев-helper: для чек-ина/аута всегда шлём координаты задачи
+  const getDevGpsPayload = () => {
+    if (hasLocationCoords && locationLat != null && locationLng != null) {
+      return {
+        latitude: locationLat,
+        longitude: locationLng,
+      };
     }
+
+    // запасной вариант, если у задачи нет координат
+    return {
+      latitude: 25.08,
+      longitude: 55.14,
+    };
   };
 
-  const status: string = job.status ?? "scheduled";
+  const status = job.status ?? "scheduled";
   const isScheduled = status === "scheduled";
   const isInProgress = status === "in_progress";
   const isCompleted = status === "completed";
 
-  const canEditChecklist = isInProgress;
+  const statusCfg = getStatusConfig(status);
 
   const timelineEvents = normalizeAndSortEvents(job.check_events ?? []);
 
   const beforePhoto = photos.find((p) => p.photo_type === "before") || null;
   const afterPhoto = photos.find((p) => p.photo_type === "after") || null;
 
-  const actualStart: string | null = job.actual_start_time ?? null;
-  const actualEnd: string | null = job.actual_end_time ?? null;
+  const beforeUrl: string | null =
+    (beforePhoto?.file_url as string | undefined) ??
+    (beforePhoto?.url as string | undefined) ??
+    null;
 
-  // состояние чеклиста считается один раз и переиспользуется
+  const afterUrl: string | null =
+    (afterPhoto?.file_url as string | undefined) ??
+    (afterPhoto?.url as string | undefined) ??
+    null;
+
   const checklistState = computeChecklistState(checklist);
 
-  // Прогресс чеклиста для подсказок в UI
-  const checklistDone = checklistState.allCompleted;
-  const checklistOk = checklistState.checklistOk;
-
-  // Единый источник истины для Progress
   const progress = deriveJobProgress({
     status,
     timelineEvents,
@@ -168,11 +277,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     checklistState,
   });
 
-  // dev-GPS: фиксированная точка возле Dubai Marina
-  const getDevGpsPayload = () => ({
-    latitude: 25.0763,
-    longitude: 55.1345,
-  });
+  const isOnlineBool = isOnline === true;
 
   // ----- Handlers: Check-in / Check-out -----
 
@@ -185,6 +290,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       return;
     }
 
+    if (!isOnlineBool) {
+      Alert.alert("Offline", "You need internet to check in.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { latitude, longitude } = getDevGpsPayload();
@@ -194,6 +304,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         fetchJobDetail(jobId),
         fetchJobPhotos(jobId),
       ]);
+
       setJob(jobData);
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
@@ -214,6 +325,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       return;
     }
 
+    if (!isOnlineBool) {
+      Alert.alert("Offline", "You need internet to check out.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const { latitude, longitude } = getDevGpsPayload();
@@ -223,6 +339,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         fetchJobDetail(jobId),
         fetchJobPhotos(jobId),
       ]);
+
       setJob(jobData);
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
@@ -234,158 +351,39 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     }
   };
 
-  // ----- Handlers: Checklist (Phase 10, bulk + fallback toggle) -----
-
-  const handleToggleChecklistItem = async (itemId: number) => {
-    if (!canEditChecklist) {
-      Alert.alert(
-        "Not allowed",
-        "Checklist can be updated only when job is in progress."
-      );
-      return;
-    }
-
-    if (isChecklistSaving || submitting) return;
-
-    setChecklistError(null);
-    setSavingItemId(itemId);
-
-    const prev = checklist;
-
-    // optimistic update
-    const next = checklist.map((it) =>
-      it.id === itemId ? { ...it, is_completed: !it.is_completed } : it
-    );
-    setChecklist(next);
-
-    setIsChecklistSaving(true);
-
-    try {
-      const payloadItems = next.map((it) => ({
-        id: it.id,
-        is_completed: it.is_completed,
-      }));
-
-      const updated = await updateJobChecklistBulk(jobId, payloadItems);
-
-      if (Array.isArray(updated) && updated.length > 0) {
-        setChecklist(updated);
-      }
-    } catch (e: any) {
-      const baseMsg = e instanceof Error ? e.message : "Checklist update failed";
-
-      const shouldTryFallback =
-        typeof e?.status === "number" && e.status >= 400 && e.status < 500;
-
-      if (shouldTryFallback) {
-        try {
-          const current = next.find((it) => it.id === itemId);
-          const isCompleted = !!current?.is_completed;
-
-          const toggled = await toggleJobChecklistItem(
-            jobId,
-            itemId,
-            isCompleted
-          );
-
-          setChecklist((list) =>
-            list.map((it) =>
-              it.id === toggled.id
-                ? { ...it, is_completed: toggled.is_completed }
-                : it
-            )
-          );
-        } catch (fallbackErr: any) {
-          setChecklist(prev);
-          setChecklistError(
-            fallbackErr instanceof Error ? fallbackErr.message : baseMsg
-          );
-        }
-      } else {
-        setChecklist(prev);
-        setChecklistError(baseMsg);
-      }
-    } finally {
-      setIsChecklistSaving(false);
-      setSavingItemId(null);
-    }
+  // Confirm-обёртки для защиты от случайных тапов
+  const handleCheckInConfirm = () => {
+    Alert.alert("Check in", "Start this job now?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Check in", style: "default", onPress: () => void handleCheckIn() },
+    ]);
   };
 
-  // ----- Handlers: Photos upload -----
-
-  const pickAndUpload = async (type: "before" | "after") => {
-    if (!isInProgress) {
-      Alert.alert(
-        "Not allowed",
-        "Photos can be uploaded only while job is in progress."
-      );
-      return;
-    }
-
-    if (type === "after" && !beforePhoto) {
-      Alert.alert("Not allowed", "Upload the before photo first.");
-      return;
-    }
-
-    try {
-      // 1) Права на галерею
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission denied",
-          "Permission to access photos was denied."
-        );
-        return;
-      }
-
-      // 2) Выбор фото
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
-        allowsEditing: false,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const asset = result.assets?.[0];
-
-      if (!asset?.uri) {
-        Alert.alert("Upload failed", "No image selected.");
-        return;
-      }
-
-      setSubmitting(true);
-
-      // 3) Вызов нашего API-обёртки
-      await uploadJobPhoto(jobId, type, asset.uri);
-
-      // 4) Обновляем фотки в UI
-      const refreshed = await fetchJobPhotos(jobId);
-      setPhotos(refreshed ?? []);
-    } catch (e: any) {
-      const msg =
-        e instanceof Error ? e.message : "Photo upload request failed";
-      console.error("[JobDetails] photo upload error:", msg);
-      Alert.alert("Upload failed", msg);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleCheckOutConfirm = () => {
+    Alert.alert(
+      "Check out",
+      "Finish this job and lock photos and checklist?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Check out", style: "destructive", onPress: () => void handleCheckOut() },
+      ]
+    );
   };
 
   // ----- Handler: Share PDF report -----
 
   const handleSharePdf = async () => {
+    if (!isOnlineBool) {
+      Alert.alert("Offline", "You need internet to generate PDF report.");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
       const buf = await fetchJobReportPdf(jobId);
       const base64 = arrayBufferToBase64(buf);
 
-      // cacheDirectory в тайпингах может не быть, поэтому берём через any
       const cacheDir =
         ((FileSystem as any).cacheDirectory as string | undefined) ||
         ((FileSystem as any).documentDirectory as string | undefined) ||
@@ -393,7 +391,6 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
       const fileUri = `${cacheDir}job-${jobId}-report.pdf`;
 
-      // тут тоже плюём на тайпинги и шлём encoding как any
       await FileSystem.writeAsStringAsync(fileUri, base64, {
         encoding: "base64" as any,
       });
@@ -416,364 +413,228 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     }
   };
 
-  // ----- derived flags для UI -----
+  // ----- Навигация -----
 
-  const canCheckIn = isScheduled;
+  const handleNavigate = async () => {
+    if (!hasLocationCoords || !locationLat || !locationLng) return;
+
+    const latLng = `${locationLat},${locationLng}`;
+    const label = encodeURIComponent(locationName);
+
+    const iosUrl = `maps://?q=${label}&ll=${latLng}`;
+    const androidUrl = `google.navigation:q=${latLng}`;
+    const webUrl = `https://www.google.com/maps/search/?api=1&query=${latLng}`;
+
+    try {
+      if (Platform.OS === "ios" && (await Linking.canOpenURL(iosUrl))) {
+        await Linking.openURL(iosUrl);
+        return;
+      }
+
+      if (
+        Platform.OS === "android" &&
+        (await Linking.canOpenURL(androidUrl))
+      ) {
+        await Linking.openURL(androidUrl);
+        return;
+      }
+
+      await Linking.openURL(webUrl);
+    } catch {
+      Alert.alert("Navigation error", "Could not open maps.");
+    }
+  };
+
+  // ----- Фото -----
+
+  const handleTakePhoto = async (photoType: "before" | "after") => {
+    try {
+      setUploadingType(photoType);
+
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert("Camera access", "Camera permission is required to take photos.");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"] as any, // новый API: 'images' / 'videos' / 'livePhotos'
+        quality: 0.7,
+      });
+
+      if ((result as any).canceled) {
+        return;
+      }
+
+      const asset = (result as any).assets?.[0];
+      if (!asset?.uri) {
+        return;
+      }
+
+      await uploadJobPhoto(jobId, photoType, asset.uri);
+
+      const [jobData, photosData] = await Promise.all([
+        fetchJobDetail(jobId),
+        fetchJobPhotos(jobId),
+      ]);
+      setJob(jobData);
+      setPhotos(photosData ?? []);
+      setChecklist(jobData?.checklist_items ?? []);
+    } catch (e: any) {
+      Alert.alert(
+        "Photo upload failed",
+        e?.message ||
+          "Calling the camera failed. Please try again."
+      );
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const canCheckInVisible = isScheduled === true;
+  const canCheckIn = isScheduled === true && isOnlineBool;
+
+  const canCheckOutVisible = isInProgress === true;
   const canCheckOut =
-    isInProgress &&
-    progress.beforePhoto &&
-    progress.afterPhoto &&
-    progress.checklist;
-
-  // ----- Render -----
+    isInProgress === true &&
+    !!progress.beforePhoto &&
+    !!progress.afterPhoto &&
+    !!progress.checklist &&
+    isOnlineBool;
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{locationName}</Text>
-        <Text style={styles.subtitle}>Date: {job.scheduled_date}</Text>
-        <Text style={styles.status}>Status: {status}</Text>
-      </View>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{locationName}</Text>
+            <Text style={styles.subtitle}>
+              Date: {job.scheduled_date ?? "—"}
+            </Text>
+          </View>
 
-      {/* Address */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Address</Text>
-
-        <Text style={styles.sectionText}>{locationName}</Text>
-
-        <View style={{ marginTop: 8 }}>
-          <Button
-            title="Navigate"
-            onPress={handleNavigate}
-            disabled={submitting}
-          />
+          <View style={styles.headerRight}>
+            <View
+              style={[
+                styles.statusPill,
+                { backgroundColor: statusCfg.badgeBg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusPillText,
+                  { color: statusCfg.badgeText },
+                ]}
+              >
+                {statusCfg.label}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
+
+      {isOnline === false && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            You are offline. Some actions are disabled.
+          </Text>
+          {isSyncing && (
+            <Text style={styles.offlineBannerText}>
+              Syncing offline changes...
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Location */}
+      <LocationBlock
+        address={locationAddress}
+        canNavigate={hasLocationCoords}
+        onNavigate={hasLocationCoords ? handleNavigate : undefined}
+      />
 
       {/* Progress */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Progress</Text>
-
-        <Text style={styles.progressItem}>
-          {progress.scheduled ? "✓" : "—"} Scheduled
-        </Text>
-
-        <Text style={styles.progressItem}>
-          {progress.checkIn ? "✓" : "—"} Check-in
-        </Text>
-
-        <Text style={styles.progressItem}>
-          {progress.beforePhoto ? "✓" : "—"} Before photo
-        </Text>
-
-        <Text style={styles.progressItem}>
-          {progress.checklist ? "✓" : "—"} Checklist
-        </Text>
-
-        <Text style={styles.progressItem}>
-          {progress.afterPhoto ? "✓" : "—"} After photo
-        </Text>
-
-        <Text style={styles.progressItem}>
-          {progress.checkOut ? "✓" : "—"} Check-out
-        </Text>
+        <JobProgressBlock
+          status={status}
+          hasBeforePhoto={!!beforePhoto}
+          hasAfterPhoto={!!afterPhoto}
+          checklistCompleted={checklistState.checklistOk}
+        />
       </View>
 
       {/* Timeline */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Timeline</Text>
-        {timelineEvents.length === 0 ? (
-          <Text style={styles.placeholder}>No events yet.</Text>
-        ) : (
-          timelineEvents.map((e) => (
-            <View key={e.id} style={styles.timelineRow}>
-              <Text style={styles.timelineMain}>
-                {e.label} — {formatTime(e.createdAt)}
-              </Text>
-              <Text style={styles.timelineMeta}>
-                {e.userName ? `${e.userName} • ` : ""}
-                {typeof e.distanceM === "number" ? `${e.distanceM} m` : ""}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
+      <JobTimelineSection events={timelineEvents} />
 
       {/* Photos */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Photos</Text>
-
-        <View style={styles.photoRow}>
-          <View style={styles.photoSlot}>
-            <Text style={styles.photoLabel}>Before</Text>
-
-            {beforePhoto ? (
-              <Text style={styles.sectionText}>Photo uploaded</Text>
-            ) : (
-              <Text style={styles.placeholder}>No photo yet.</Text>
-            )}
-
-            {isInProgress && !beforePhoto && (
-              <View style={styles.photoButton}>
-                <Button
-                  title="Upload Before"
-                  onPress={() => pickAndUpload("before")}
-                  disabled={submitting}
-                />
-              </View>
-            )}
-          </View>
-
-          <View style={styles.photoSlot}>
-            <Text style={styles.photoLabel}>After</Text>
-
-            {afterPhoto ? (
-              <Text style={styles.sectionText}>Photo uploaded</Text>
-            ) : (
-              <Text style={styles.placeholder}>No photo yet.</Text>
-            )}
-
-            {isInProgress && beforePhoto && !afterPhoto && (
-              <View style={styles.photoButton}>
-                <Button
-                  title="Upload After"
-                  onPress={() => pickAndUpload("after")}
-                  disabled={submitting}
-                />
-              </View>
-            )}
-          </View>
-        </View>
-      </View>
+      <JobPhotosBlock
+        isInProgress={isInProgress}
+        beforeUrl={beforeUrl}
+        afterUrl={afterUrl}
+        hasBeforePhoto={!!beforePhoto}
+        hasAfterPhoto={!!afterPhoto}
+        canTakeBeforePhoto={isInProgress && !beforePhoto}
+        canTakeAfterPhoto={isInProgress && !!beforePhoto && !afterPhoto}
+        isUploadingBefore={uploadingType === "before"}
+        isUploadingAfter={uploadingType === "after"}
+        submitting={submitting}
+        onTakeBefore={() => handleTakePhoto("before")}
+        onTakeAfter={() => handleTakePhoto("after")}
+      />
 
       {/* Checklist */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Checklist</Text>
-
-        {checklistError && (
-          <Text style={styles.errorText}>{checklistError}</Text>
-        )}
-
-        {isInProgress && checklist.length > 0 && !checklistDone && (
-          <Text style={styles.helperText}>Tap an item to mark it completed.</Text>
-        )}
-
-        {!isInProgress && checklist.length > 0 && (
-          <Text style={styles.helperText}>
-            Checklist is read-only until job is in progress.
-          </Text>
-        )}
-
-        {checklist.length === 0 ? (
-          <Text style={styles.placeholder}>No checklist items.</Text>
-        ) : (
-          checklist.map((item) => {
-            const isDone = !!item.is_completed;
-            return (
-              <Pressable
-                key={item.id}
-                style={({ pressed }) => [
-                  styles.checklistItem,
-                  !canEditChecklist && styles.checklistItemDisabled,
-                  pressed && canEditChecklist && styles.checklistItemPressed,
-                ]}
-                onPress={() => handleToggleChecklistItem(item.id)}
-                disabled={submitting || isChecklistSaving || !canEditChecklist}
-              >
-                <Text
-                  style={[
-                    styles.checklistStatusIcon,
-                    isDone && styles.checklistStatusIconDone,
-                  ]}
-                >
-                  {isDone ? "✓" : "○"}
-                </Text>
-                <Text style={styles.checklistText}>
-                  {item.text}
-                  {item.is_required ? " *" : ""}
-                </Text>
-                <Text
-                  style={[
-                    styles.checklistMeta,
-                    isDone && styles.checklistMetaDone,
-                  ]}
-                >
-                  {savingItemId === item.id
-                    ? "Saving..."
-                    : isDone
-                    ? "Completed"
-                    : "Pending"}
-                </Text>
-              </Pressable>
-            );
-          })
-        )}
-      </View>
+      <ChecklistSection
+        items={checklist}
+        canEditChecklist={isInProgress}
+        isInProgress={isInProgress}
+        isOnline={isOnline}
+        checklistState={checklistState}
+        checklistError={checklistError}
+        isChecklistSaving={isChecklistSaving}
+        savingItemId={savingItemId}
+        submitting={submitting}
+        onToggleItem={async (itemId, nextValue) => {
+          // оставляю простой вариант — как было до рефактора
+          try {
+            setSavingItemId(itemId);
+            setChecklistError(null);
+            await toggleJobChecklistItem(jobId, itemId, nextValue);
+            const jobData = await fetchJobDetail(jobId);
+            setJob(jobData);
+            setChecklist(jobData?.checklist_items ?? []);
+          } catch (e: any) {
+            setChecklistError(e?.message || "Failed to update checklist item");
+          } finally {
+            setSavingItemId(null);
+          }
+        }}
+      />
 
       {/* Actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions</Text>
-
-        {canCheckIn && (
-          <View style={styles.buttonWrapper}>
-            <Button
-              title="Check in"
-              onPress={handleCheckIn}
-              disabled={submitting}
-            />
-          </View>
-        )}
-
-        {isInProgress && (
-          <View style={styles.buttonWrapper}>
-            <Button
-              title="Check out"
-              onPress={handleCheckOut}
-              disabled={submitting || !canCheckOut}
-            />
-          </View>
-        )}
-
-        {isInProgress && !canCheckOut && (
-          <View style={{ marginTop: 8 }}>
-            <Text style={styles.placeholder}>
-              To check out, finish these steps:
-            </Text>
-            {!beforePhoto && (
-              <Text style={styles.placeholder}>• Upload the before photo.</Text>
-            )}
-            {!afterPhoto && (
-              <Text style={styles.placeholder}>• Upload the after photo.</Text>
-            )}
-            {checklistState.hasRequired && !checklistState.requiredCompleted && (
-              <Text style={styles.placeholder}>
-                • Complete all required checklist items (*).
-              </Text>
-            )}
-          </View>
-        )}
-
-        <View style={styles.buttonWrapper}>
-          <Button
-            title="Share PDF report"
-            onPress={handleSharePdf}
-            disabled={submitting}
-          />
-        </View>
-
-        {isCompleted && (
-          <Text style={styles.placeholder}>
-            Job is completed. No more actions available.
-          </Text>
-        )}
-      </View>
+      <JobActionsSection
+        isOnline={isOnlineBool}
+        isScheduled={isScheduled === true}
+        isInProgress={isInProgress === true}
+        isCompleted={isCompleted === true}
+        canCheckInVisible={canCheckInVisible}
+        canCheckIn={canCheckIn}
+        canCheckOutVisible={canCheckOutVisible}
+        canCheckOut={canCheckOut}
+        submitting={!!submitting}
+        beforePhoto={beforePhoto}
+        afterPhoto={afterPhoto}
+        checklistState={{
+          hasRequired: checklistState.hasRequired,
+          requiredCompleted: checklistState.requiredCompleted,
+        }}
+        onCheckIn={handleCheckInConfirm}
+        onCheckOut={handleCheckOutConfirm}
+        onSharePdf={handleSharePdf}
+      />
     </ScrollView>
   );
-}
-
-// ----- helpers -----
-
-type ChecklistState = {
-  hasAny: boolean;
-  hasRequired: boolean;
-  allCompleted: boolean;
-  requiredCompleted: boolean;
-  checklistOk: boolean;
-};
-
-function computeChecklistState(checklist: JobChecklistItem[]): ChecklistState {
-  const hasAny = checklist.length > 0;
-  const requiredItems = checklist.filter((item) => item.is_required);
-  const hasRequired = requiredItems.length > 0;
-
-  const allCompleted =
-    hasAny && checklist.every((item) => item.is_completed === true);
-
-  const requiredCompleted =
-    !hasRequired || requiredItems.every((item) => item.is_completed === true);
-
-  // чеклист «ок» для прогресса / check-out:
-  // - если вообще нет пунктов
-  // - или все обязательные завершены
-  const checklistOk = !hasAny || requiredCompleted;
-
-  return {
-    hasAny,
-    hasRequired,
-    allCompleted,
-    requiredCompleted,
-    checklistOk,
-  };
-}
-
-type ProgressState = {
-  scheduled: boolean;
-  checkIn: boolean;
-  beforePhoto: boolean;
-  checklist: boolean;
-  afterPhoto: boolean;
-  checkOut: boolean;
-};
-
-function deriveJobProgress(params: {
-  status: string;
-  timelineEvents: any[];
-  beforePhoto: any | null;
-  afterPhoto: any | null;
-  checklistState: ChecklistState;
-}): ProgressState {
-  const { status, timelineEvents, beforePhoto, afterPhoto, checklistState } =
-    params;
-
-  const hasCheckIn = timelineEvents.some((e) => e.event_type === "check_in");
-  const hasCheckOut = timelineEvents.some((e) => e.event_type === "check_out");
-
-  return {
-    scheduled: true,
-    checkIn: hasCheckIn || status === "in_progress" || status === "completed",
-    beforePhoto: !!beforePhoto,
-    checklist: checklistState.checklistOk,
-    afterPhoto: !!afterPhoto,
-    checkOut: hasCheckOut || status === "completed",
-  };
-}
-
-function normalizeAndSortEvents(events: any[]) {
-  const mapped = events
-    .map((e) => {
-      const createdAt = e.created_at ?? e.event_timestamp ?? e.createdAt ?? "";
-      const type = e.event_type ?? e.type ?? "";
-      const label =
-        type === "check_in"
-          ? "Checked in"
-          : type === "check_out"
-          ? "Checked out"
-          : type || "Event";
-
-      return {
-        id: String(e.id ?? `${type}-${createdAt}`),
-        createdAt,
-        label,
-        userName: e.user_name ?? e.userName ?? "",
-        distanceM:
-          typeof e.distance_m === "number"
-            ? e.distance_m
-            : typeof e.distanceM === "number"
-            ? e.distanceM
-            : undefined,
-        event_type: type,
-      };
-    })
-    .filter((e) => e.createdAt);
-
-  mapped.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-  return mapped;
-}
-
-function formatTime(iso: string) {
-  const match = iso.match(/T(\d{2}:\d{2})/);
-  return match ? match[1] : iso;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer) {
@@ -784,14 +645,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
 
-  const btoaFn =
-    // @ts-ignore
-    globalThis.btoa ||
-    // @ts-ignore
-    (global as any).btoa;
+  // @ts-ignore
+  const btoaFn = globalThis.btoa || (global as any).btoa;
 
   if (!btoaFn) {
-    // fallback, если вдруг нет btoa
     // @ts-ignore
     return Buffer.from(binary, "binary").toString("base64");
   }
@@ -802,6 +659,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
 // ----- styles -----
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
   container: {
     padding: 16,
     paddingBottom: 32,
@@ -810,120 +671,83 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: COLORS.bg,
   },
   loadingText: {
     marginTop: 8,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  subtitle: {
     fontSize: 14,
     color: "#555",
   },
-  status: {
-    marginTop: 4,
+  header: {
+    marginTop: 12,
+    marginBottom: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 18,
+    backgroundColor: COLORS.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerRight: {
+    marginLeft: 12,
+    alignItems: "flex-end",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 4,
+    color: COLORS.textMain,
+  },
+  subtitle: {
     fontSize: 14,
-    fontWeight: "500",
+    color: COLORS.textMuted,
+  },
+  statusPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  offlineBanner: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.warningBg,
+    borderWidth: 1,
+    borderColor: COLORS.warningBorder,
+  },
+  offlineBannerText: {
+    fontSize: 13,
+    color: COLORS.warningText,
   },
   section: {
-    marginTop: 16,
+    marginTop: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 8,
-  },
-  sectionText: {
-    fontSize: 14,
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 4,
-  },
-  errorText: {
-    fontSize: 12,
-    color: "#b00020",
-    marginBottom: 6,
-  },
-  placeholder: {
-    fontSize: 14,
-    color: "#888",
-  },
-  buttonWrapper: {
-    marginTop: 8,
-  },
-  checklistItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  checklistItemPressed: {
-    opacity: 0.6,
-  },
-  checklistItemDisabled: {
-    opacity: 0.5,
-  },
-  checklistStatusIcon: {
-    width: 20,
-    fontSize: 16,
-    marginRight: 8,
-    color: "#888",
-  },
-  checklistStatusIconDone: {
-    color: "#0a7f42",
-  },
-  checklistText: {
-    fontSize: 14,
-    flexShrink: 1,
-    flex: 1,
-  },
-  checklistMeta: {
-    fontSize: 12,
-    color: "#666",
-    marginLeft: 8,
-  },
-  checklistMetaDone: {
-    color: "#0a7f42",
-    fontWeight: "600",
-  },
-  // photos
-  photoRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  photoSlot: {
-    flex: 1,
-  },
-  photoLabel: {
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  photoButton: {
-    marginTop: 8,
-  },
-  // timeline
-  timelineRow: {
-    paddingVertical: 6,
-  },
-  timelineMain: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  timelineMeta: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#666",
-  },
-  // progress
-  progressItem: {
-    fontSize: 15,
-    marginTop: 4,
+    color: COLORS.textMain,
   },
 });

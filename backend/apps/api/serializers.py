@@ -46,7 +46,16 @@ class JobCheckEventSerializer(serializers.ModelSerializer):
 
 
 class JobDetailSerializer(serializers.ModelSerializer):
+    """
+    Job detail для Cleaner (и частично для Mobile).
+
+    Важно:
+    - Оставляем location_name для обратной совместимости (старые клиенты).
+    - Добавляем вложенный location с координатами для Mobile Navigate.
+    """
     location_name = serializers.CharField(source="location.name", read_only=True)
+    location = serializers.SerializerMethodField()
+
     checklist_items = JobChecklistItemSerializer(many=True, read_only=True)
     check_events = JobCheckEventSerializer(many=True, read_only=True)
 
@@ -61,11 +70,25 @@ class JobDetailSerializer(serializers.ModelSerializer):
             "actual_start_time",
             "actual_end_time",
             "location_name",
+            "location",
             "manager_notes",
             "cleaner_notes",
             "checklist_items",
             "check_events",
         )
+
+    def get_location(self, obj):
+        loc = getattr(obj, "location", None)
+        if not loc:
+            return None
+
+        return {
+            "id": loc.id,
+            "name": loc.name,
+            "address": getattr(loc, "address", None),
+            "latitude": getattr(loc, "latitude", None),
+            "longitude": getattr(loc, "longitude", None),
+        }
 
 
 class ChecklistToggleSerializer(serializers.Serializer):

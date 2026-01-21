@@ -132,3 +132,4 @@ def convert_to_jpeg_if_needed(uploaded_file):
     Старое имя для совместимости. Просто обёртка над normalize_job_photo_to_jpeg.
     """
     return normalize_job_photo_to_jpeg(uploaded_file)
+    

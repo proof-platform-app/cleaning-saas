@@ -208,7 +208,6 @@ export async function fetchJobDetail(jobId: number): Promise<JobDetail> {
   for (const path of candidates) {
     try {
       const data = await apiFetch<JobDetail>(path, { method: "GET" });
-      console.log("[JobDetails] fetched from:", path);
       return data;
     } catch (e: any) {
       lastError = e;
@@ -344,7 +343,6 @@ export async function fetchJobPhotos(jobId: number): Promise<JobPhoto[]> {
     method: "GET",
   });
 
-  console.log("[fetchJobPhotos] raw:", data);
   return data ?? [];
 }
 
