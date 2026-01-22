@@ -1,5 +1,13 @@
 // mobile-cleaner/src/offline/storage.ts
 
+// OFFLINE STORAGE (v0)
+// ------------------------------------------
+// Здесь только generic-хелперы кэширования и dev-GPS.
+// Оффлайн-очередь (outbox) здесь НЕ реализуем.
+// Для модели очереди см. src/offline/types.ts.
+// Любая "умная" оффлайн-логика делается отдельной фазой
+// после согласования с backend.
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const key = (jobId: number, part: string) => `job:${jobId}:${part}`;

@@ -47,6 +47,8 @@ import JobPhotosBlock from "../components/job-details/JobPhotosBlock";
 import ChecklistSection from "../components/job-details/ChecklistSection";
 import JobActionsSection from "../components/job-details/JobActionsSection";
 
+import type { OutboxItem } from "../offline/types";
+
 /**
  * JobDetailsScreen — Mobile Execution Core (Layer 1)
  *
@@ -137,13 +139,36 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   const [isSyncing, setIsSyncing] = React.useState(false);
 
+  // ------------------------------------------
+  // OFFLINE MODEL v0 (архитектура, не реализация)
+  // ------------------------------------------
+  //
+  // Что сейчас считаем оффлайн-безопасным:
+  // - checklist_bulk: синхронизация чек-листа;
+  // - photo: загрузка before/after фото.
+  //
+  // Чего здесь НЕТ и не будет без отдельной фазы:
+  // - check-in / check-out (онлайн-только);
+  // - генерация PDF отчёта;
+  // - первичная загрузка job / списка задач.
+  //
+  // Реальная очередь сейчас НЕ реализована:
+  // - ожидаем, что (global as any).outboxPeek / outboxShift
+  //   могут быть провайднуты где-то ещё;
+  // - если их нет, flushOutbox просто ничего не делает.
+  //
+  // ВАЖНО:
+  // - Не добавлять новые type'ы в outbox, пока не
+  //   согласуем это с backend / бизнес-логикой.
+  // - Не менять формат payload без апдейта типов
+  //   в src/offline/types.ts.
   const flushOutbox = React.useCallback(async () => {
     if (!isOnline || isSyncing) return;
 
     setIsSyncing(true);
     try {
       while (true) {
-        const item: any = await (global as any).outboxPeek?.();
+        const item = (await (global as any).outboxPeek?.()) as OutboxItem | null;
         if (!item) break;
 
         if (item.type === "checklist_bulk") {
