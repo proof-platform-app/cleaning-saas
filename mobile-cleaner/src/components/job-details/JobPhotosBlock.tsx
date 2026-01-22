@@ -3,6 +3,21 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable, Image } from "react-native";
 
+/**
+ * JobPhotosBlock — UI-only component (Mobile Execution Layer 1)
+ *
+ * IMPORTANT:
+ * This component is part of the job execution proof flow (Photos: before / after).
+ *
+ * Rules:
+ * - NO business logic here
+ * - NO API calls here
+ * - NO changes to photo order semantics (before → after)
+ *
+ * All logic is handled in JobDetailsScreen.
+ * DO NOT add conditions or side effects here without full flow review.
+ */
+
 const COLORS = {
   cardBg: "#FFFFFF",
   textMain: "#111827",
@@ -54,6 +69,12 @@ export const JobPhotosBlock: React.FC<JobPhotosBlockProps> = ({
         <View style={styles.photoSlot}>
           <Text style={styles.photoLabel}>Before</Text>
 
+          {/*
+            IMPORTANT:
+            This button triggers BEFORE photo upload.
+            Order is enforced at backend and execution layer.
+            DO NOT change enable/disable logic or call order without full E2E review.
+          */}
           <Pressable
             disabled={beforeDisabled}
             onPress={onTakeBefore}
@@ -103,6 +124,14 @@ export const JobPhotosBlock: React.FC<JobPhotosBlockProps> = ({
         <View style={styles.photoSlot}>
           <Text style={styles.photoLabel}>After</Text>
 
+          {/*
+            IMPORTANT:
+            This button triggers AFTER photo upload.
+            Backend enforces:
+            - after is forbidden without before
+            - exactly one photo per type
+            DO NOT loosen UI guards here.
+          */}
           <Pressable
             disabled={afterDisabled}
             onPress={onTakeAfter}

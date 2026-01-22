@@ -1,5 +1,29 @@
 // mobile-cleaner/src/api/client.ts
 
+/**
+ * Mobile API client — Execution Core (Layer 1)
+ *
+ * Этот модуль — единственная точка общения мобильного приложения с backend
+ * для:
+ * - логина клинера;
+ * - получения списка задач на сегодня;
+ * - детальной информации по job;
+ * - check-in / check-out;
+ * - чек-листа;
+ * - фото (before / after);
+ * - PDF-отчёта.
+ *
+ * ВАЖНО:
+ * - Любое изменение формата payload’ов или URL может сломать:
+ *   - backend-валидацию (Phase 9 photos, GPS, checklist),
+ *   - Manager Portal (Job Details / Planning),
+ *   - PDF-отчёты.
+ * - Перед изменениями:
+ *   - проверять backend/apps/api/*,
+ *   - проверять контракты, описанные в MASTER BRIEF / PRD,
+ *   - прогонять полный флоу: Login → Today Jobs → Job Details → Check-in → Photos → Checklist → Check-out → PDF.
+ */
+
 // Базовый URL API (IP твоего Mac + порт backend'а)
 export const API_BASE_URL = "http://192.168.0.162:8001";
 
@@ -96,6 +120,20 @@ type ApiError = Error & {
   details?: any;
 };
 
+/**
+ * apiFetch — единственный низкоуровневый helper для запросов.
+ *
+ * ВАЖНО:
+ * - Отвечает за:
+ *   - подстановку Authorization: Token <token>;
+ *   - корректный Content-Type (JSON vs FormData);
+ *   - единый формат ошибок (ApiError с .status и .details).
+ *
+ * НЕЛЬЗЯ:
+ * - Ставить Content-Type руками для FormData (ломает boundary);
+ * - менять формат выбрасываемых ошибок (ожидается Error с .status);
+ * - читать body более одного раза.
+ */
 async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {}
@@ -161,6 +199,17 @@ async function apiFetch<T = any>(
 
 // ===== Auth / login =====
 
+/**
+ * loginCleaner
+ *
+ * POST /api/auth/login/
+ * body: { email, password }
+ *
+ * Возвращает token и кладёт его в in-memory storage.
+ * НЕЛЬЗЯ:
+ * - менять URL без синхронизации с backend;
+ * - менять формат { token } → это ломает весь login-flow.
+ */
 export async function loginCleaner(
   email: string,
   password: string
@@ -180,6 +229,21 @@ export async function loginCleaner(
 
 // ===== Список задач на сегодня =====
 
+/**
+ * fetchCleanerTodayJobs
+ *
+ * GET /api/jobs/today/
+ *
+ * Возвращает плоский список задач, в том числе:
+ * - id
+ * - status
+ * - scheduled_date / time
+ * - location__name (плоское поле, на котором уже сидит UI).
+ *
+ * НЕЛЬЗЯ:
+ * - придумывать здесь новый формат location;
+ * - маппить в другой shape (UI знает про location__name).
+ */
 export async function fetchCleanerTodayJobs(): Promise<CleanerJobSummary[]> {
   const data = await apiFetch<CleanerJobSummary[]>("/api/jobs/today/", {
     method: "GET",
@@ -194,6 +258,19 @@ export async function fetchTodayJobs(): Promise<JobListItem[]> {
 
 // ===== Детали задачи =====
 
+/**
+ * fetchJobDetail
+ *
+ * Основной источник правды для Job Details Screen.
+ *
+ * Важно:
+ * - Пытается несколько URL-кандидатов (legacy support),
+ * - Возвращает JobDetail с checklist_items, check_events и фото-URL.
+ *
+ * НЕЛЬЗЯ:
+ * - менять порядок кандидатов без ревью backend;
+ * - убирать fallback’и, пока на backend не зафиксирован финальный URL.
+ */
 export async function fetchJobDetail(jobId: number): Promise<JobDetail> {
   // Сейчас у нас стабильный DRF endpoint, старые варианты оставим как fallback
   const candidates = [
@@ -228,6 +305,22 @@ export async function fetchJobDetail(jobId: number): Promise<JobDetail> {
 
 // ===== Check-in / Check-out =====
 
+/**
+ * checkInJob
+ *
+ * POST /api/jobs/<id>/check-in/
+ * body: { latitude, longitude }
+ *
+ * Связан с:
+ * - GPS-валидацией (≤ 100 м),
+ * - сменой статуса scheduled → in_progress,
+ * - созданием JobCheckEvent.
+ *
+ * НЕЛЬЗЯ:
+ * - вызывать без координат,
+ * - менять ключи в payload (latitude / longitude),
+ * - переименовывать URL.
+ */
 export async function checkInJob(
   jobId: number,
   latitude: number,
@@ -244,6 +337,22 @@ export async function checkInJob(
   return data;
 }
 
+/**
+ * checkOutJob
+ *
+ * POST /api/jobs/<id>/check-out/
+ * body: { latitude, longitude }
+ *
+ * Связан с:
+ * - финализацией job (in_progress → completed),
+ * - проверкой чек-листа и фото на backend,
+ * - итоговым PDF-отчётом.
+ *
+ * НЕЛЬЗЯ:
+ * - вызывать без координат,
+ * - менять URL или структуру payload,
+ * - пытаться "обойти" backend-валидацию через этот слой.
+ */
 export async function checkOutJob(
   jobId: number,
   latitude: number,
@@ -269,6 +378,11 @@ export async function checkOutJob(
  *
  * Возвращаем массив JobChecklistItem[] если backend его явно отдаёт.
  * Если нет — возвращаем [], чтобы экран использовал локальный optimistic state.
+ *
+ * НЕЛЬЗЯ:
+ * - менять структуру payload (id, is_completed),
+ * - переименовывать поле items,
+ * - интерпретировать ответ "как попало" (здесь уже все варианты учтены).
  */
 export async function updateJobChecklistBulk(
   jobId: number,
@@ -306,6 +420,11 @@ export async function updateJobChecklistBulk(
  * POST /api/jobs/<job_id>/checklist/<item_id>/toggle/
  *
  * Оставляем поддержку payload с is_completed (даже если backend его не требует).
+ *
+ * НЕЛЬЗЯ:
+ * - менять URL-структуру;
+ * - убирать поле is_completed из payload;
+ * - менять ожидаемый формат ответа (id, job_id, is_completed).
  */
 export async function toggleJobChecklistItem(
   jobId: number,
@@ -338,6 +457,20 @@ export async function toggleChecklistItem(
 
 // ===== Фото before / after =====
 
+/**
+ * fetchJobPhotos
+ *
+ * GET /api/jobs/<job_id>/photos/
+ *
+ * Возвращает массив JobPhoto:
+ * - photo_type ("before" | "after"),
+ * - file_url / url,
+ * - created_at.
+ *
+ * НЕЛЬЗЯ:
+ * - менять URL;
+ * - маппить структуру ответа (UI сам решает, что брать: file_url или url).
+ */
 export async function fetchJobPhotos(jobId: number): Promise<JobPhoto[]> {
   const data = await apiFetch<JobPhoto[]>(`/api/jobs/${jobId}/photos/`, {
     method: "GET",
@@ -347,10 +480,24 @@ export async function fetchJobPhotos(jobId: number): Promise<JobPhoto[]> {
 }
 
 /**
+ * uploadJobPhoto
+ *
  * Загрузка фото для job:
  *   jobId      — ID задачи
  *   photoType  — "before" | "after"
  *   uri        — file:// URI, который вернул ImagePicker
+ *
+ * Связано с backend Phase 9:
+ * - exactly 2 photos (before / after),
+ * - after нельзя без before,
+ * - EXIF / GPS-валидация.
+ *
+ * НЕЛЬЗЯ:
+ * - менять имена полей:
+ *   - "photo_type"
+ *   - "file"
+ * - ставить Content-Type руками (ломает FormData);
+ * - передавать что-то кроме file://-uri от ImagePicker.
  */
 export async function uploadJobPhoto(
   jobId: number,
@@ -406,6 +553,18 @@ export async function uploadJobPhoto(
 
 // ===== PDF report =====
 
+/**
+ * fetchJobReportPdf
+ *
+ * POST /api/jobs/<job_id>/report/pdf/
+ *
+ * Возвращает бинарный PDF как ArrayBuffer (для дальнейшего сохранения / шаринга).
+ *
+ * НЕЛЬЗЯ:
+ * - менять метод (POST → GET) без синхронизации с backend;
+ * - пытаться парсить JSON здесь — этот вызов всегда должен возвращать бинарь;
+ * - завязывать сюда бизнес-логику (валидации делаются до генерации отчёта).
+ */
 export async function fetchJobReportPdf(jobId: number): Promise<ArrayBuffer> {
   const url = `${API_BASE_URL}/api/jobs/${jobId}/report/pdf/`;
 

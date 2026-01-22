@@ -27,19 +27,50 @@ import {
   JobChecklistItem,
 } from "../api/client";
 
+// helpers
 import {
   computeChecklistState,
   deriveJobProgress,
   normalizeAndSortEvents,
 } from "./jobDetails.helpers";
 
+// status config (лежит в src/, не в components)
 import { getStatusConfig } from "../components/job-details/statusConfig";
+
+// job details blocks
+import LocationBlock from "../components/job-details/LocationBlock";
 import JobProgressBlock from "../components/job-details/JobProgressBlock";
+import JobTimelineSection from "../components/job-details/JobTimelineSection";
 import JobPhotosBlock from "../components/job-details/JobPhotosBlock";
 import ChecklistSection from "../components/job-details/ChecklistSection";
 import JobActionsSection from "../components/job-details/JobActionsSection";
-import JobTimelineSection from "../components/job-details/JobTimelineSection";
-import LocationBlock from "../components/job-details/LocationBlock";
+
+/**
+ * JobDetailsScreen — Mobile Execution Core (Layer 1)
+ *
+ * Этот экран замыкает основной цикл клинера:
+ * Login → Today Jobs → Job Details → Check-in → Photos → Checklist → Check-out → PDF.
+ *
+ * ВАЖНО:
+ * - Любое изменение здесь может сломать:
+ *   - GPS-валидацию,
+ *   - проверку чек-листа,
+ *   - PDF-отчёты,
+ *   - Manager Portal (Job Details).
+ * - Перед изменениями логики смотри:
+ *   - backend/apps/api (jobs, photos, pdf),
+ *   - Manager Portal Job Details,
+ *   - PDF-репорт.
+ *
+ * Разрешено:
+ * - косметические правки UI (тексты, отступы),
+ * - небольшие комментарии и логи без изменения порядка действий.
+ *
+ * НЕЛЬЗЯ:
+ * - менять порядок шагов,
+ * - переупаковывать payload’ы API,
+ * - "упрощать" хендлеры без полного E2E-ревью.
+ */
 
 const COLORS = {
   bg: "#F3F4F6",
@@ -229,7 +260,19 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const hasLocationCoords =
     typeof locationLat === "number" && typeof locationLng === "number";
 
-  // Дев-helper: для чек-ина/аута всегда шлём координаты задачи
+  /**
+   * DEV HELPER ONLY:
+   * Сейчас для check-in / check-out всегда отправляем координаты задачи
+   * (чтобы не мучиться с реальным GPS на этапе разработки).
+   *
+   * В Phase 11.2 это будет заменено на обёртку:
+   *   getGpsPayload() → PROD: реальные координаты устройства, DEV: фоллбек.
+   *
+   * НЕЛЬЗЯ:
+   * - подмешивать сюда логику реального GPS,
+   * - менять формат возвращаемых координат (latitude, longitude),
+   * - использовать этот helper вне check-in / check-out.
+   */
   const getDevGpsPayload = () => {
     if (hasLocationCoords && locationLat != null && locationLng != null) {
       return {
@@ -281,6 +324,19 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   // ----- Handlers: Check-in / Check-out -----
 
+  /**
+   * handleCheckIn
+   *
+   * Точка входа в check-in:
+   * - клинер должен быть на статусе scheduled,
+   * - координаты берутся из getDevGpsPayload (позже — из реального GPS),
+   * - после вызова обязательно refetch job + photos + checklist.
+   *
+   * НЕЛЬЗЯ:
+   * - вызывать checkInJob без GPS,
+   * - менять порядок "API → refetch" без проверки Manager Portal / PDF,
+   * - дописывать сюда лишние ветки/ретраи "для надёжности".
+   */
   const handleCheckIn = async () => {
     if (!isScheduled) {
       Alert.alert(
@@ -316,6 +372,19 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     }
   };
 
+  /**
+   * handleCheckOut
+   *
+   * Финализирует job:
+   * - разрешён только для in_progress,
+   * - завязан на проверку чек-листа и фото на backend,
+   * - меняет статус на completed и влияет на PDF-отчёт.
+   *
+   * НЕЛЬЗЯ:
+   * - вызывать checkOutJob без GPS,
+   * - вызывать, если доказательная база неполная (обходить guards),
+   * - менять формат вызова без ревью backend и Manager Portal.
+   */
   const handleCheckOut = async () => {
     if (!isInProgress) {
       Alert.alert(
@@ -352,6 +421,14 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   };
 
   // Confirm-обёртки для защиты от случайных тапов
+
+  /**
+   * Confirm-обёртки не меняют бизнес-логику,
+   * только спрашивают подтверждение перед "настоящим" действием.
+   *
+   * Если нужно менять UI текста — можно.
+   * Логику (какой хендлер вызывается и когда) — НЕ трогать.
+   */
   const handleCheckInConfirm = () => {
     Alert.alert("Check in", "Start this job now?", [
       { text: "Cancel", style: "cancel" },
@@ -372,6 +449,19 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   // ----- Handler: Share PDF report -----
 
+  /**
+   * handleSharePdf
+   *
+   * Связка:
+   * - fetchJobReportPdf (backend генерирует PDF),
+   * - временное сохранение в файловую систему,
+   * - системный share sheet.
+   *
+   * НЕЛЬЗЯ:
+   * - менять тип возвращаемых данных из fetchJobReportPdf,
+   * - подмешивать сюда другие API-вызовы отчётов,
+   * - завязывать сюда какую-либо бизнес-валидацию (это только транспорт).
+   */
   const handleSharePdf = async () => {
     if (!isOnlineBool) {
       Alert.alert("Offline", "You need internet to generate PDF report.");
@@ -415,6 +505,18 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   // ----- Навигация -----
 
+  /**
+   * handleNavigate
+   *
+   * Открывает внешнюю карту:
+   * - iOS → Apple Maps,
+   * - Android → Google Maps,
+   * - fallback → web Google Maps.
+   *
+   * Важно:
+   * - Не подтягивать сюда GPS устройства, тут используются координаты задачи.
+   * - При отсутствии координат просто ничего не делаем.
+   */
   const handleNavigate = async () => {
     if (!hasLocationCoords || !locationLat || !locationLng) return;
 
@@ -447,6 +549,21 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   // ----- Фото -----
 
+  /**
+   * handleTakePhoto
+   *
+   * Фото-флоу:
+   * - запрашиваем разрешение камеры,
+   * - открываем камеру,
+   * - берём первый asset.uri,
+   * - отправляем в uploadJobPhoto(jobId, photoType, uri),
+   * - потом refetch job + photos + checklist.
+   *
+   * НЕЛЬЗЯ:
+   * - вызывать uploadJobPhoto без uri,
+   * - менять тип photoType (строго "before" | "after"),
+   * - подмешивать сюда FormData/headers — это уровень api/client.ts.
+   */
   const handleTakePhoto = async (photoType: "before" | "after") => {
     try {
       setUploadingType(photoType);
@@ -595,8 +712,19 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         isChecklistSaving={isChecklistSaving}
         savingItemId={savingItemId}
         submitting={submitting}
-        onToggleItem={async (itemId, nextValue) => {
-          // оставляю простой вариант — как было до рефактора
+        onToggleItem={async (itemId: number, nextValue: boolean) => {
+          /**
+           * Checklist inline handler
+           *
+           * Важно:
+           * - UI вызывает только toggleJobChecklistItem,
+           * - после изменения чек-листа всегда refetch всего job,
+           *   чтобы не разойтись с backend-валидацией required-пунктов.
+           *
+           * НЕЛЬЗЯ:
+           * - пытаться "кэшировать" локально и не дергать backend,
+           * - менять структуру payload без синхронизации с backend.
+           */
           try {
             setSavingItemId(itemId);
             setChecklistError(null);
