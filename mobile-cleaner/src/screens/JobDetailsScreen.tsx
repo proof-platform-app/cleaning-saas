@@ -34,6 +34,8 @@ import {
   normalizeAndSortEvents,
 } from "./jobDetails.helpers";
 
+import getGpsPayload from "../utils/gps";
+
 // status config (лежит в src/, не в components)
 import { getStatusConfig } from "../components/job-details/statusConfig";
 
@@ -260,34 +262,6 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const hasLocationCoords =
     typeof locationLat === "number" && typeof locationLng === "number";
 
-  /**
-   * DEV HELPER ONLY:
-   * Сейчас для check-in / check-out всегда отправляем координаты задачи
-   * (чтобы не мучиться с реальным GPS на этапе разработки).
-   *
-   * В Phase 11.2 это будет заменено на обёртку:
-   *   getGpsPayload() → PROD: реальные координаты устройства, DEV: фоллбек.
-   *
-   * НЕЛЬЗЯ:
-   * - подмешивать сюда логику реального GPS,
-   * - менять формат возвращаемых координат (latitude, longitude),
-   * - использовать этот helper вне check-in / check-out.
-   */
-  const getDevGpsPayload = () => {
-    if (hasLocationCoords && locationLat != null && locationLng != null) {
-      return {
-        latitude: locationLat,
-        longitude: locationLng,
-      };
-    }
-
-    // запасной вариант, если у задачи нет координат
-    return {
-      latitude: 25.08,
-      longitude: 55.14,
-    };
-  };
-
   const status = job.status ?? "scheduled";
   const isScheduled = status === "scheduled";
   const isInProgress = status === "in_progress";
@@ -322,6 +296,9 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
   const isOnlineBool = isOnline === true;
 
+  // NOTE (offline design):
+  // Checklist and photo actions are offline-capable by design.
+  // Check-in / check-out are strictly online-only and must never be queued.
   // ----- Handlers: Check-in / Check-out -----
 
   /**
@@ -329,7 +306,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
    *
    * Точка входа в check-in:
    * - клинер должен быть на статусе scheduled,
-   * - координаты берутся из getDevGpsPayload (позже — из реального GPS),
+   * - координаты берутся из getGpsPayload,
    * - после вызова обязательно refetch job + photos + checklist.
    *
    * НЕЛЬЗЯ:
@@ -353,7 +330,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
     setSubmitting(true);
     try {
-      const { latitude, longitude } = getDevGpsPayload();
+      const { latitude, longitude } = await getGpsPayload({
+        jobLatitude: locationLat,
+        jobLongitude: locationLng,
+      });
+
       await checkInJob(jobId, latitude, longitude);
 
       const [jobData, photosData] = await Promise.all([
@@ -365,8 +346,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Check-in request failed";
-      Alert.alert("Check-in failed", msg);
+      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") return;
+
+      Alert.alert(
+        "Check-in failed",
+        e instanceof Error ? e.message : "Check-in request failed"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -401,7 +386,11 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
     setSubmitting(true);
     try {
-      const { latitude, longitude } = getDevGpsPayload();
+      const { latitude, longitude } = await getGpsPayload({
+        jobLatitude: locationLat,
+        jobLongitude: locationLng,
+      });
+
       await checkOutJob(jobId, latitude, longitude);
 
       const [jobData, photosData] = await Promise.all([
@@ -413,8 +402,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Check-out request failed";
-      Alert.alert("Check-out failed", msg);
+      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") return;
+
+      Alert.alert(
+        "Check-out failed",
+        e instanceof Error ? e.message : "Check-out request failed"
+      );
     } finally {
       setSubmitting(false);
     }

@@ -134,6 +134,13 @@ type ApiError = Error & {
  * - менять формат выбрасываемых ошибок (ожидается Error с .status);
  * - читать body более одного раза.
  */
+
+// TODO (offline groundwork):
+// If a request fails due to network connectivity,
+// certain actions (checklist updates, photo uploads)
+// may be enqueued into an offline outbox instead of throwing.
+// Check-in / check-out must never be queued.
+
 async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {}
