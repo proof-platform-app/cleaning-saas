@@ -31,7 +31,7 @@ export function AppSidebar() {
             </span>
           </div>
           <span className="font-semibold text-foreground tracking-tight">
-            SparkClean
+            CleanProof
           </span>
         </div>
       </div>

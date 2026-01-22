@@ -31,7 +31,7 @@ export default function Login() {
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-soft">
               <span className="text-primary-foreground font-bold text-lg">SC</span>
             </div>
-            <span className="font-semibold text-xl text-foreground tracking-tight">SparkClean</span>
+            <span className="font-semibold text-xl text-foreground tracking-tight">CleanProof</span>
           </div>
 
           {/* Header */}

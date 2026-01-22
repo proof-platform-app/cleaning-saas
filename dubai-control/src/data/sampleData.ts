@@ -151,8 +151,8 @@ export const sampleJobs: Job[] = [
 ];
 
 export const companySettings = {
-  name: "SparkClean Services LLC",
-  email: "operations@sparkclean.ae",
+  name: "CleanProof Services LLC",
+  email: "operations@CleanProof.ae",
   phone: "+971 4 123 4567",
   logo: null,
   notificationsEnabled: true,
