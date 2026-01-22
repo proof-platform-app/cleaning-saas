@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 
+/* Product pages */
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
@@ -15,6 +16,10 @@ import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
 import JobPlanning from "@/pages/JobPlanning";
 
+/* Marketing – CleanProof */
+import CleanProofLanding from "@/marketing/cleanproof/CleanProofLanding";
+import CleanProofDemoRequest from "@/marketing/cleanproof/CleanProofDemoRequest";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -24,10 +29,20 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Public routes */}
+          {/* =========================
+              Marketing (public)
+              ========================= */}
+          <Route path="/cleanproof" element={<CleanProofLanding />} />
+          <Route path="/cleanproof/demo" element={<CleanProofDemoRequest />} />
+
+          {/* =========================
+              Auth
+              ========================= */}
           <Route path="/" element={<Login />} />
 
-          {/* Protected routes with sidebar layout */}
+          {/* =========================
+              Protected app (with layout)
+              ========================= */}
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/jobs" element={<Jobs />} />
@@ -37,10 +52,14 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
           </Route>
 
-          {/* Cleaner interface - standalone, no sidebar */}
+          {/* =========================
+              Cleaner interface (standalone)
+              ========================= */}
           <Route path="/cleaner" element={<CleanerJob />} />
 
-          {/* Catch-all */}
+          {/* =========================
+              Catch-all
+              ========================= */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

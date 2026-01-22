@@ -46,6 +46,20 @@
     --status-issue: 25 95% 53%;
     --status-issue-bg: 25 95% 95%;
 
+    /* Analytics colors - enterprise palette */
+    --analytics-primary: 221 83% 53%;
+    --analytics-primary-light: 221 83% 95%;
+    --analytics-success: 158 64% 42%;
+    --analytics-success-light: 158 64% 94%;
+    --analytics-warning: 38 92% 50%;
+    --analytics-warning-light: 38 92% 95%;
+    --analytics-danger: 0 72% 51%;
+    --analytics-danger-light: 0 72% 95%;
+    --analytics-neutral: 215 16% 47%;
+    --analytics-neutral-light: 210 40% 96%;
+    --analytics-accent: 262 83% 58%;
+    --analytics-accent-light: 262 83% 95%;
+
     /* Sidebar */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 47% 11%;
@@ -61,11 +75,17 @@
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 99%) 100%);
     --gradient-blue: linear-gradient(135deg, hsl(221 83% 53% / 0.03) 0%, hsl(221 83% 53% / 0.08) 100%);
 
+    /* Cinematic gradients */
+    --gradient-dark: linear-gradient(180deg, hsl(222 47% 8%) 0%, hsl(222 47% 5%) 100%);
+    --gradient-dramatic: linear-gradient(135deg, hsl(222 47% 11%) 0%, hsl(221 83% 15%) 100%);
+    --gradient-glow: radial-gradient(ellipse at center, hsl(221 83% 53% / 0.15) 0%, transparent 70%);
+
     /* Shadows - Apple-style soft shadows */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.03);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
     --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --shadow-dramatic: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   }
 
   .dark {
@@ -129,6 +149,18 @@
     background: var(--gradient-blue);
   }
 
+  .gradient-dark {
+    background: var(--gradient-dark);
+  }
+
+  .gradient-dramatic {
+    background: var(--gradient-dramatic);
+  }
+
+  .gradient-glow {
+    background: var(--gradient-glow);
+  }
+
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
@@ -139,5 +171,31 @@
 
   .shadow-elevated {
     box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-dramatic {
+    box-shadow: var(--shadow-dramatic);
+  }
+
+  /* Cinematic text styles */
+  .text-hero {
+    font-size: clamp(3rem, 12vw, 9rem);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    font-weight: 600;
+  }
+
+  .text-display {
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  .text-statement {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    font-weight: 500;
   }
 }
