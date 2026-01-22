@@ -15,10 +15,16 @@ import Settings from "./pages/Settings";
 import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
 import JobPlanning from "@/pages/JobPlanning";
+import Locations from "@/pages/Locations";
+
+/* Contexts */
+import { LocationsProvider } from "@/contexts/LocationsContext";
 
 /* Marketing – CleanProof */
 import CleanProofLanding from "@/marketing/cleanproof/CleanProofLanding";
 import CleanProofDemoRequest from "@/marketing/cleanproof/CleanProofDemoRequest";
+
+import "leaflet/dist/leaflet.css";
 
 const queryClient = new QueryClient();
 
@@ -28,40 +34,45 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* =========================
-              Marketing (public)
-              ========================= */}
-          <Route path="/cleanproof" element={<CleanProofLanding />} />
-          <Route path="/cleanproof/demo" element={<CleanProofDemoRequest />} />
+        <LocationsProvider>
+          <Routes>
+            {/* =========================
+                Marketing (public)
+                ========================= */}
+            <Route path="/cleanproof" element={<CleanProofLanding />} />
+            <Route path="/cleanproof/demo" element={<CleanProofDemoRequest />} />
 
-          {/* =========================
-              Auth
-              ========================= */}
-          <Route path="/" element={<Login />} />
+            {/* =========================
+                Auth
+                ========================= */}
+            <Route path="/" element={<Login />} />
 
-          {/* =========================
-              Protected app (with layout)
-              ========================= */}
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/jobs" element={<Jobs />} />
-            <Route path="/jobs/:id" element={<JobDetails />} />
-            <Route path="/create-job" element={<CreateJob />} />
-            <Route path="/planning" element={<JobPlanning />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
+            {/* =========================
+                Protected app (with layout)
+                ========================= */}
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/jobs" element={<Jobs />} />
+              <Route path="/jobs/:id" element={<JobDetails />} />
+              <Route path="/create-job" element={<CreateJob />} />
+              <Route path="/planning" element={<JobPlanning />} />
+              <Route path="/locations" element={<Locations />} />
+              <Route path="/locations/new" element={<Locations />} />
+              <Route path="/locations/:id" element={<Locations />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
 
-          {/* =========================
-              Cleaner interface (standalone)
-              ========================= */}
-          <Route path="/cleaner" element={<CleanerJob />} />
+            {/* =========================
+                Cleaner interface (standalone)
+                ========================= */}
+            <Route path="/cleaner" element={<CleanerJob />} />
 
-          {/* =========================
-              Catch-all
-              ========================= */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* =========================
+                Catch-all
+                ========================= */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </LocationsProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

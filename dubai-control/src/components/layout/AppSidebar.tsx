@@ -7,6 +7,7 @@ import {
   PlusCircle,
   Settings,
   LogOut,
+  MapPin,
 } from "lucide-react";
 
 const navigation = [
@@ -14,6 +15,7 @@ const navigation = [
   { name: "Jobs", href: "/jobs", icon: Briefcase },
   { name: "Job Planning", href: "/planning", icon: CalendarDays },
   { name: "Create Job", href: "/create-job", icon: PlusCircle },
+  { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
