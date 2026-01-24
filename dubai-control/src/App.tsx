@@ -1,9 +1,12 @@
+// dubai-control/src/App.tsx
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
+import ScrollToTop from "@/components/layout/ScrollToTop";
 
 /* Product pages */
 import Login from "./pages/Login";
@@ -16,6 +19,7 @@ import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
 import JobPlanning from "@/pages/JobPlanning";
 import Locations from "@/pages/Locations";
+import PricingPage from "@/pages/PricingPage";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -34,6 +38,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        {/* 👇 глобальный контроль скролла */}
+        <ScrollToTop />
+
         <LocationsProvider>
           <Routes>
             {/* =========================
@@ -41,6 +48,9 @@ const App = () => (
                 ========================= */}
             <Route path="/cleanproof" element={<CleanProofLanding />} />
             <Route path="/cleanproof/demo" element={<CleanProofDemoRequest />} />
+            <Route path="/cleanproof/pricing" element={<PricingPage />} />
+            {/* alias на всякий случай */}
+            <Route path="/pricing" element={<PricingPage />} />
 
             {/* =========================
                 Auth

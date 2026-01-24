@@ -1,5 +1,7 @@
+// dubai-control/src/components/landing/CTASection.tsx
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const CTASection = () => {
@@ -9,7 +11,7 @@ const CTASection = () => {
   return (
     <section ref={ref} className="relative py-32 md:py-48 px-6 bg-foreground">
       <div className="absolute inset-0 gradient-glow opacity-30" />
-      
+
       <div className="relative z-10 max-w-3xl mx-auto text-center">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -21,14 +23,17 @@ const CTASection = () => {
             <br />
             <span className="text-primary">in real life.</span>
           </h2>
-          
-          <Button 
-            size="lg" 
-            className="h-14 px-12 text-base font-medium rounded-full bg-primary-foreground text-foreground hover:bg-primary-foreground/90 transition-all duration-300 mb-4"
-          >
-            Request demo
-          </Button>
-          
+
+          {/* MAIN CTA – белая «пилюля» как в hero */}
+          <Link to="/cleanproof/demo">
+            <Button
+              size="lg"
+              className="h-14 px-12 text-base font-medium rounded-full bg-white text-slate-900 hover:bg-slate-100 shadow-md transition-colors mb-4"
+            >
+              Request demo
+            </Button>
+          </Link>
+
           <p className="text-slate-400 text-sm">
             No public signup. Demo only.
           </p>

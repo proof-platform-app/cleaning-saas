@@ -10,12 +10,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { locations, cleaners } from "@/data/sampleData";
+import { cleaners } from "@/data/sampleData";
 import { ArrowLeft } from "lucide-react";
+import { useLocations } from "@/contexts/LocationsContext";
 
 export default function CreateJob() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const { locations, isLoading: isLocationsLoading } = useLocations();
 
   const [formData, setFormData] = useState({
     location: "",
@@ -31,7 +33,7 @@ export default function CreateJob() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate job creation
+    // TODO: заменить на реальный API вызов
     setTimeout(() => {
       setIsLoading(false);
       navigate("/jobs");
@@ -64,10 +66,11 @@ export default function CreateJob() {
       {/* Form */}
       <div className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Location & Cleaner */}
+          {/* Assignment */}
           <div className="bg-card rounded-xl border border-border shadow-card p-6">
             <h2 className="font-semibold text-foreground mb-6">Assignment</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Location */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground">
                   Location
@@ -75,13 +78,20 @@ export default function CreateJob() {
                 <Select
                   value={formData.location}
                   onValueChange={(value) => handleChange("location", value)}
+                  disabled={isLocationsLoading || locations.length === 0}
                 >
                   <SelectTrigger className="h-11 bg-background border-border">
-                    <SelectValue placeholder="Select location" />
+                    <SelectValue
+                      placeholder={
+                        isLocationsLoading
+                          ? "Loading locations..."
+                          : "Select location"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {locations.map((loc) => (
-                      <SelectItem key={loc.id} value={loc.id}>
+                      <SelectItem key={loc.id} value={String(loc.id)}>
                         {loc.name}
                       </SelectItem>
                     ))}
@@ -92,6 +102,7 @@ export default function CreateJob() {
                 </p>
               </div>
 
+              {/* Cleaner */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-foreground">
                   Cleaner
@@ -105,7 +116,7 @@ export default function CreateJob() {
                   </SelectTrigger>
                   <SelectContent>
                     {cleaners.map((cleaner) => (
-                      <SelectItem key={cleaner.id} value={cleaner.id}>
+                      <SelectItem key={cleaner.id} value={String(cleaner.id)}>
                         {cleaner.name}
                       </SelectItem>
                     ))}
@@ -163,7 +174,7 @@ export default function CreateJob() {
             </div>
           </div>
 
-          {/* Pricing (Display Only) */}
+          {/* Pricing */}
           <div className="bg-card rounded-xl border border-border shadow-card p-6">
             <h2 className="font-semibold text-foreground mb-2">
               Pricing
