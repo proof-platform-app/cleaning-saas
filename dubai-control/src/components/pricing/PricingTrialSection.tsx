@@ -1,8 +1,16 @@
+// dubai-control/src/components/pricing/PricingTrialSection.tsx
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import { Button } from "@/components/ui/button";
 
-const PricingTrialSection = () => {
-  const ref = useRef(null);
+type PricingTrialSectionProps = {
+  onStartStandardTrial?: () => void;
+};
+
+const PricingTrialSection: React.FC<PricingTrialSectionProps> = ({
+  onStartStandardTrial,
+}) => {
+  const ref = useRef<HTMLDivElement | null>(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
 
   return (
@@ -25,18 +33,30 @@ const PricingTrialSection = () => {
           </h3>
 
           {/* Лимиты, как три равнозначных пункта с разделителями */}
-          <div className="flex items-center justify-center gap-0">
-            <span className="text-base text-primary-foreground/60 font-medium px-5">
-              2 cleaners
-            </span>
-            <span className="w-px h-4 bg-primary-foreground/20" />
-            <span className="text-base text-primary-foreground/60 font-medium px-5">
-              10 jobs
-            </span>
-            <span className="w-px h-4 bg-primary-foreground/20" />
-            <span className="text-base text-primary-foreground/60 font-medium px-5">
-              Full proof flow
-            </span>
+          <div className="flex flex-col items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-0">
+              <span className="text-base text-primary-foreground/60 font-medium px-5">
+                2 cleaners
+              </span>
+              <span className="w-px h-4 bg-primary-foreground/20" />
+              <span className="text-base text-primary-foreground/60 font-medium px-5">
+                10 jobs
+              </span>
+              <span className="w-px h-4 bg-primary-foreground/20" />
+              <span className="text-base text-primary-foreground/60 font-medium px-5">
+                Full proof flow
+              </span>
+            </div>
+
+            {/* Кнопка запуска триала */}
+            <Button
+              size="lg"
+              onClick={onStartStandardTrial}
+              disabled={!onStartStandardTrial}
+              className="mt-2 rounded-full"
+            >
+              Start 7-day trial
+            </Button>
           </div>
         </motion.div>
       </div>

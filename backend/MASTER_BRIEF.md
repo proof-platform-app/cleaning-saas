@@ -42,7 +42,7 @@ CleanProof marketing entry is implemented as a controlled two-step funnel:
 1. Landing page (/cleanproof) — communicates the problem, positioning, and product philosophy.
 2. Demo request page (/cleanproof/demo) — explains the real operational flow and collects demo requests without granting product access.
 
-Both pages are non-authenticated, non-interactive, and intentionally separated from the core product UI. Their purpose is to prepare prospects for a guided or live demo, not to replace it. The core message remains unchanged: “If it’s not proven, it didn’t happen.”
+Both pages are non-authenticated, non-interactive, and intentionally separated from the core product UI. Their purpose is to prepare prospects for a guided or live demo, not to replace it. The core message remains unchanged: "If it’s not proven, it didn’t happen."
 
 Landing & Demo
 
@@ -62,6 +62,7 @@ Next focus:
 CleanProof treats location not as a textual concept, but as a physical fact. A job does not happen at an address string — it happens at a specific point on the map. This is why coordinates, not typed addresses, define where work is performed. This principle reinforces the core narrative of CleanProof: proof must be verifiable, precise, and resistant to interpretation.
 
 Монетизационный флоу (зафиксировано)
+
 В проекте разделены три сценария:
 1. Marketing / Landing — объясняет продукт, ведёт на Demo или Pricing.
 2. Demo request — ручной, sales-driven сценарий (/cleanproof/demo).

@@ -85,12 +85,10 @@ from — дата начала, YYYY-MM-DD (обязательный)
 
 to — дата конца, YYYY-MM-DD (обязательный)
 
-http
-Копировать код
+
 GET /api/manager/analytics/jobs-completed/?from=2026-01-06&to=2026-01-19
 Response
-json
-Копировать код
+
 [
   { "date": "2026-01-06", "jobs_completed": 18 },
   { "date": "2026-01-07", "jobs_completed": 21 },
@@ -115,12 +113,10 @@ from — дата начала, YYYY-MM-DD (обязательный)
 
 to — дата конца, YYYY-MM-DD (обязательный)
 
-http
-Копировать код
+
 GET /api/manager/analytics/job-duration/?from=2026-01-06&to=2026-01-19
 Response
-json
-Копировать код
+
 [
   { "date": "2026-01-06", "avg_job_duration_hours": 2.3 },
   { "date": "2026-01-07", "avg_job_duration_hours": 2.1 },
@@ -143,12 +139,10 @@ from — дата начала, YYYY-MM-DD (обязательный)
 
 to — дата конца, YYYY-MM-DD (обязательный)
 
-http
-Копировать код
+
 GET /api/manager/analytics/proof-completion/?from=2026-01-06&to=2026-01-19
 Response
-json
-Копировать код
+
 [
   {
     "date": "2026-01-06",
@@ -192,12 +186,10 @@ from — дата начала, YYYY-MM-DD (обязательный)
 
 to — дата конца, YYYY-MM-DD (обязательный)
 
-http
-Копировать код
+
 GET /api/manager/analytics/cleaners-performance/?from=2026-01-06&to=2026-01-19
 Response
-json
-Копировать код
+
 [
   {
     "cleaner_id": 3,
@@ -262,5 +254,3 @@ Breaking changes:
 
 считаем, что «обновление раз в N минут» — задача будущего этапа.
 
-yaml
-Копировать код

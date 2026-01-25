@@ -2,7 +2,7 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const plans = [
   {
@@ -36,7 +36,7 @@ const plans = [
       "",
     ],
     cta: "Request access",
-    ctaLink: "/demo",
+    ctaLink: "/cleanproof/demo",
     note: null,
     badge: "Most teams choose Pro",
     highlighted: true,
@@ -46,22 +46,23 @@ const plans = [
 const PricingPlansSection = () => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
+  const navigate = useNavigate();
 
   return (
-    <section 
-      ref={ref} 
+    <section
+      ref={ref}
       className="relative py-20 md:py-28 px-6 bg-foreground"
     >
       {/* Grid overlay - matching landing page */}
-      <div 
+      <div
         className="absolute inset-0 opacity-[0.02]"
         style={{
           backgroundImage: `linear-gradient(hsl(var(--primary-foreground)) 1px, transparent 1px),
                            linear-gradient(90deg, hsl(var(--primary-foreground)) 1px, transparent 1px)`,
-          backgroundSize: '80px 80px'
+          backgroundSize: "80px 80px",
         }}
       />
-      
+
       <div className="relative z-10 max-w-3xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -76,7 +77,7 @@ const PricingPlansSection = () => {
             Choose your scale.
           </h2>
         </motion.div>
-        
+
         {/* Shared container for both cards */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -89,10 +90,12 @@ const PricingPlansSection = () => {
               <div
                 key={plan.name}
                 className={`relative flex flex-col p-7 rounded-xl transition-all duration-300 ${
-                  plan.highlighted 
-                    ? "bg-primary-foreground/[0.04]" 
+                  plan.highlighted ? "bg-primary-foreground/[0.04]" : ""
+                } ${
+                  index === 0
+                    ? "md:border-r md:border-primary-foreground/[0.06]"
                     : ""
-                } ${index === 0 ? "md:border-r md:border-primary-foreground/[0.06]" : ""}`}
+                }`}
               >
                 {/* Reserved badge space - identical height for both cards */}
                 <div className="h-7 mb-3">
@@ -102,40 +105,45 @@ const PricingPlansSection = () => {
                     </span>
                   )}
                 </div>
-                
+
                 {/* Plan name - larger and bolder */}
                 <h3 className="text-2xl font-bold text-primary-foreground mb-4 tracking-tight">
                   {plan.name}
                 </h3>
-                
+
                 {/* Price */}
                 <p className="text-4xl font-semibold text-primary-foreground mb-1.5">
                   {plan.price}
-                  <span className="text-sm font-normal text-primary-foreground/40 ml-1.5">/ month</span>
+                  <span className="text-sm font-normal text-primary-foreground/40 ml-1.5">
+                    / month
+                  </span>
                 </p>
-                
+
                 {/* Description - fixed height */}
                 <p className="text-sm text-primary-foreground/50 h-10 mb-6">
                   {plan.description}
                 </p>
-                
+
                 {/* Features - fixed height container */}
                 <div className="flex-1 mb-6" style={{ minHeight: "156px" }}>
                   <div className="space-y-2.5">
                     {plan.features.map((feature, i) => (
-                      <p key={i} className="text-sm text-primary-foreground/55 h-5">
+                      <p
+                        key={i}
+                        className="text-sm text-primary-foreground/55 h-5"
+                      >
                         {feature}
                       </p>
                     ))}
                   </div>
                 </div>
-                
+
                 {/* CTA - aligned at bottom with equal sizing */}
                 <div>
                   {plan.ctaLink ? (
                     <Link to={plan.ctaLink} className="block">
-                      <Button 
-                        size="lg" 
+                      <Button
+                        size="lg"
                         className={`w-full h-12 text-sm font-medium rounded-full transition-all duration-300 ${
                           plan.highlighted
                             ? "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -146,8 +154,13 @@ const PricingPlansSection = () => {
                       </Button>
                     </Link>
                   ) : (
-                    <Button 
-                      size="lg" 
+                    <Button
+                      size="lg"
+                      onClick={
+                        plan.name === "Standard"
+                          ? () => navigate("/?trial=standard")
+                          : undefined
+                      }
                       className={`w-full h-12 text-sm font-medium rounded-full transition-all duration-300 ${
                         plan.highlighted
                           ? "bg-primary text-primary-foreground hover:bg-primary/90"

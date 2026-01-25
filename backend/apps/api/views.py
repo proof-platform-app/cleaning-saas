@@ -46,9 +46,9 @@ class LoginView(APIView):
     authentication_classes = []
     permission_classes = []
 
-    def post(self, request):
-        email = (request.data.get("email") or "").strip().lower()
-        password = request.data.get("password") or ""
+    def post(self, request, *args, **kwargs):
+        email = (request.data.get("email") or "").strip()
+        password = (request.data.get("password") or "")
 
         if not email or not password:
             return Response(
@@ -56,22 +56,22 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 🔴 ВАЖНО: тут убираем фильтр по role
         try:
             user = User.objects.get(
                 email__iexact=email,
-                role=User.ROLE_CLEANER,
                 is_active=True,
             )
         except User.DoesNotExist:
             return Response(
                 {"detail": "User not found"},
-                status=status.HTTP_401_UNAUTHORIZED,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not user.check_password(password):
             return Response(
                 {"detail": "Invalid credentials"},
-                status=status.HTTP_401_UNAUTHORIZED,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         token, _ = Token.objects.get_or_create(user=user)

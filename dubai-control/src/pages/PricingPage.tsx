@@ -1,5 +1,5 @@
 // dubai-control/src/pages/PricingPage.tsx
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
@@ -12,6 +12,21 @@ import PricingCTASection from "@/components/pricing/PricingCTASection";
 import CleanProofHeader from "@/marketing/cleanproof/CleanProofHeader";
 
 const PricingPage = () => {
+  const navigate = useNavigate();
+
+  /**
+   * Start 7-day trial flow (Standard plan)
+   *
+   * Правило:
+   * — триал стартует только через Pricing → Login
+   * — здесь мы просто добавляем query-параметр ?trial=standard
+   * — дальше login-страница, увидев этот параметр, дергает
+   *   POST /api/cleanproof/trials/start/ после успешного входа.
+   */
+  const handleStartStandardTrial = () => {
+    navigate("/?trial=standard");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header в едином стиле с другими маркетинговыми страницами */}
@@ -68,7 +83,8 @@ const PricingPage = () => {
       <main className="overflow-hidden">
         <PricingHeroSection />
         <PricingPlansSection />
-        <PricingTrialSection />
+        {/* Здесь триал секция получает хендлер для кнопки */}
+        <PricingTrialSection onStartStandardTrial={handleStartStandardTrial} />
         <PricingFAQSection />
         <PricingCTASection />
       </main>
