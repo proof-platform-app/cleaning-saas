@@ -28,6 +28,19 @@ export interface ManagerJobSummary {
   [key: string]: any;
 }
 
+// ---------- Usage summary (trial + soft-limits) ----------
+
+export type UsageSummary = {
+  plan: string;
+  is_trial_active: boolean;
+  is_trial_expired: boolean;
+  days_left: number | null;
+  jobs_today_count: number;
+  jobs_today_soft_limit: number;
+  cleaners_count: number;
+  cleaners_soft_limit: number;
+};
+
 // ---------- Timeline types ----------
 
 export type JobTimelineStepKey =
@@ -490,6 +503,13 @@ function normalizePhotos(
   };
 }
 
+// ---------- Usage summary API ----------
+
+export async function getUsageSummary(): Promise<UsageSummary> {
+  await loginManager();
+  return apiFetch<UsageSummary>("/api/cleanproof/usage-summary/");
+}
+
 // ---------- Jobs: today ----------
 
 export async function getManagerTodayJobs(): Promise<ManagerJobSummary[]> {
@@ -589,4 +609,3 @@ export const apiClient = {
     return { data };
   },
 };
-  

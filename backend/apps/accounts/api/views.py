@@ -4,8 +4,18 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.contrib.auth import get_user_model
 from apps.accounts.models import Company
+from apps.jobs.models import Job  # предполагаем, что модели jobs лежат здесь
+
 from .serializers import TrialStatusSerializer
+
+
+# Soft-limits для trial (можно будет позже поменять числа в одном месте)
+TRIAL_JOBS_SOFT_LIMIT_PER_DAY = 20
+TRIAL_CLEANERS_SOFT_LIMIT = 5
+
+User = get_user_model()
 
 
 class StartStandardTrialView(APIView):
@@ -76,3 +86,70 @@ class StartStandardTrialView(APIView):
             }
         )
         return serializer.data
+
+
+class UsageSummaryView(APIView):
+    """
+    Краткая сводка по trial и usage для менеджера.
+
+    URL: GET /api/cleanproof/usage-summary/
+    Требует: авторизацию.
+
+    Назначение:
+    - дать фронту одну точку правды:
+      * trial-план и статус
+      * кол-во job за сегодня + soft-limit
+      * кол-во активных клинеров + soft-limit
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        company: Company = user.company
+        now = timezone.now()
+
+        # Trial-состояние (логика согласована с StartStandardTrialView)
+        if company.trial_expires_at:
+            delta = company.trial_expires_at.date() - now.date()
+            days_left = max(delta.days, 0)
+        else:
+            days_left = None
+
+        is_expired = bool(
+            company.trial_expires_at and company.trial_expires_at <= now
+        )
+        is_active = company.plan == "trial" and not is_expired
+
+        # Usage: jobs за сегодня (кроме отменённых)
+        today = timezone.localdate()
+        jobs_today_count = (
+            Job.objects.filter(
+                company=company,
+                scheduled_date=today,
+            )
+            .exclude(status="cancelled")
+            .count()
+        )
+
+        # Usage: кол-во активных клинеров
+        cleaners_count = (
+            User.objects.filter(
+                company=company,
+                role="cleaner",
+                is_active=True,
+            ).count()
+        )
+
+        data = {
+            "plan": company.plan,
+            "is_trial_active": is_active,
+            "is_trial_expired": is_expired,
+            "days_left": days_left,
+            "jobs_today_count": jobs_today_count,
+            "jobs_today_soft_limit": TRIAL_JOBS_SOFT_LIMIT_PER_DAY,
+            "cleaners_count": cleaners_count,
+            "cleaners_soft_limit": TRIAL_CLEANERS_SOFT_LIMIT,
+        }
+
+        return Response(data, status=status.HTTP_200_OK)

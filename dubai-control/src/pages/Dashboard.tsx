@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
-// sampleJobs больше не используем, данные идут с API
-// import { sampleJobs } from "@/data/sampleData";
 import {
   Calendar,
   Clock,
@@ -18,17 +16,10 @@ import { getManagerTodayJobs } from "@/api/client";
 type ApiJob = {
   id: number;
   status: "scheduled" | "in_progress" | "completed" | string;
-  scheduled_start?: string; // ISO-строка
-  scheduled_end?: string; // ISO-строка
-  location?: {
-    id: number;
-    name: string;
-    address?: string;
-  };
-  cleaner?: {
-    id: number;
-    full_name: string;
-  };
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+  location: string;
+  cleaner: string;
 };
 
 type UiJobStatus = "in-progress" | "completed" | "issue";
@@ -44,15 +35,12 @@ type UiJob = {
 };
 
 function mapApiJobToUi(job: ApiJob): UiJob {
-  // Бэкенд: scheduled | in_progress | completed
-  // UI: in-progress | completed | issue
   let uiStatus: UiJobStatus;
   if (job.status === "in_progress") {
     uiStatus = "in-progress";
   } else if (job.status === "completed") {
     uiStatus = "completed";
   } else {
-    // временно считаем всё остальное "issue" (можно потом придумать лучше)
     uiStatus = "issue";
   }
 
@@ -67,8 +55,8 @@ function mapApiJobToUi(job: ApiJob): UiJob {
     id: job.id,
     status: uiStatus,
     date,
-    location: job.location?.name || "Unknown location",
-    cleaner: job.cleaner?.full_name || "Unknown cleaner",
+    location: job.location || "Unknown location",
+    cleaner: job.cleaner || "Unknown cleaner",
     startTime,
     endTime,
   };
@@ -78,6 +66,12 @@ export default function Dashboard() {
   const [todayJobs, setTodayJobs] = useState<UiJob[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // TEMP: trial context (will be wired to API later)
+  const trialInfo = {
+    isActive: true,
+    daysLeft: 6,
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -125,10 +119,10 @@ export default function Dashboard() {
             {"Today's Overview"}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            {/* пока дата захардкожена, позже можно подставить реальную */}
             Monday, January 15, 2024 · GST (UTC+4)
           </p>
         </div>
+
         <Link to="/create-job">
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft">
             <Plus className="w-4 h-4 mr-2" />
@@ -136,6 +130,30 @@ export default function Dashboard() {
           </Button>
         </Link>
       </div>
+
+      {/* Trial banner */}
+      {trialInfo.isActive && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm">
+            <div>
+              <p className="font-medium text-slate-900">
+                Trial active · {trialInfo.daysLeft}{" "}
+                {trialInfo.daysLeft === 1 ? "day" : "days"} left
+              </p>
+              <p className="mt-0.5 text-xs text-slate-600">
+                You&apos;re exploring CleanProof with full access. Upgrade anytime
+                — no changes to your data.
+              </p>
+            </div>
+            <Link
+              to="/cleanproof/pricing"
+              className="ml-4 text-xs font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+            >
+              Upgrade
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -165,7 +183,6 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Ошибка / лоадер (простая версия) */}
       {error && (
         <div className="mb-4 text-sm text-red-500">
           Failed to load jobs: {error}
@@ -175,7 +192,7 @@ export default function Dashboard() {
       {/* Today's Jobs */}
       <div className="bg-card rounded-xl border border-border shadow-card">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-foreground">Today's Jobs</h2>
+          <h2 className="font-semibold text-foreground">Today&apos;s Jobs</h2>
           <Link
             to="/jobs"
             className="text-sm text-primary hover:text-primary/80 font-medium flex items-center gap-1"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import {
 import { cleaners } from "@/data/sampleData";
 import { ArrowLeft } from "lucide-react";
 import { useLocations } from "@/contexts/LocationsContext";
+import { getUsageSummary, type UsageSummary } from "@/api/client";
 
 export default function CreateJob() {
   const navigate = useNavigate();
@@ -29,6 +30,32 @@ export default function CreateJob() {
     flatRate: "",
   });
 
+  // Soft-limits usage summary (trial + jobs)
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadUsage() {
+      try {
+        const data = await getUsageSummary();
+        if (!isMounted) return;
+        setUsage(data);
+      } catch (err) {
+        // не ломаем форму, просто молчим
+        if (!isMounted) return;
+        setUsage(null);
+        console.warn("[CreateJob] Failed to load usage summary", err);
+      }
+    }
+
+    loadUsage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -42,6 +69,47 @@ export default function CreateJob() {
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const renderJobsSoftLimitBanner = () => {
+    if (!usage) return null;
+
+    const isTrialPlan =
+      usage.plan === "trial" || usage.is_trial_expired === true;
+
+    if (!isTrialPlan) return null;
+
+    const closeToJobsLimit =
+      usage.jobs_today_count >= usage.jobs_today_soft_limit - 2 &&
+      usage.jobs_today_count < usage.jobs_today_soft_limit;
+
+    const atJobsLimit =
+      usage.jobs_today_count >= usage.jobs_today_soft_limit;
+
+    if (!closeToJobsLimit && !atJobsLimit) return null;
+
+    return (
+      <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm flex items-start justify-between gap-4">
+        <div>
+          <p className="font-medium text-slate-900">
+            {atJobsLimit
+              ? "You’ve reached the recommended job limit for trial accounts."
+              : "You’re close to the job limit for trial accounts."}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-600">
+            {atJobsLimit
+              ? "You can still continue — some actions may be limited later."
+              : "You can continue working — upgrade anytime."}
+          </p>
+        </div>
+        <Link
+          to="/cleanproof/pricing"
+          className="text-xs font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+        >
+          Upgrade
+        </Link>
+      </div>
+    );
   };
 
   return (
@@ -66,6 +134,9 @@ export default function CreateJob() {
       {/* Form */}
       <div className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Soft-limit banner (jobs) */}
+          {renderJobsSoftLimitBanner()}
+
           {/* Assignment */}
           <div className="bg-card rounded-xl border border-border shadow-card p-6">
             <h2 className="font-semibold text-foreground mb-6">Assignment</h2>
