@@ -491,3 +491,40 @@ Mobile-клиент стабилен: check-in / check-out проходят с �
 Mobile Cleaner App — Offline readiness (v0)
 
 Приложение остаётся online-first. Добавлена архитектурная подготовка к оффлайн-режиму: типы outbox, ограничения по операциям, комментарии в ключевых точках кода. Реальная оффлайн-очередь и ретраи не реализованы. Phase 11.3 считается завершённой.
+
+Landing & Demo  
+Status: READY (v1)
+- Landing page structure finalized.
+- Demo page finalized with linear narrative flow.
+- Demo navigation limited to:
+  - return to landing,
+  - demo request submission.
+- No dead-end UX remains.
+
+Next focus:
+- Phase 14.1 — end-to-end happy-path validation (Manager → Cleaner → Manager → PDF).
+- Identification of blocking UX or functional issues during real job execution.
+
+### Locations: status and constraints
+
+Location management is implemented with manual map-based coordinate selection. Address autocomplete and automatic geocoding are intentionally not part of the current implementation. This behavior is considered stable and correct for the current product phase. Any enhancement related to address lookup or map assistance is deferred to a future phase and must preserve manual coordinate confirmation.
+
+Статус на текущий момент
+- Страница Pricing подключена и доступна по `/cleanproof/pricing`.
+- Кнопка “Start 7-day trial” определена как основной self-serve CTA.
+- Trial-флоу зафиксирован: Pricing → Login → Trial company (7 дней).
+- Demo и Trial разведены как разные пользовательские сценарии.
+- Визуально CTA-кнопки приведены к единому стилю (white primary на dark hero).
+
+Marketing & Positioning  
+Status: READY / LOCKED (v1)
+- Public marketing pages implemented: Landing, Pricing, Product Updates, Contact, Demo Request.
+- Unified navigation and visual language applied across all CleanProof public pages.
+- No public signup or automated trial flow enabled.
+- Demo and Contact act as the only entry points into sales and support conversations.
+
+Next Focus
+- Define and implement trial logic (limits, duration, enforcement).
+- Decide where demo and contact form data is persisted and how it is reviewed.
+- Validate pricing with first paying customers.
+- Move primary effort back to product execution and end-to-end reliability.
