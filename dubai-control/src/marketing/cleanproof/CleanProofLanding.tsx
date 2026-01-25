@@ -1,6 +1,5 @@
 // dubai-control/src/marketing/cleanproof/CleanProofLanding.tsx
-import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import CleanProofHeader from "./CleanProofHeader";
 
 import HeroSection from "@/components/landing/HeroSection";
 import ProblemSection from "@/components/landing/ProblemSection";
@@ -14,30 +13,8 @@ import TransitionSection3 from "@/components/landing/TransitionSection3";
 export default function CleanProofLanding() {
   return (
     <div className="min-h-screen bg-background">
-      {/* Minimal header over dark hero */}
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.5 }}
-        className="fixed top-0 left-0 right-0 z-50 bg-transparent"
-      >
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link
-            to="/cleanproof"
-            className="text-lg font-semibold text-primary-foreground"
-          >
-            CleanProof
-          </Link>
-
-          {/* Только текстовый Sign in, как в дизайне */}
-          <Link
-            to="/"
-            className="text-sm md:text-base text-primary-foreground/70 hover:text-primary-foreground transition-colors"
-          >
-            Sign in
-          </Link>
-        </div>
-      </motion.header>
+      {/* Единый маркетинговый хедер поверх тёмного hero */}
+      <CleanProofHeader variant="onDark" />
 
       {/* Структура лендинга */}
       <main className="overflow-hidden">
@@ -62,16 +39,42 @@ export default function CleanProofLanding() {
               Built for UAE cleaning operations.
             </p>
           </div>
-          <div className="flex items-center gap-8">
+
+          {/* Навигация в футере */}
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+            <a
+              href="/cleanproof"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Home
+            </a>
+            <a
+              href="/cleanproof/pricing"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Pricing
+            </a>
+            <a
+              href="/cleanproof/updates"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Product updates
+            </a>
+            <a
+              href="/cleanproof/contact"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Contact
+            </a>
             <a
               href="#"
-              className="text-sm text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Privacy
             </a>
             <a
               href="#"
-              className="text-sm text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Terms
             </a>

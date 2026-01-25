@@ -1,833 +1,755 @@
-Не обрезал, только добавил новый блок в начало и чуть подчистил пробелы внутри него. Вот полный `MASTER_BRIEF.md` целиком:
+MASTER BRIEF — Cleaning SaaS (MVP)
 
-````markdown
-## Product Narrative & Positioning
+(актуальная версия для продолжения работы)
 
-CleanProof позиционируется как proof layer для клининговых операций, а не как CRM, task manager или marketplace. Лендинг выстроен как линейный narrative-флоу: проблема → отсутствие доказательств → жёсткий процесс → проверяемый результат → один PDF как финальный артефакт.
+Что это за проект
 
-Ключевая идея зафиксирована:
+Cleaning SaaS — backend-first SaaS для клининговых компаний (рынок UAE).
+
+Проект покрывает реальный операционный цикл:
+
+Планирование → Исполнение → Контроль → Отчёт
+
+Фокус MVP
+
+дисциплина и прозрачность работы клинеров
+
+контроль выполнения через:
+
+GPS
+
+чек-листы
+
+фото before / after
+
+PDF-отчёт как финальный, юридически понятный артефакт работы
+
+Проект не про биллинг, маркетинг или CRM.
+Только операционка.
+
+Marketing Entry Principle
+
+CleanProof marketing entry consists of two controlled layers:
+1. Landing page — explains the problem and product philosophy.
+2. Demo page — explains the real operational flow without allowing self-navigation into the product.
+
+The demo page is intentionally non-interactive and serves as a narrative explanation, not a sandbox. Its purpose is to prepare prospects for a live or guided demo, not replace it. The core product message remains unchanged:
 If it’s not proven, it didn’t happen.
-Любые будущие изменения продукта или UI должны усиливать эту идею, а не размывать её.
 
-# API_CONTRACTS — Cleaning SaaS
+Marketing Entry Architecture
 
-Mobile Execution API — Freeze & Guards (Phase 11.1)
+CleanProof marketing entry is implemented as a controlled two-step funnel:
+1. Landing page (/cleanproof) — communicates the problem, positioning, and product philosophy.
+2. Demo request page (/cleanproof/demo) — explains the real operational flow and collects demo requests without granting product access.
 
-Контракты мобильного клиента для исполнения задач **зафиксированы**.
-Check-in / Check-out, чек-лист (bulk и toggle), фото (before / after) и PDF-отчёт используют стабильные эндпоинты и payload’ы, описанные в этом документе.
+Both pages are non-authenticated, non-interactive, and intentionally separated from the core product UI. Their purpose is to prepare prospects for a guided or live demo, not to replace it. The core message remains unchanged: “If it’s not proven, it didn’t happen.”
 
-В `mobile-cleaner/src/api/client.ts` все критичные вызовы (jobs, checklist, photos, pdf) помечены явными комментариями:
+Landing & Demo
 
-> **НЕ МЕНЯТЬ URL / FORMAT БЕЗ ПОЛНОГО E2E-РЕВЬЮ**
+Status: READY (v1 locked)
+* CleanProof landing page implemented and live at /cleanproof.
+* Demo request page implemented and live at /cleanproof/demo.
+* Marketing routes are isolated from product routes and layouts.
+* No self-serve registration or demo access is exposed.
+* Visual and narrative content matches real system behavior.
 
-Любые изменения этих контрактов считаются **breaking**, требуют:
+Next focus:
+* Phase 14.1 — end-to-end happy-path validation (Manager → Cleaner → Manager → PDF).
+* Preparation of a structured live demo flow based on real data.
 
-* отдельной ветки,
-* обновления этого файла,
-* ручного E2E-прогона (backend + mobile).
+### Physical proof requires physical precision
 
----
+CleanProof treats location not as a textual concept, but as a physical fact. A job does not happen at an address string — it happens at a specific point on the map. This is why coordinates, not typed addresses, define where work is performed. This principle reinforces the core narrative of CleanProof: proof must be verifiable, precise, and resistant to interpretation.
 
-## Check-in / Check-out — GPS Contract
+Монетизационный флоу (зафиксировано)
+В проекте разделены три сценария:
+1. Marketing / Landing — объясняет продукт, ведёт на Demo или Pricing.
+2. Demo request — ручной, sales-driven сценарий (/cleanproof/demo).
+3. 7-day Trial — self-serve вход в продукт через Pricing Page.
 
-Мобильный клиент **всегда** отправляет payload вида:
+Trial стартует только с кнопки “Start 7-day trial” на /cleanproof/pricing
+и ведёт пользователя в продукт через существующий Login.
+Это осознанное решение: не плодить signup-экран до готовности биллинга.
 
-```json
+Marketing & Revenue Readiness
+
+CleanProof marketing pages are designed to support direct, low-volume B2B sales rather than self-serve onboarding.
+The current structure intentionally avoids public signup, automated trials, or instant billing.
+Pricing communicates value and positioning, while conversion is expected to happen through demo requests and direct interaction.
+
+Short-term revenue goal is defined as reaching $1,000–$2,000 in monthly recurring revenue through a small number of high-intent customers rather than scale.
+All future product decisions should prioritize reliability, clarity of proof, and ease of demonstration over feature expansion or growth mechanics.
+
+Архитектура (ЗАФИКСИРОВАНА)
+
+Backend
+
+Django (API-first)
+
+DRF — только как API-слой
+
+Auth: TokenAuthentication
+
+БД:
+
+SQLite (локально)
+
+схема спроектирована под PostgreSQL
+
+Асинхронщины нет
+
+Очередей нет
+
+Всё синхронно, прозрачно и детерминировано
+
+Роли
+
+Manager
+
+Cleaner
+
+Архитектурная фиксация (ВАЖНО):
+Job создаётся менеджером заранее и становится доступен клинеру автоматически через GET /api/jobs/today/ в день выполнения.
+Отдельного механизма “назначения” или “отправки” заданий не требуется — backend является единственным источником правды.
+
+Структура проекта (фактически есть)
+
+backend/
+├── apps/
+│   ├── accounts/
+│   │   └── models.py # User, Company, roles
+│   ├── api/
+│   │   ├── views.py # DRF API (login, jobs, checklist, photos, pdf)
+│   │   ├── urls.py
+│   │   ├── serializers.py
+│   │   └── pdf.py # генерация PDF отчёта
+│   ├── jobs/
+│   │   ├── models.py # Job, JobChecklistItem, JobCheckEvent, File, JobPhoto
+│   │   ├── utils.py # distance_m, extract_exif_data
+│   │   ├── migrations/
+│   │   └── admin.py
+│   └── locations/
+│       └── models.py # Location, ChecklistTemplate, ChecklistTemplateItem
+├── config/
+│   └── urls.py
+├── requirements.txt
+└── manage.py
+
+Важные правила
+
+apps.api — единственный API-слой
+
+apps.jobs.views — legacy, не расширять
+
+Новая логика → apps.api
+
+Passing tests = истина
+
+Что реализовано (DONE)
+
+✅ Аутентификация
+
+POST /api/auth/login/
+
+email + password
+
+Token-based auth
+
+логин только для active cleaner
+
+проверено через curl и mobile
+
+✅ Jobs (Cleaner flow)
+
+GET /api/jobs/today/
+
+GET /api/jobs/<id>/
+
+Статусы job:
+
+scheduled
+
+in_progress
+
+completed
+
+⚠️ Фактический контракт /api/jobs/today/ (ВАЖНО):
+
+[
 {
-  "latitude": number,
-  "longitude": number
+"id": 5,
+"location__name": "Dubai Marina Tower",
+"scheduled_date": "2026-01-17",
+"scheduled_start_time": null,
+"scheduled_end_time": null,
+"status": "scheduled"
 }
-````
+]
 
-### Поведение backend
+Контракт плоский, без вложенного location.
+Mobile и frontend подстроены под это.
 
-* вычисляет расстояние между координатами устройства и локацией job,
-* отклоняет check-in / check-out при превышении допустимого порога.
+✅ Check-in / Check-out
 
-### Важно
+POST /api/jobs/<id>/check-in/
 
-* мобильный клиент **не выполняет** локальную проверку расстояния;
-* вся валидация дистанции — **строго server-side**.
+POST /api/jobs/<id>/check-out/
 
----
+Логика:
 
-## Production GPS (mobile)
+GPS проверка (≤ 100 м)
 
-Мобильный клиент переведён на production-GPS.
+проверка роли
 
-* координаты берутся с устройства через `expo-location`;
-* используется обёртка `getGpsPayload`, которая **всегда** возвращает `{ latitude, longitude }`;
-* структура payload **не менялась**;
-* эндпоинты:
+проверка владельца job
 
-  * `POST /api/jobs/<id>/check-in/`
-  * `POST /api/jobs/<id>/check-out/`
-    остаются без изменений;
-* логика backend-валидации расстояния не затрагивалась.
+корректная смена статусов
 
-### DEV-режим
+создание JobCheckEvent
 
-При ошибке получения GPS возможен fallback на координаты job, чтобы не блокировать тестирование.
-В PROD fallback **не используется**.
+✅ Checklist
 
----
+snapshot чек-листа при создании job
 
-## Offline groundwork (mobile, v0)
+JobChecklistItem привязан к job
 
-В мобильном клиенте зафиксирована архитектурная модель оффлайна **без реализации**.
+bulk update чек-листа
 
-Разрешённые будущие операции:
+защита:
 
-* checklist bulk updates,
-* photo uploads (с очередью).
+только назначенный клинер
 
-Строго онлайн:
+только когда job = in_progress
 
-* check-in / check-out,
-* генерация PDF,
-* загрузка job-данных.
+required-пункты проверяются при check-out
 
-API-контракты и payload’ы **не изменены**.
+✅ Photos — Mobile + Backend DONE (Phase 9)
 
----
+Mobile + backend-поток фотографий полностью рабочий:
 
-# API Contracts (DEV)
+– Check-in переводит job в in_progress, создаётся JobCheckEvent.
+– На экране Job Details появляются слоты Before / After.
+– Фото выбирается через expo-image-picker и отправляется как FormData:
+– поле photo_type = before или after,
+– поле file = бинарник файла.
+– Токен авторизации успешно уходит и для JSON, и для multipart-запросов
+(Authorization: Token <token>).
 
-Документ фиксирует контракт между Backend (Django / DRF) и:
+Правила на backend (факт):
 
-* Manager Portal (React + Vite),
-* Mobile Cleaner App (Expo + React Native).
+– Фото может загружать только назначенный cleaner.
+– Загружать можно только при status = in_progress.
+– Ровно одно фото на тип: before и after.
+– after нельзя загрузить, если ещё нет before.
+– Если в EXIF есть координаты, расстояние до location проверяется (≤ 100 м).
+– EXIF может отсутствовать — тогда загрузка разрешена, а в ответе флаг
+exif_missing = true.
 
-Считается **единственным источником правды**.
-Любые ломающие изменения сначала фиксируются здесь.
+Фактическое хранилище файлов:
 
----
+/media/company/<company_id>/jobs/<job_id>/photos/<type>/<uuid>.<ext>
 
-## 0. Общий контекст
+Интеграция с Mobile:
 
-### 0.1. Технологический стек
+– Экран Job Details показывает:
+– статус (scheduled / in_progress / completed),
+– прогресс (check-in, before, checklist, after, check-out),
+– timeline из JobCheckEvent,
+– состояние фото (uploaded / no photo yet),
+– чек-лист в режиме read-only (на этом этапе без изменения с мобильного).
+– Check-out с мобильного пока привязан только к статусу job и наличию
+обоих фото; дальнейшие бизнес-правила будем уточнять отдельно.
 
-* Backend: Django + DRF (API-first)
-* Frontends:
+✅ Фото: нормализация формата закрыла “разные телефоны → разные PDF/WEB” проблему
 
-  * Manager Portal: React + Vite
-  * Mobile Cleaner App: Expo + React Native
+Фото на backend приводятся к единому JPEG-формату (normalize), поэтому:
 
-### 0.2. Base URL (DEV)
+web и PDF отображают одинаково
 
-```
-http://127.0.0.1:8001
-```
+исчезла нестабильность “на одном устройстве ок, на другом нет”
 
-### 0.3. Авторизация
+это закрывает прошлый болезненный костыль
 
-```
-Authorization: Token <TOKEN>
-```
+✅ PDF отчёт
 
-### 0.4. DEV-пользователи
+POST /api/jobs/<id>/report/pdf/
 
-```
-Cleaner: cleaner@test.com / Test1234!
-Manager: manager@test.com / Test1234!
-```
+генерация через ReportLab
 
----
+PDF содержит:
 
-## 1. Auth API
+job
 
-### 1.1. Cleaner login
+location
 
-`POST /api/auth/login/`
+cleaner
 
-```json
+scheduled / actual timestamps
 
-{
-  "email": "cleaner@test.com",
-  "password": "Test1234!"
-}
-```
+checklist
 
-**Response 200 OK**
+audit events
 
-```json
-{
-  "token": "string",
-  "user_id": 3,
-  "email": "cleaner@test.com",
-  "full_name": "Dev Cleaner",
-  "role": "cleaner"
-}
-```
+фото готовы к включению в следующей итерации PDF
 
-Ошибки:
+✅ Manager: Planning + Create Job
 
-* `400 Bad Request` — пустые поля
-* `401 Unauthorized` — неверные креды
+✅ Manager Job Planning — backend + frontend DONE (read-only идеал + create job)
 
-После логина **все** запросы идут с:
+Backend (факт):
 
-```
+✅ GET /api/manager/jobs/planning/?date=YYYY-MM-DD
+
+принимает YYYY-MM-DD и DD.MM.YYYY (фикс парсинга даты под UI)
+
+отдаёт jobs за дату с:
+
+location {id,name,address}
+
+cleaner {id,full_name, phone?}
+
+status
+
+proof (флаги выполнения)
+
+✅ GET /api/manager/meta/
+Один запрос-справочник для формы Create Job:
+
+cleaners
+
+locations
+
+checklist_templates
+
+✅ POST /api/manager/jobs/
+Создание job менеджером через API:
+
+создаёт Job
+
+если checklist_template_id передан — создаёт snapshot JobChecklistItem из ChecklistTemplateItem
+
+возвращает payload сразу пригодный для таблицы Planning
+
+Proof-контракт (важно, зафиксировано):
+
+Бэкенд возвращает proof как:
+
+старые ключи: before_uploaded / after_uploaded / checklist_completed
+
+и синхронизированные ключи под UI: before_photo / after_photo / checklist
+(это сделано, чтобы фронт не ломался и не зависел от переименований)
+
+Frontend (dubai-control) (факт):
+
+✅ Экран /planning теперь реально работает с backend:
+
+загрузка jobs по дате
+
+фильтр по статусам (локально)
+
+proof отображается корректно (как в референсе Lovable)
+
+✅ Кнопка Create job теперь не заглушка:
+
+открывает drawer
+
+подтягивает meta (/api/manager/meta/)
+
+отправляет create job (POST /api/manager/jobs/)
+
+после успешного создания job появляется в таблице без перезагрузки
+
+Mobile Cleaner App — ТЕКУЩИЙ СТАТУС
+
+Технологии
+
+Expo
+
+React Native
+
+TypeScript
+
+React Navigation (Native Stack)
+
+Что работает (ФАКТ)
+
+Login
+
+Today Jobs
+
+Job Details
+
+Check-in / Check-out
+
+Реальная интеграция с backend
+
+Token хранится in-memory
+
+Все JSON-запросы работают с:
+
 Authorization: Token <token>
-```
 
----
+Manager Portal (dubai-control) — ЗАФИКСИРОВАНО
 
-### 1.2. Manager login
+React + Vite
 
-`POST /api/manager/auth/login/`
+TypeScript
 
-```json
-{
-  "email": "manager@test.com",
-  "password": "Test1234!"
-}
-```
+Tailwind
 
-**Response 200 OK**
+shadcn/ui
 
-```json
-{
-  "token": "string",
-  "user_id": 2,
-  "email": "manager@test.com",
-  "full_name": "Dev Manager",
-  "role": "manager"
-}
-```
+API-first
 
-Ошибки аналогичны cleaner login.
+Статус:
 
----
+Manager Portal MVP визуально и архитектурно завершён.
 
-## 2. Cleaner API
+6.1. Job Planning (Manager) — ТЕКУЩИЙ ФАКТ (обновлено)
 
-Требования:
+Статус: работает end-to-end (read-only идеал + Create Job)
 
-* валидный токен
-* роль `cleaner`
+Что есть:
 
----
+✅ маршрут /planning + пункт в навигации
 
-### 2.1. Today Jobs
+✅ таблица jobs за дату (backend источник истины)
 
-`GET /api/jobs/today/`
+✅ proof-флаги (Before/After/Checklist) синхронизированы с API
 
-**Назначение**
-Список job клинера **на сегодня**.
+✅ сайдпанель (JobSidePanel) показывает данные job
 
-**Response 200 OK (ПЛОСКИЙ контракт)**
+✅ Create Job Drawer подключён к backend:
 
-```json
-[
-  {
-    "id": 5,
-    "location__name": "Dubai Marina Tower",
-    "scheduled_date": "2026-01-17",
-    "scheduled_start_time": null,
-    "scheduled_end_time": null,
-    "status": "scheduled"
-  }
-]
-```
+GET /api/manager/meta/
 
-Фиксации:
+POST /api/manager/jobs/
 
-* `location__name` — строка, не объект
-* вложенного `location` нет
-* чеклист, фото, cleaner отсутствуют
+Примечание:
 
-Минимум для UI:
+Job Planning сейчас не редактирует существующие job’ы, только:
 
-* `id`
-* `location__name`
-* `scheduled_date`
-* `status`
+просмотр
 
----
+создание новых
 
-### 2.1.1. Today Jobs — mobile behavior
+переход в Job Details
 
-Контракт **не расширяется**.
+Принципиальное решение (ЗАФИКСИРОВАНО):
 
-UI:
+Job Planning — инструмент менеджера
 
-* заголовок строится **только** из `location__name`
-* `Today` / формат даты — логика клиента
-* никакие дополнительные поля не предполагаются
+Cleaner не получает “уведомление”, а:
 
----
+видит job через /api/jobs/today/
 
-### 2.1.2. Today Jobs — 401 handling (mobile)
+backend остаётся источником истины
 
-При отсутствии токена:
+Никакой push-логики и автоматических рассылок в MVP
 
-```json
-{
-  "detail": "Authentication credentials were not provided."
-}
-```
+Принцип работы с Lovable (ЗАФИКСИРОВАНО)
 
-Mobile трактует как:
+Lovable используется как:
 
-> Session expired → redirect to Login
+генератор эталонного UI
 
----
-
-### 2.2. Job Detail
-
-`GET /api/jobs/<id>/`
-
-**Назначение**
-Полная информация по job для клинера.
-
-**Response 200 OK**
-
-```json
-{
-  "id": 10,
-  "status": "in_progress",
-  "scheduled_date": "2026-01-15",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "11:00:00",
-  "actual_start_time": "2026-01-15T09:05:12+04:00",
-  "actual_end_time": null,
-  "location": {
-    "id": 5,
-    "name": "Marina Heights Tower",
-    "address": "Dubai Marina, Dubai, UAE",
-    "latitude": 25.089123,
-    "longitude": 55.145678
-  },
-  "cleaner": {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "phone": "+10000000000"
-  },
-  "check_events": [],
-  "photos": [],
-  "checklist_items": []
-}
-```
-
-Гарантии:
-
-* массивы могут быть пустыми
-* порядок `check_events` — backend-controlled
-* `actual_*` могут быть `null`
-
----
-
-### 2.3. Check-in
-
-`POST /api/jobs/<id>/check-in/`
-
-```json
-{
-  "latitude": 25.08912,
-  "longitude": 55.14567
-}
-```
-
-**Response**
-
-```json
-{
-  "status": "in_progress",
-  "check_in": {
-    "created_at": "2026-01-15T09:05:12+04:00",
-    "latitude": 25.08912,
-    "longitude": 55.14567
-  }
-}
-```
+источник UX-референсов
 
 Правила:
 
-* только `scheduled`
-* расстояние ≤ 100 м
-* job принадлежит cleaner
+Lovable не источник истины
 
-Ошибки:
+API и логика — только репозиторий
 
-* `400` — бизнес-ошибка
-* `403` — не тот пользователь
-* `409` — неверный статус
+Используется для:
 
----
+новых экранов
 
-### 2.4. Check-out
+крупных UI-итераций
 
-`POST /api/jobs/<id>/check-out/`
+Что НЕЛЬЗЯ делать ❌
 
-```json
-{
-  "latitude": 25.08913,
-  "longitude": 55.14568
-}
-```
+Запрещено:
 
-**Response**
+переписывать auth
 
-```json
-{
-  "status": "completed",
-  "check_out": {
-    "created_at": "2026-01-15T10:58:03+04:00",
-    "latitude": 25.08913,
-    "longitude": 55.14568
-  }
-}
-```
+переписывать jobs
 
-Требования:
+переписывать check-in / check-out
 
-* статус `in_progress`
-* все required checklist items завершены
-* есть before + after фото
-* расстояние ≤ 100 м
+менять модели
 
----
+трогать миграции
 
-### 2.5. Checklist toggle
+предлагать Celery / async / очереди
 
-`POST /api/jobs/<job_id>/checklist/<item_id>/toggle/`
+«рефакторить ради красоты»
 
-```json
-{
-  "is_completed": true
-}
-```
+❌ Запрещено переименовывать proof-поля в API без слоя совместимости
 
-**Response**
+Proof-поля уже использует фронт.
+Если меняем контракт — только добавлением новых полей или маппингом, но не “ломаем”.
 
-```json
-{
-  "id": 101,
-  "is_completed": true
-}
-```
+Любые изменения — только точечно и проверяемо.
 
----
+Что делать в НОВОМ ЧАТЕ (TODO)
 
-### 2.6. Checklist bulk
+🎯 Фокус: довести Manager Planning до “операционного уровня”, без расширения scope.
 
-`POST /api/jobs/<job_id>/checklist/bulk/`
+Шаг 1 — Коммит/пуш текущего состояния (обязательно)
 
-```json
-{
-  "items": [
-    { "id": 101, "is_completed": true },
-    { "id": 102, "is_completed": true }
-  ]
-}
-```
+проверить git status
 
-**Response**
+закоммитить изменения planning/meta/create job + UI
 
-```json
-{
-  "updated_count": 2
-}
-```
+убедиться что migrations не затронуты
 
----
+Шаг 2 — Дожать UX Create Job (не дизайн, а стабильность)
 
-### 2.7. Photos
+состояния drawer: loading / error / submitting / success
 
-#### 2.7.1. Upload
+валидация времени (start < end)
 
-`POST /api/jobs/<id>/photos/` (multipart)
+нормальный toast/alert (без window.alert)
 
-Поля:
+после создания:
 
-* `photo_type`: `before | after`
-* `file`: image
+вставить job в список
 
-**Response**
+закрыть drawer
 
-```json
-{
-  "id": 12,
-  "photo_type": "before",
-  "file_url": "https://cdn.example.com/.../before.jpg",
-  "photo_timestamp": "2026-01-15T09:06:00+04:00",
-  "exif_missing": false
-}
-```
+опционально: открыть side panel на созданной job
 
-Правила:
+Шаг 3 — Planning фильтры “как в Lovable”
 
-* только `in_progress`
-* after только при наличии before
-* максимум одно фото на тип
-* EXIF координаты валидируются, отсутствие разрешено
+фильтр по cleanerIds
 
----
+фильтр по locationId
 
-### 2.8. PDF Report
+фильтр statuses уже есть, довести до полного соответствия
+(backend пока можно фильтровать на фронте; если станет тяжело — добавим query params)
 
-`POST /api/jobs/<id>/report/pdf/`
+Шаг 4 — Визуальная полировка “нежнее как Lovable”
 
-Body: пустой
+StatusPill и Proof-иконки привести к одному стилю (мягкие цвета, одинаковая насыщенность)
 
-**Response**
+не менять семантику статусов, только классы/иконки
 
-```
-Content-Type: application/pdf
-```
+📦 Что НЕ коммитили осознанно
 
-PDF бинарный, идемпотентный.
+Backend-миграции и admin-утилиты (admin_auth.py) изменялись в ходе разработки, но не зафиксированы в git.
+Их состояние будет проверено и закоммичено отдельным шагом после стабилизации Job Planning backend-контракта.
 
----
+✅ Закрытые костыли (боль, которую больше не трогаем)
 
-## 3. Manager API
+✅ Парсинг даты для planning: UI мог слать DD.MM.YYYY, backend теперь принимает
 
-Все manager-эндпоинты требуют:
+✅ Proof-флаги: backend и frontend теперь говорят на одном языке (before/after/checklist)
 
-* валидный токен
+✅ Create Job теперь не заглушка: есть meta + create endpoint + UI интеграция
 
-  ```
-  Authorization: Token <MANAGER_TOKEN>
-  ```
-* роль пользователя: `manager`
+✅ Фото с разных телефонов приведены к единому формату и стабильно попадают в web/PDF
 
----
+🚀 С ЧЕГО НАЧАТЬ НОВЫЙ ЧАТ (ОБЯЗАТЕЛЬНО СКОПИРОВАТЬ)
 
-### 3.1. Today Jobs (manager)
+В новом чате первый месседж должен быть вот таким (прямо копипаст):
 
-`GET /api/manager/jobs/today/`
+MASTER BRIEF — Cleaning SaaS (MVP)
 
-**Назначение**
-Вернуть список job по компании менеджера за текущий день.
+Контекст:
+– Photos (mobile + backend) полностью DONE
+– PDF отчёт DONE (без фото)
+– Manager Portal работает
+– Добавлен экран Job Planning (UI + routing)
+– Backend для Job Planning пока отсутствует
 
-**Response 200 OK (концептуально)**
-
-```json
-[
-  {
-    "id": 10,
-    "status": "in_progress",
-    "scheduled_date": "2026-01-15",
-    "scheduled_start_time": "09:00:00",
-    "scheduled_end_time": "11:00:00",
-    "location": {
-      "id": 5,
-      "name": "Marina Heights Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    },
-    "cleaner": {
-      "id": 3,
-      "full_name": "Dev Cleaner"
-    },
-    "has_before_photo": true,
-    "has_after_photo": false
-  }
-]
-```
-
-Используется Manager Portal для:
-
-* обзора текущих работ,
-* перехода в Job Detail,
-* контроля факта выполнения.
-
----
-
-## 4. Manager — Job Planning & Create Job (зафиксированный контракт)
-
-### 4.1. Meta для Planning / Create Job
-
-`GET /api/manager/meta/`
-
-**Назначение**
-Единый read-only endpoint для:
-
-* Create Job Drawer,
-* фильтров Planning.
-
-**Response**
-
-```json
-{
-  "cleaners": [
-    { "id": 3, "full_name": "Dev Cleaner", "phone": "+10000000001" }
-  ],
-  "locations": [
-    {
-      "id": 1,
-      "name": "Dubai Marina Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    }
-  ],
-  "checklist_templates": [
-    { "id": 1, "name": "Standard Cleaning" }
-  ]
-}
-```
-
----
-
-### 4.2. Create Job
-
-`POST /api/manager/jobs/`
-
-```json
-{
-  "scheduled_date": "2026-01-19",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "12:00:00",
-  "location_id": 1,
-  "cleaner_id": 3,
-  "checklist_template_id": 1
-}
-```
-
-**Backend поведение (ЗАФИКСИРОВАНО)**:
-
-* создаётся job со статусом `scheduled`;
-* если передан `checklist_template_id`, создаётся snapshot чеклиста;
-* модели и миграции не меняются.
-
-**Response 201 Created**
-
-```json
-{
-  "id": 7,
-  "scheduled_date": "2026-01-19",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "12:00:00",
-  "status": "scheduled",
-  "location": {
-    "id": 1,
-    "name": "Dubai Marina Tower",
-    "address": "Dubai Marina, Dubai, UAE"
-  },
-  "cleaner": {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "phone": "+10000000001"
-  },
-  "proof": {
-    "before_photo": false,
-    "after_photo": false,
-    "checklist": false
-  }
-}
-```
-
----
-
-### 4.3. Planning list
-
-`GET /api/manager/jobs/planning/?date=YYYY-MM-DD`
-
-Поддерживаются форматы даты:
-
-* `YYYY-MM-DD`
-* `DD.MM.YYYY`
-
-**Response**
-
-```json
-[
-  {
-    "id": 7,
-    "scheduled_date": "2026-01-19",
-    "scheduled_start_time": "09:00:00",
-    "scheduled_end_time": "12:00:00",
-    "status": "scheduled",
-    "location": {
-      "id": 1,
-      "name": "Dubai Marina Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    },
-    "cleaner": {
-      "id": 3,
-      "full_name": "Dev Cleaner"
-    },
-    "proof": {
-      "before_uploaded": false,
-      "after_uploaded": false,
-      "checklist_completed": false,
-      "before_photo": false,
-      "after_photo": false,
-      "checklist": false
-    }
-  }
-]
-```
-
-Фиксация:
-
-* endpoint read-only;
-* `proof`-ключи **нельзя переименовывать** без слоя совместимости.
-
----
-
-### 4.4. Manager Job Detail
-
-`GET /api/manager/jobs/<id>/`
-
-**Response (концептуально)**
-
-```json
-{
-  "id": 10,
-  "status": "completed",
-  "scheduled_date": "2026-01-15",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "11:00:00",
-  "location": {
-    "id": 5,
-    "name": "Marina Heights Tower",
-    "address": "Dubai Marina, Dubai, UAE",
-    "latitude": 25.089123,
-    "longitude": 55.145678
-  },
-  "cleaner": {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "phone": "+10000000000"
-  },
-  "check_events": [],
-  "photos": [],
-  "checklist_items": [],
-  "notes": null
-}
-```
-
----
-
-## 5. Ошибки (общий паттерн)
-
-Формат:
-
-```json
-{
-  "detail": "Error message"
-}
-```
-
-Коды:
-
-* `400` — бизнес-ошибка
-* `401` — нет / неверный токен
-* `403` — неверная роль / чужая job
-* `404` — не найдено
-* `409` — конфликт статусов
-
-Frontend:
-
-* читает `detail`;
-* не парсит текст;
-* не пересчитывает бизнес-логику.
-
----
+Цель этого чата:
+Реализовать backend-контракт для Job Planning
+и аккуратно связать его с существующими Job моделями
+без изменения текущей логики jobs / check-in / photos.
 
-## 6. Общие правила
-
-* все даты — ISO 8601;
-* backend может **добавлять** поля;
-* существующие поля считаются стабильными;
-* backend — источник истины.
+Ограничения:
+– Модели не меняем
+– Миграции не ломаем
+– Только новые API-эндпоинты
+– Работаем строго по шагам
 
----
+🧭 Что логично делать первым в новом чате
 
-## 7. Analytics Semantics (Manager)
+Шаг 1 (следующий):
+Спроектировать 1 backend endpoint:
 
-* `check_in_time` — JobCheckEvent(type=check_in)
-* `check_out_time` — JobCheckEvent(type=check_out)
-* `job_duration` = check_out - check_in
-* `checklist_passed` — все required выполнены
-* `full_proof` = before + after + checklist
+GET /api/manager/jobs/planning/?date=YYYY-MM-DD
 
----
+read-only
 
-## 8. API Contract — Mobile Layer 1 (зафиксировано)
+агрегирует Job + Location + Cleaner
 
-### 8.1. Job Details (mobile)
+без создания / редактирования
 
-```json
-{
-  "id": 0,
-  "status": "scheduled",
-  "scheduled_date": "YYYY-MM-DD",
-  "location": {
-    "id": 0,
-    "name": "string",
-    "address": null,
-    "latitude": null,
-    "longitude": null
-  },
-  "cleaner": {
-    "id": 0,
-    "full_name": "string"
-  }
-}
-```
+Только после этого:
 
-Если координат нет:
+create job
 
-* Navigate disabled
-* без onPress
+bulk import (Excel)
 
----
+оптимизация под 15–25 job’ов в день.
 
-### 8.2. Photos (mobile)
+Последние изменения (зафиксировано)
+Web / Admin (Job Planning)
 
-* максимум 1 before и 1 after;
-* after запрещён без before;
-* отсутствие фото = `No photo yet`.
+Закрыто:
 
----
+Полностью переработан UI фильтров на странице Job Planning:
 
-### 8.3. Checklist (mobile)
+Date picker приведён к единому стилю (popover + calendar).
 
-* read-only до `in_progress`;
-* required пункты обязательны для check-out;
-* backend — источник истины.
+Dropdown’ы (Cleaner, Location) переведены на Radix Select:
 
----
+белый фон,
 
-### 8.4. Timeline (mobile)
+корректные отступы,
 
-* read-only;
-* порядок определяет backend;
-* UI не переупорядочивает.
+нормальное состояние выбранного пункта.
 
----
+Исправлены ошибки Radix Select:
 
-### 8.5. Guard rails
+устранён краш из-за пустых значений,
 
-Backend:
+соблюдена стабильность хуков (no conditional hooks).
 
-* completed job immutable;
-* порядок действий жёстко валидируется.
+Реализован и стабилизирован Create Job Drawer:
 
-Mobile UI:
+единый стиль с Job Planning,
 
-* Check-in только из `scheduled`;
-* Check-out только из `in_progress`;
-* completed — без действий.
+корректный календарь,
 
----
+белые dropdown’ы,
 
-### 8.6. Статус
+добавлено поле Manager Notes (optional),
 
-Контрактов достаточно для закрытия **Mobile Layer 1**.
-Новые API **не требуются**.
+устранены TS-ошибки и runtime-crash’и.
 
----
+Create Job полностью рабочий end-to-end (UI → API → job появляется в списке).
 
-## ИТОГ
+Статус:
+Web / Admin часть по Job Planning и Create Job — стабильна, зафиксирована, закоммичена.
+Дальнейшие изменения — только точечные или дизайнерские.
 
-Любые изменения:
+Mobile / Cleaner App — текущее состояние
 
-1. сначала правят `API_CONTRACTS.md`,
-2. затем код,
-3. затем E2E-проверка.
+Что уже работает (фактически):
 
-**Файл теперь собран целиком.**
+Экран Job Details полностью функционален:
 
-```
+статусы (scheduled → in_progress → completed);
+
+чек-ин / чек-аут;
+
+before / after фото;
+
+чеклист с обязательными пунктами;
+
+таймлайн событий;
+
+PDF-отчёт формируется и корректно отображает фото.
+
+Все ключевые ограничения соблюдены:
+
+нельзя check-out без before / after;
+
+нельзя завершить job без чеклиста;
+
+completed job — read-only.
+
+Навигация Navigate снова отображается (после правок).
+
+Логика важнее дизайна — визуал осознанно упрощён на этом этапе.
+
+Текущий фокус работы (Mobile — Layer 1)
+Цель
+
+Закрыть Слой 1 — мобильное исполнение (logic-complete)
+без финального UI-дизайна.
+
+В работе сейчас
+
+Навигация
+
+Подключить реальные координаты локации из backend:
+
+location_latitude
+
+location_longitude
+
+Поведение:
+
+координаты есть → открывается Apple / Google Maps;
+
+координат нет → Navigate (no location), без onPress.
+
+Камера / галерея
+
+Обновить ImagePicker:
+
+убрать deprecated MediaTypeOptions;
+
+использовать ImagePicker.MediaType.IMAGE.
+
+Добавить стабильные состояния загрузки:
+
+дизейбл кнопок во время upload;
+
+явный Uploading….
+
+Корректная обработка ошибок (rollback + alert).
+
+Превью фото
+
+В Photos показывать мини-превью загруженных изображений:
+
+before / after;
+
+если нет — No photo yet.
+
+Это функциональность, не дизайн.
+
+Guard rails UI
+
+Проверить, что:
+
+Check in — только для scheduled;
+
+Check out — только для in_progress;
+
+completed — без действий.
+
+UI не предлагает невозможных действий.
+
+QA + фиксация
+
+Прогон трёх сценариев на девайсе:
+
+полный happy-path job;
+
+попытки нарушить порядок действий;
+
+job без координат.
+
+После этого:
+
+обновить PROJECT_STATE.md,
+
+пометить Mobile Layer 1 как ✅ завершённый.
+
+Важная договорённость
+
+Дизайн мобильного приложения будет делаться ПОСЛЕ:
+
+закрытия Layer 1 (логика),
+
+стабилизации API,
+
+фиксации UX-поведения.
+
+Текущие упрощения UI — осознанные и временные.

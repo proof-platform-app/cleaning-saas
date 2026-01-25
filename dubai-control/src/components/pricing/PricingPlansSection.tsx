@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 const plans = [
   {
     name: "Standard",
-    price: "$99",
+    price: "$79",
     description: "For small teams that need reliable proof.",
     features: [
       "Up to 5 cleaners",
@@ -25,7 +25,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "$199",
+    price: "$149",
     description: "For growing operations with higher volume.",
     features: [
       "Up to 15 cleaners",

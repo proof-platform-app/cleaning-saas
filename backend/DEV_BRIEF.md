@@ -1,5 +1,3 @@
-Да, в этот раз не режу. Ниже — **полный DEV_BRIEF.md** в исходном виде, только с добавленным блоком **`## Landing Status (Frozen)`** (я вставил его после блока про Phase 11.3 и до первого `---`). Лишних пробелов и пустых строк вокруг нового блока не добавлял.
-
 ````markdown
 # DEV_BRIEF.md — Cleaning SaaS
 
@@ -40,15 +38,76 @@ Any GPS-related changes must happen in `utils/gps.ts` only.
 
 ## Landing Status (Frozen)
 
-Текущая версия лендинга считается зафиксированной по структуре и смыслу.
-Допустимы только:
+Текущая версия лендинга считается зафиксированной по структуре и смыслу. Допустимы только:
+
 * правки текста (копирайт, тон, микроформулировки),
 * визуальная полировка (анимации, отступы, тайминги),
 * замена или обновление скриншотов.
+
 Запрещено:
+
 * менять последовательность блоков,
 * добавлять новые смысловые сущности,
 * обещать функциональность, не подтверждённую backend-логикой.
+
+### Landing & Demo Status
+
+Landing page and demo page are considered functionally complete (v1 frozen). Further work is limited to:
+
+* copy refinements,
+* visual polish,
+* navigation affordances (links only),
+* screenshot replacement.
+
+Explicitly out of scope:
+
+* new demo interactions,
+* interactive product simulations,
+* additional navigation paths,
+* changes that imply new backend behavior.
+
+Development focus shifts back to product stabilization (Phase 14).
+
+### Landing & Demo Integration (Completed)
+
+CleanProof landing and demo request pages have been fully integrated into the main application as a separate marketing layer (`/cleanproof`, `/cleanproof/demo`). These pages are intentionally isolated from the product application layout, authentication flow, and internal navigation. Scope is now frozen. Further work on these pages is limited to copy refinements, visual polish, and content accuracy checks only. No interactive demos, simulated product behavior, or backend-triggering actions are permitted.
+
+### Location input & map behavior (Intentional design)
+
+The Location form does NOT use address autocomplete or automatic geocoding.
+
+* `Name` and `Address` fields are free-text and intended for human readability only.
+* The map is the single source of truth for location coordinates.
+* Managers must explicitly set the pin on the map to define `latitude` and `longitude`.
+
+Rationale:
+
+* Coordinates are used for cleaner navigation and GPS check-in / check-out validation.
+* Relying on typed addresses introduces ambiguity and inconsistent positioning, especially in UAE locations (towers, compounds, multiple entrances).
+* This design forces deliberate placement and avoids false precision.
+
+Future enhancement (explicitly out of current scope):
+
+* Address autocomplete / geocoding via an external provider (not Google by default).
+* Optional "Find on map" action to assist pin placement.
+* Any such change must preserve manual map confirmation as the final step.
+
+### Map-first location discipline
+
+The product intentionally separates human-readable address input from operational geolocation. Engineers must assume that typed addresses are unreliable and non-authoritative. All logic that depends on "where the job happens" must rely exclusively on stored coordinates. UI or backend changes that infer coordinates from address text are explicitly discouraged unless manually confirmed via map interaction.
+
+### Trial entry point зафиксирован
+
+Старт пробного периода осуществляется только через Pricing Page (`/cleanproof/pricing`). Кнопка "Start 7-day trial" ведёт на текущий Login (`/`) и далее будет расширена логикой:
+
+* если пользователь пришёл с `?trial=standard`,
+* после логина/регистрации автоматически создаётся компания с trial-планом (7 дней).
+
+Демо (`/cleanproof/demo`) — отдельный сценарий, не связанный с trial и оплатой.
+
+### Marketing Layer Status (Frozen v1)
+
+The CleanProof marketing layer (Landing, Pricing, Product Updates, Contact, Demo Request) is considered structurally complete and visually unified. A single shared marketing header is used across all public CleanProof pages to ensure consistent navigation and layout behavior. Further development work must not introduce additional marketing pages, navigation items, or calls-to-action without a corresponding product or backend implementation. Engineering focus shifts away from marketing and toward product stability, onboarding flow, and trial enforcement logic.
 
 ---
 
@@ -86,8 +145,8 @@ yaml
 
 ### Cleaner
 
-email: [cleaner@test.com](mailto:cleaner@test.com)
-password: Test1234!
+email: [cleaner@test.com](mailto:cleaner@test.com)  
+password: Test1234!  
 role: cleaner
 
 shell
@@ -95,8 +154,8 @@ shell
 
 ### Manager
 
-email: [manager@test.com](mailto:manager@test.com)
-password: Test1234!
+email: [manager@test.com](mailto:manager@test.com)  
+password: Test1234!  
 role: manager
 
 yaml
@@ -120,7 +179,7 @@ pgsql
   "email": "cleaner@test.com",
   "password": "Test1234!"
 }
-````
+```
 
 Response
 
@@ -137,7 +196,7 @@ json
 }
 ```
 
-Использование токена
+Использование токена  
 Во всех запросах:
 
 makefile
@@ -315,7 +374,7 @@ Frontend / Mobile:
 
 ## 7. Checklist
 
-Структура
+Структура  
 Checklist — snapshot, привязанный к job.
 
 `JobChecklistItem`:
@@ -347,7 +406,7 @@ Form-data
 ini
 Копировать код
 
-file=<image>
+file=<image>  
 type=before | after
 
 Правила:
@@ -518,7 +577,7 @@ Frontend не:
 * вычисляет бизнес-логику
 * меняет статусы сам
 
-Все изменения → только через API.
+Все изменения → только через API.  
 Ошибки API не скрывать.
 
 ---
@@ -548,7 +607,7 @@ Mobile app:
 
 ## Mobile — Job Details (Cleaner)
 
-Этот раздел фиксирует контракт между Mobile Job Details экраном и API.
+Этот раздел фиксирует контракт между Mobile Job Details экраном и API.  
 Цель: по этому тексту можно полностью реализовать экран без догадок.
 
 ### 15.1. Навигация из Today Jobs
@@ -579,7 +638,7 @@ Mobile app:
 h
 Копировать код
 
-GET /api/jobs/<id>/
+GET /api/jobs/<id>/  
 Authorization: Token <token>
 
 Ответ содержит (концептуально):
@@ -659,7 +718,7 @@ UI:
 * кнопка Check-in — активна
 * кнопки Upload Photo / Check-out:
 
-  * либо скрыть
+  * либо скрыть,
   * либо показать в disabled (логика всё равно на backend)
 
 API:
@@ -667,8 +726,8 @@ API:
 h
 Копировать код
 
-POST /api/jobs/<id>/check-in/
-Authorization: Token <token>
+POST /api/jobs/<id>/check-in/  
+Authorization: Token <token>  
 Content-Type: application/json
 
 ```json
@@ -722,7 +781,7 @@ UI:
 * текст: `Checked in at <time>`
 * время берётся из:
 
-  * `actual_start_time`, если есть
+  * `actual_start_time`, если есть,
   * иначе — первого `check_events` с `event_type="check_in"`
 
 Кнопки:
@@ -730,8 +789,8 @@ UI:
 * Upload Before Photo — активна, если в `photos` ещё нет `photo_type="before"`;
 * Upload After Photo — активна, если:
 
-  * есть `photo_type="before"`
-  * нет `photo_type="after"`
+  * есть `photo_type="before"`,
+  * нет `photo_type="after"`;
 * Check-out — активна всегда при `status="in_progress"` (backend всё равно проверит чеклист и фото).
 
 #### 15.4.3. Состояние completed
@@ -745,7 +804,7 @@ UI:
 * `Checked in at <time>` (см. выше)
 * `Checked out at <time>`:
 
-  * `actual_end_time`, если есть
+  * `actual_end_time`, если есть,
   * иначе — `event check_out` из `check_events`
 
 Кнопки:
@@ -783,11 +842,11 @@ Before:
 http
 Копировать код
 
-POST /api/jobs/<id>/photos/
-Authorization: Token <token>
+POST /api/jobs/<id>/photos/  
+Authorization: Token <token>  
 Content-Type: multipart/form-data
 
-file=<image binary>
+file=<image binary>  
 type=before
 
 After:
@@ -795,11 +854,11 @@ After:
 http
 Копировать код
 
-POST /api/jobs/<id>/photos/
-Authorization: Token <token>
+POST /api/jobs/<id>/photos/  
+Authorization: Token <token>  
 Content-Type: multipart/form-data
 
-file=<image binary>
+file=<image binary>  
 type=after
 
 Ответ (пример, одинаковый для обоих типов):
@@ -821,19 +880,19 @@ json
 
 UI:
 
-* после успешного ответа обновить соответствующий слот
-* использовать `file_url` для превью
+* после успешного ответа обновить соответствующий слот,
+* использовать `file_url` для превью.
 
 Backend-ограничения:
 
-* максимум 1 before и 1 after на job
-* after нельзя загружать, если нет before
-* загрузка только при `status="in_progress"`
+* максимум 1 before и 1 after на job,
+* after нельзя загружать, если нет before,
+* загрузка только при `status="in_progress"`.
 
 Ошибки:
 
-* 409 Conflict — попытка загрузить лишнюю фотку или after без before
-* 400 Bad Request — слишком далеко от location по EXIF
+* 409 Conflict — попытка загрузить лишнюю фотку или after без before,
+* 400 Bad Request — слишком далеко от location по EXIF.
 
 В любом случае фронт показывает `detail` пользователю.
 
@@ -845,26 +904,26 @@ Backend-ограничения:
 
 Каждый пункт:
 
-* текст → `text`
-* чекбокс → `is_completed`
+* текст → `text`,
+* чекбокс → `is_completed`,
 * required:
 
-  * если `is_required == true` → визуально помечаем (звёздочка / цвет)
+  * если `is_required == true` → визуально помечаем (звёздочка / цвет).
 
 Изменение чеклиста:
 
-* нажатие на чекбокс меняет локальное состояние
-* фронтенд отправляет изменения на backend через endpoint bulk-update чеклиста
+* нажатие на чекбокс меняет локальное состояние,
+* фронтенд отправляет изменения на backend через endpoint bulk-update чеклиста.
 
 backend проверяет:
 
-* автор — cleaner
-* `job.status == "in_progress"`
+* автор — cleaner,
+* `job.status == "in_progress"`.
 
 При ошибке (например, job уже `completed`):
 
-* показываем `detail`
-* откатываем локальное изменение
+* показываем `detail`,
+* откатываем локальное изменение.
 
 ---
 
@@ -877,8 +936,8 @@ backend проверяет:
 http
 Копировать код
 
-POST /api/jobs/<id>/check-out/
-Authorization: Token <token>
+POST /api/jobs/<id>/check-out/  
+Authorization: Token <token>  
 Content-Type: application/json
 
 ```json
@@ -890,28 +949,28 @@ Content-Type: application/json
 
 Условия на backend:
 
-* job принадлежит cleaner
-* `status == "in_progress"`
-* все required checklist items → `is_completed = true`
-* есть и before, и after фото
-* расстояние ≤ 100 м
+* job принадлежит cleaner,
+* `status == "in_progress"`,
+* все required checklist items → `is_completed = true`,
+* есть и before, и after фото,
+* расстояние ≤ 100 м.
 
 Ответ (успех):
 
-* `job.status → completed`
-* в `check_events` появляется `check_out`
-* `actual_end_time` обновляется
+* `job.status → completed`,
+* в `check_events` появляется `check_out`,
+* `actual_end_time` обновляется.
 
 UI:
 
-* обновить состояние job из ответа
-* перерисовать экран как `completed`
-* опционально показать баннер `"Job Completed"`
+* обновить состояние job из ответа,
+* перерисовать экран как `completed`,
+* опционально показать баннер `"Job Completed"`.
 
 Ошибки:
 
-* 400 Bad Request — далеко от точки / не все required пункты выполнены
-* 409 Conflict — неверный статус job
+* 400 Bad Request — далеко от точки / не все required пункты выполнены,
+* 409 Conflict — неверный статус job.
 
 Фронт показывает `detail` и НЕ меняет статус локально.
 
@@ -921,12 +980,12 @@ UI:
 
 Если нужен визуальный таймлайн:
 
-* берём `check_events`
-* они уже отсортированы по времени (ASC)
+* берём `check_events`,
+* они уже отсортированы по времени (ASC),
 * строим список:
 
-  * check_in → `"Checked in at <time>"`
-  * check_out → `"Checked out at <time>"`
+  * check_in → `"Checked in at <time>"`,
+  * check_out → `"Checked out at <time>"`.
 
 Это опциональный UI, логика API от него не зависит.
 
@@ -934,7 +993,7 @@ UI:
 
 ### DEV BRIEF — Job Details stability rules
 
-Контекст:
+Контекст:  
 Экран Job Details ранее был рабочим, но был сломан серией изменений. В этом этапе выполнено восстановление и стабилизация поведения.
 
 Ключевые правила для разработки:
@@ -976,5 +1035,4 @@ UI:
 * дублировать бизнес-логику в секциях,
 * «чинить» UI без понимания backend-состояния,
 * удалять dev-хелперы без восстановления альтернативы.
-
-```
+````

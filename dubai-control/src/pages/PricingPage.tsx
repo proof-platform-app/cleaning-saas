@@ -1,44 +1,70 @@
 // dubai-control/src/pages/PricingPage.tsx
-import * as React from "react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+
 import PricingHeroSection from "@/components/pricing/PricingHeroSection";
 import PricingPlansSection from "@/components/pricing/PricingPlansSection";
 import PricingTrialSection from "@/components/pricing/PricingTrialSection";
 import PricingFAQSection from "@/components/pricing/PricingFAQSection";
 import PricingCTASection from "@/components/pricing/PricingCTASection";
-import { Button } from "@/components/ui/button";
 
-const PricingPage: React.FC = () => {
+import CleanProofHeader from "@/marketing/cleanproof/CleanProofHeader";
+
+const PricingPage = () => {
   return (
     <div className="min-h-screen bg-background">
-      {/* Header такой же, как на лендинге */}
+      {/* Header в едином стиле с другими маркетинговыми страницами */}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, delay: 0.5 }}
-        className="fixed top-0 left-0 right-0 z-50 bg-transparent"
+        transition={{ duration: 0.6, delay: 0.2 }}
+        className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm border-b border-border/40"
       >
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link to="/cleanproof" className="text-lg font-semibold text-foreground">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-8">
+          {/* Логотип / переход на лендинг */}
+          <Link
+            to="/cleanproof"
+            className="text-lg font-semibold text-foreground"
+          >
             CleanProof
           </Link>
 
-          <div className="flex items-center gap-3">
-            {/* FIX: Sign in ведёт на / (Login), а не на /login */}
-            <Link to="/">
-              <Button
-                variant="ghost"
-                className="text-foreground/70 hover:text-foreground hover:bg-foreground/5"
-              >
-                Sign in
-              </Button>
+          {/* Навигация по маркетинговым страницам */}
+          <nav className="hidden md:flex items-center gap-8 text-sm">
+            <Link
+              to="/cleanproof/pricing"
+              className="text-foreground font-medium"
+            >
+              Pricing
             </Link>
-          </div>
+            <Link
+              to="/cleanproof/updates"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Product updates
+            </Link>
+            <Link
+              to="/cleanproof/contact"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Contact
+            </Link>
+          </nav>
+
+          {/* Sign in справа */}
+          <Link to="/">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground hover:bg-transparent"
+            >
+              Sign in
+            </Button>
+          </Link>
         </div>
       </motion.header>
 
-      {/* Контент страницы */}
+      {/* Основные секции страницы */}
       <main className="overflow-hidden">
         <PricingHeroSection />
         <PricingPlansSection />
@@ -47,7 +73,7 @@ const PricingPage: React.FC = () => {
         <PricingCTASection />
       </main>
 
-      {/* Футер как на лендинге */}
+      {/* Футер с навигацией, видимой и для гостей, и для пользователей */}
       <footer className="py-16 px-6 bg-foreground border-t border-white/5">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
@@ -58,22 +84,40 @@ const PricingPage: React.FC = () => {
               Built for UAE cleaning operations.
             </p>
           </div>
-          <div className="flex items-center gap-8">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
             <Link
               to="/cleanproof"
-              className="text-sm text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Home
             </Link>
+            <Link
+              to="/cleanproof/pricing"
+              className="text-primary-foreground hover:text-primary-foreground transition-colors"
+            >
+              Pricing
+            </Link>
+            <Link
+              to="/cleanproof/updates"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Product updates
+            </Link>
+            <Link
+              to="/cleanproof/contact"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+            >
+              Contact
+            </Link>
             <a
               href="#"
-              className="text-sm text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Privacy
             </a>
             <a
               href="#"
-              className="text-sm text-primary-foreground/40 hover:text-primary-foreground transition-colors"
+              className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Terms
             </a>

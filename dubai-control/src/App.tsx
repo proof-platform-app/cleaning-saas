@@ -27,6 +27,8 @@ import { LocationsProvider } from "@/contexts/LocationsContext";
 /* Marketing – CleanProof */
 import CleanProofLanding from "@/marketing/cleanproof/CleanProofLanding";
 import CleanProofDemoRequest from "@/marketing/cleanproof/CleanProofDemoRequest";
+import CleanProofContact from "@/marketing/cleanproof/CleanProofContact";
+import CleanProofUpdates from "@/marketing/cleanproof/CleanProofUpdates";
 
 import "leaflet/dist/leaflet.css";
 
@@ -38,7 +40,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        {/* 👇 глобальный контроль скролла */}
+        {/* глобальный контроль скролла */}
         <ScrollToTop />
 
         <LocationsProvider>
@@ -49,6 +51,8 @@ const App = () => (
             <Route path="/cleanproof" element={<CleanProofLanding />} />
             <Route path="/cleanproof/demo" element={<CleanProofDemoRequest />} />
             <Route path="/cleanproof/pricing" element={<PricingPage />} />
+            <Route path="/cleanproof/updates" element={<CleanProofUpdates />} />
+            <Route path="/cleanproof/contact" element={<CleanProofContact />} />
             {/* alias на всякий случай */}
             <Route path="/pricing" element={<PricingPage />} />
 

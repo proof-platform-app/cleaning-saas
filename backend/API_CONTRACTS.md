@@ -1,5 +1,3 @@
-Да, я его реально урезал — моя ошибка. Сейчас даю **полный файл целиком**, как в исходнике, только с добавленным блоком про лендинг (0.6) и без лишних изменений по тексту.
-
 ````markdown
 # API Contracts (DEV) — Cleaning SaaS
 
@@ -21,7 +19,7 @@
 
 ```text
 http://127.0.0.1:8001
-````
+```
 
 Все эндпоинты ниже указываются относительно этого base URL в DEV.
 
@@ -79,6 +77,28 @@ DEV-особенность:
 Никаких маркетинговых обещаний вне технической реальности продукта не используется.
 Лендинг продаёт только то, что действительно фиксируется и может быть выдано
 в виде доказательства через API.
+
+Demo page and landing page content are strictly aligned with existing API behavior and backend guarantees. All demonstrated flows (job creation, check-in/out, checklist completion, photo capture, PDF generation) correspond to real API events and persisted data. No demo or marketing materials reference functionality that is not backed by current API contracts. Demo navigation is intentionally minimal and does not expose internal product routes or authentication flows.
+
+#### Marketing & Demo Alignment
+
+CleanProof landing page (/cleanproof) and demo request page (/cleanproof/demo) are purely marketing-facing and do not expose or simulate any product functionality. All descriptions, screenshots, and narrative elements strictly reflect existing API contracts and real backend events (job creation, check-in/out, checklist completion, photo proof, PDF generation). No marketing content implies features, workflows, or system behavior that are not backed by current API guarantees. The demo request flow does not create accounts, trigger backend actions, or require authentication.
+
+#### Location coordinates as source of truth
+
+Location `latitude` and `longitude` values are treated as the authoritative source of truth for all location-based operations. These coordinates are used for cleaner navigation, GPS check-in/check-out validation, and inclusion in proof artifacts (e.g. PDF reports). Address and name fields are stored as descriptive metadata only and are not used for geolocation or validation logic. Any future geocoding or autocomplete features must not override explicitly stored coordinates.
+
+#### Pricing & Trial Flow (v1)
+
+Кнопка `Start 7-day trial` на странице `/cleanproof/pricing` инициирует старт бесплатного пробного периода тарифа Standard.  
+На текущем этапе кнопка ведёт на существующий экран авторизации (`/`) с передачей параметра `?trial=standard`.  
+Backend обязан поддерживать сценарий создания компании в статусе `trial` сроком 7 дней после успешного логина или регистрации.  
+Платёжные данные на этапе trial не требуются.  
+По окончании trial доступ ограничивается до выбора платного тарифа.
+
+#### Marketing Pages & Demo Flow Alignment
+
+Public CleanProof pages (Landing, Pricing, Product Updates, Contact, Demo Request) are informational and do not introduce any new backend behavior beyond existing API contracts. All calls-to-action (Request demo, Contact form, Pricing CTAs) are intentionally decoupled from direct account creation and billing logic. Demo requests and contact submissions are treated as pre-sales inputs and do not create system entities such as users, companies, jobs, or locations. Any future trial or subscription flow must be explicitly backed by new API endpoints and persisted data models before being referenced in marketing or pricing pages.
 
 ---
 
@@ -1279,3 +1299,4 @@ Backend **не обязан** гарантировать наличие коор
 
 1. укладываться в контракты, зафиксированные здесь, **либо**
 2. сначала обновить этот файл (`API_CONTRACT.md`) с чётким описанием изменений и только потом реализовывать их в коде.
+````
