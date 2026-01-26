@@ -1,10 +1,11 @@
+// dubai-control/src/components/layout/AppSidebar.tsx
+
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Briefcase,
   CalendarDays,
-  PlusCircle,
   Settings,
   LogOut,
   MapPin,
@@ -14,7 +15,6 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Jobs", href: "/jobs", icon: Briefcase },
   { name: "Job Planning", href: "/planning", icon: CalendarDays },
-  { name: "Create Job", href: "/create-job", icon: PlusCircle },
   { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -42,6 +42,7 @@ export function AppSidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
+
           return (
             <NavLink
               key={item.name}

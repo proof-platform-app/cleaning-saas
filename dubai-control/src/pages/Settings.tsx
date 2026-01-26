@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { companySettings } from "@/data/sampleData";
-import { Upload, MoreHorizontal } from "lucide-react";
+import { Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,32 +14,50 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { getUsageSummary, type UsageSummary } from "@/api/client";
+import {
+  getUsageSummary,
+  type UsageSummary,
+  getCompanyProfile,
+  updateCompanyProfile,
+  uploadCompanyLogo,
+  getCleaners,
+  createCleaner,
+  updateCleaner,
+  type Cleaner as ApiCleaner,
+} from "@/api/client";
 
-interface Cleaner {
-  id: string;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+type SettingsState = {
   name: string;
+  email: string;
   phone: string;
-  email?: string;
-  isActive: boolean;
-}
+  notificationsEnabled: boolean;
+  ramadanMode: boolean;
+};
 
-const initialCleaners: Cleaner[] = [
-  { id: "1", name: "Aisha Khan", phone: "+971 50 123 4567", isActive: true },
-  { id: "2", name: "Omar Al Mansoori", phone: "+971 55 234 5678", isActive: true },
-  { id: "3", name: "Maria Santos", phone: "+971 52 345 6789", isActive: false },
-];
+const initialSettings: SettingsState = {
+  name: "",
+  email: "",
+  phone: "",
+  notificationsEnabled: true,
+  ramadanMode: false,
+};
+
+type CleanerRow = ApiCleaner;
 
 export default function Settings() {
-  const [settings, setSettings] = useState(companySettings);
+  const [settings, setSettings] = useState<SettingsState>(initialSettings);
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- ЛОГОТИП КОМПАНИИ (превью + файл) ---
+  // --- ЛОГОТИП КОМПАНИИ (превью + файл + backend URL) ---
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
-  // локальный список клинеров (пока мок, позже заменим на API)
-  const [cleaners, setCleaners] = useState<Cleaner[]>(initialCleaners);
+  // список клинеров из API
+  const [cleaners, setCleaners] = useState<CleanerRow[]>([]);
 
   // trial / usage summary (для soft-limits)
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -53,26 +70,46 @@ export default function Settings() {
     isActive: true,
   });
 
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+
   useEffect(() => {
     let isMounted = true;
 
-    async function loadUsage() {
+    async function loadAll() {
       try {
-        const data = await getUsageSummary();
+        setIsLoadingInitial(true);
+        const [company, cleanersData, usageData] = await Promise.all([
+          getCompanyProfile(),
+          getCleaners(),
+          getUsageSummary(),
+        ]);
+
         if (!isMounted) return;
-        setUsage(data);
+
+        setSettings((prev) => ({
+          ...prev,
+          name: company.name || "",
+          email: company.contact_email || "",
+          phone: company.contact_phone || "",
+        }));
+
+        setCompanyLogoUrl(company.logo_url || null);
+        setCleaners(cleanersData);
+        setUsage(usageData);
       } catch (err) {
         if (!isMounted) return;
-        console.warn("[Settings] Failed to load usage summary", err);
+        console.warn("[Settings] Failed to load initial data", err);
         setUsage(null);
+      } finally {
+        if (isMounted) setIsLoadingInitial(false);
       }
     }
 
-    loadUsage();
+    loadAll();
 
     return () => {
       isMounted = false;
-      // заодно подчистим урл, если он есть
       if (logoPreview) {
         URL.revokeObjectURL(logoPreview);
       }
@@ -81,25 +118,47 @@ export default function Settings() {
   }, []);
 
   const handleSave = async () => {
+    setIsSavingCompany(true);
     setIsLoading(true);
 
-    // TODO: сюда потом добавим реальный аплоад логотипа:
-    // if (logoFile) — отправить на backend вместе с остальными настройками
+    try {
+      // 1) Сохраняем профиль компании и обновляем state из ответа backend
+      const updatedCompany = await updateCompanyProfile({
+        name: settings.name || "",
+        contact_email: settings.email || null,
+        contact_phone: settings.phone || null,
+      });
 
-    setTimeout(() => {
+      setSettings((prev) => ({
+        ...prev,
+        name: updatedCompany.name || "",
+        email: updatedCompany.contact_email || "",
+        phone: updatedCompany.contact_phone || "",
+      }));
+
+      // 2) Если выбран логотип — отправляем на backend и обновляем logo_url
+      if (logoFile) {
+        const updatedWithLogo = await uploadCompanyLogo(logoFile);
+        setCompanyLogoUrl(updatedWithLogo.logo_url || null);
+        setLogoFile(null);
+        setLogoPreview(null);
+      }
+    } catch (err) {
+      console.error("[Settings] Failed to save company settings", err);
+    } finally {
+      setIsSavingCompany(false);
       setIsLoading(false);
-    }, 800);
+    }
   };
 
-  const handleChange = (field: string, value: string | boolean) => {
-    setSettings((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: keyof SettingsState, value: string | boolean) => {
+    setSettings((prev) => ({ ...prev, [field]: value as any }));
   };
 
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // ограничимся картинками
     if (!file.type.startsWith("image/")) {
       console.warn("Not an image");
       return;
@@ -114,20 +173,23 @@ export default function Settings() {
     });
   };
 
-  const handleAddCleaner = () => {
+  const handleAddCleaner = async () => {
     if (!newCleaner.name.trim()) return;
 
-    const cleaner: Cleaner = {
-      id: Date.now().toString(),
-      name: newCleaner.name.trim(),
-      phone: newCleaner.phone.trim(),
-      email: newCleaner.email.trim() || undefined,
-      isActive: newCleaner.isActive,
-    };
+    try {
+      const created = await createCleaner({
+        full_name: newCleaner.name.trim(),
+        email: newCleaner.email.trim() || undefined,
+        phone: newCleaner.phone.trim() || undefined,
+        is_active: newCleaner.isActive,
+      });
 
-    setCleaners((prev) => [...prev, cleaner]);
-    setNewCleaner({ name: "", email: "", phone: "", isActive: true });
-    setIsAddCleanerOpen(false);
+      setCleaners((prev) => [...prev, created]);
+      setNewCleaner({ name: "", email: "", phone: "", isActive: true });
+      setIsAddCleanerOpen(false);
+    } catch (err) {
+      console.error("[Settings] Failed to create cleaner", err);
+    }
   };
 
   const renderCleanersSoftLimitBanner = () => {
@@ -138,11 +200,16 @@ export default function Settings() {
 
     if (!isTrialPlan) return null;
 
-    const closeToLimit =
-      usage.cleaners_count >= usage.cleaners_soft_limit - 1 &&
-      usage.cleaners_count < usage.cleaners_soft_limit;
+    const currentCount =
+      typeof usage.cleaners_count === "number"
+        ? usage.cleaners_count
+        : cleaners.length;
 
-    const atLimit = usage.cleaners_count >= usage.cleaners_soft_limit;
+    const limit = usage.cleaners_soft_limit;
+
+    const closeToLimit = currentCount >= limit - 1 && currentCount < limit;
+
+    const atLimit = currentCount >= limit;
 
     if (!closeToLimit && !atLimit) return null;
 
@@ -175,6 +242,12 @@ export default function Settings() {
       ? `${usage.cleaners_count} cleaners`
       : `${cleaners.length} cleaners`;
 
+  const resolveLogoUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.startsWith("http")) return url;
+    return `${API_BASE_URL}${url}`;
+  };
+
   return (
     <div className="p-8 animate-fade-in">
       {/* Header */}
@@ -205,6 +278,7 @@ export default function Settings() {
                 value={settings.name}
                 onChange={(e) => handleChange("name", e.target.value)}
                 className="h-11 bg-background border-border"
+                disabled={isLoadingInitial}
               />
             </div>
 
@@ -214,10 +288,10 @@ export default function Settings() {
               </Label>
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted">
-                  {logoPreview ? (
+                  {logoPreview || companyLogoUrl ? (
                     <img
-                      src={logoPreview}
-                      alt="Company logo preview"
+                      src={logoPreview || resolveLogoUrl(companyLogoUrl)}
+                      alt="Company logo"
                       className="h-full w-full object-cover"
                     />
                   ) : (
@@ -225,7 +299,6 @@ export default function Settings() {
                   )}
                 </div>
 
-                {/* скрытый input для выбора файла */}
                 <input
                   id="company-logo-input"
                   type="file"
@@ -239,9 +312,7 @@ export default function Settings() {
                   className="border-border"
                   type="button"
                   onClick={() =>
-                    document
-                      .getElementById("company-logo-input")
-                      ?.click()
+                    document.getElementById("company-logo-input")?.click()
                   }
                 >
                   Upload Logo
@@ -269,6 +340,7 @@ export default function Settings() {
                 value={settings.email}
                 onChange={(e) => handleChange("email", e.target.value)}
                 className="h-11 bg-background border-border"
+                disabled={isLoadingInitial}
               />
             </div>
 
@@ -281,6 +353,7 @@ export default function Settings() {
                 value={settings.phone}
                 onChange={(e) => handleChange("phone", e.target.value)}
                 className="h-11 bg-background border-border"
+                disabled={isLoadingInitial}
               />
             </div>
           </div>
@@ -299,7 +372,11 @@ export default function Settings() {
               <span className="text-sm text-muted-foreground">
                 {cleanersCountLabel}
               </span>
-              <Button size="sm" onClick={() => setIsAddCleanerOpen(true)}>
+              <Button
+                size="sm"
+                onClick={() => setIsAddCleanerOpen(true)}
+                disabled={isLoadingInitial}
+              >
                 Add cleaner
               </Button>
             </div>
@@ -312,27 +389,50 @@ export default function Settings() {
                 className="flex items-center justify-between rounded-lg border border-border bg-background p-4"
               >
                 <div>
-                  <p className="font-medium text-foreground">{cleaner.name}</p>
+                  <p className="font-medium text-foreground">
+                    {cleaner.full_name}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Cleaner · {cleaner.phone}
+                    Cleaner · {cleaner.phone || "No phone"}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                      cleaner.isActive
+                      cleaner.is_active
                         ? "bg-status-completed-bg text-status-completed"
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {cleaner.isActive ? "Active" : "Inactive"}
+                    {cleaner.is_active ? "Active" : "Inactive"}
                   </span>
-                  <button className="rounded-md p-1.5 transition-colors hover:bg-muted">
-                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                  <Switch
+                    checked={cleaner.is_active}
+                    onCheckedChange={async (checked) => {
+                      try {
+                        const updated = await updateCleaner(cleaner.id, {
+                          is_active: checked,
+                        });
+                        setCleaners((prev) =>
+                          prev.map((c) => (c.id === updated.id ? updated : c))
+                        );
+                      } catch (e) {
+                        console.error(
+                          "[Settings] Failed to update cleaner status",
+                          e
+                        );
+                      }
+                    }}
+                  />
                 </div>
               </div>
             ))}
+
+            {cleaners.length === 0 && !isLoadingInitial && (
+              <p className="text-sm text-muted-foreground">
+                No cleaners yet. Add your first team member to get started.
+              </p>
+            )}
           </div>
 
           <p className="mt-6 text-xs text-muted-foreground">
@@ -387,10 +487,10 @@ export default function Settings() {
         <div className="flex items-center gap-4 pt-4">
           <Button
             onClick={handleSave}
-            disabled={isLoading}
+            disabled={isLoading || isLoadingInitial}
             className="bg-primary px-8 text-primary-foreground shadow-soft hover:bg-primary/90"
           >
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isSavingCompany ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>

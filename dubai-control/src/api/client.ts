@@ -1,3 +1,5 @@
+// dubai-control/src/api/client.ts
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -100,6 +102,26 @@ export interface ManagerJobDetail extends ManagerJobSummary {
   checklist?: { item: string; completed: boolean }[];
 }
 
+// ---------- Company & Cleaners types ----------
+
+export interface CompanyProfile {
+  id: number;
+  name: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  logo_url: string | null;
+}
+
+export interface Cleaner {
+  id: number;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+}
+
+// ---------- Auth state ----------
+
 type AuthState = {
   token: string | null;
 };
@@ -107,6 +129,8 @@ type AuthState = {
 const auth: AuthState = {
   token: null,
 };
+
+// ---------- Low-level fetch helpers ----------
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
@@ -550,6 +574,47 @@ export async function fetchManagerJobDetail(
   };
 }
 
+// ---------- Job create (Manager Portal) ----------
+
+export type ManagerJobCreatePayload = {
+  scheduled_date: string; // "YYYY-MM-DD"
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+  location_id: number;
+  cleaner_id: number;
+  // опционально, на будущее:
+  checklist_template_id?: number | null;
+  hourly_rate?: number | null;
+  flat_rate?: number | null;
+};
+
+export async function createManagerJob(
+  payload: ManagerJobCreatePayload
+): Promise<ManagerJobDetail> {
+  await loginManager();
+
+  const raw = await apiFetch<any>("/api/manager/jobs/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  const base = normalizeJob(raw);
+  const photos = normalizePhotos(raw);
+  const timeline = buildJobTimeline(raw);
+  const checklist = normalizeChecklist(raw);
+
+  return {
+    ...base,
+    photos,
+    check_events: Array.isArray(raw.check_events)
+      ? (raw.check_events as ManagerJobCheckEvent[])
+      : [],
+    notes: raw.notes ?? raw.manager_notes ?? null,
+    checklist,
+    timeline,
+  };
+}
+
 // ---- PDF report (binary) ----
 
 export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
@@ -574,6 +639,93 @@ export async function emailJobReportPdf(
   await apiFetch(`/api/manager/jobs/${jobId}/report/email/`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+// ---------- Company API ----------
+
+export async function getCompanyProfile(): Promise<CompanyProfile> {
+  await loginManager();
+  return apiFetch<CompanyProfile>("/api/manager/company/");
+}
+
+export async function updateCompanyProfile(
+  payload: Partial<{
+    name: string;
+    contact_email: string | null;
+    contact_phone: string | null;
+  }>
+): Promise<CompanyProfile> {
+  await loginManager();
+  return apiFetch<CompanyProfile>("/api/manager/company/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
+  await loginManager();
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const url = `${API_BASE_URL}/api/manager/company/logo/`;
+
+  const headers: HeadersInit = {};
+  if (auth.token) {
+    headers["Authorization"] = `Token ${auth.token}`;
+  }
+
+  const resp = await fetch(url, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error("API logo upload error", resp.status, resp.statusText, text);
+    throw new Error(
+      `API ${resp.status} ${resp.statusText}: ${text || "Unknown error"}`
+    );
+  }
+
+  return (await resp.json()) as CompanyProfile;
+}
+
+// ---------- Cleaners API ----------
+
+export async function getCleaners(): Promise<Cleaner[]> {
+  await loginManager();
+  return apiFetch<Cleaner[]>("/api/manager/cleaners/");
+}
+
+export async function createCleaner(input: {
+  full_name: string;
+  email?: string;
+  phone?: string;
+  is_active?: boolean;
+}): Promise<Cleaner> {
+  await loginManager();
+  return apiFetch<Cleaner>("/api/manager/cleaners/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateCleaner(
+  id: number,
+  input: Partial<{
+    full_name: string;
+    email: string | null;
+    phone: string | null;
+    is_active: boolean;
+  }>
+): Promise<Cleaner> {
+  await loginManager();
+  return apiFetch<Cleaner>(`/api/manager/cleaners/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 
@@ -609,3 +761,6 @@ export const apiClient = {
     return { data };
   },
 };
+
+// ----- explicit exports for other modules -----
+export { API_BASE_URL };

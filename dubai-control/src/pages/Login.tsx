@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // Базовый URL для API — тот же, что и для всего проекта
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -30,11 +29,14 @@ export default function Login() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/api/manager/auth/login/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       const data = await response.json().catch(() => null);
 
@@ -54,7 +56,6 @@ export default function Login() {
       //   "role": "manager"
       // }
 
-      // Сохраняем токен и базовую инфу
       if (data?.token) {
         localStorage.setItem("authToken", data.token);
       }

@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import ScrollToTop from "@/components/layout/ScrollToTop";
 
@@ -13,7 +13,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
-import CreateJob from "./pages/CreateJob";
+// CreateJob больше не используем как отдельную страницу
 import Settings from "./pages/Settings";
 import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
@@ -68,7 +68,13 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/jobs" element={<Jobs />} />
               <Route path="/jobs/:id" element={<JobDetails />} />
-              <Route path="/create-job" element={<CreateJob />} />
+
+              {/* create-job считается легаси: всегда ведём в Job Planning */}
+              <Route
+                path="/create-job"
+                element={<Navigate to="/planning" replace />}
+              />
+
               <Route path="/planning" element={<JobPlanning />} />
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />

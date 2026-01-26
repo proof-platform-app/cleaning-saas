@@ -113,9 +113,9 @@ export default function Dashboard() {
   return (
     <div className="p-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {"Today's Overview"}
           </h1>
           <p className="mt-1 text-muted-foreground">
@@ -123,9 +123,9 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <Link to="/create-job">
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft">
-            <Plus className="w-4 h-4 mr-2" />
+        <Link to="/planning">
+          <Button className="bg-primary text-primary-foreground shadow-soft hover:bg-primary/90">
+            <Plus className="mr-2 h-4 w-4" />
             Create Job
           </Button>
         </Link>
@@ -141,13 +141,13 @@ export default function Dashboard() {
                 {trialInfo.daysLeft === 1 ? "day" : "days"} left
               </p>
               <p className="mt-0.5 text-xs text-slate-600">
-                You&apos;re exploring CleanProof with full access. Upgrade anytime
-                — no changes to your data.
+                You&apos;re exploring CleanProof with full access. Upgrade
+                anytime — no changes to your data.
               </p>
             </div>
             <Link
               to="/cleanproof/pricing"
-              className="ml-4 text-xs font-medium text-blue-700 hover:text-blue-800 whitespace-nowrap"
+              className="ml-4 whitespace-nowrap text-xs font-medium text-blue-700 hover:text-blue-800"
             >
               Upgrade
             </Link>
@@ -156,7 +156,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Jobs Today"
           value={stats.total}
@@ -190,15 +190,15 @@ export default function Dashboard() {
       )}
 
       {/* Today's Jobs */}
-      <div className="bg-card rounded-xl border border-border shadow-card">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+      <div className="rounded-xl border border-border bg-card shadow-card">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <h2 className="font-semibold text-foreground">Today&apos;s Jobs</h2>
           <Link
             to="/jobs"
-            className="text-sm text-primary hover:text-primary/80 font-medium flex items-center gap-1"
+            className="flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80"
           >
             View all
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
         <div className="divide-y divide-border">
@@ -215,11 +215,11 @@ export default function Dashboard() {
               <Link
                 key={job.id}
                 to={`/jobs/${job.id}`}
-                className="flex items-center justify-between px-6 py-4 hover:bg-muted/50 transition-colors"
+                className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/50"
               >
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3">
-                    <p className="font-medium text-foreground truncate">
+                    <p className="truncate font-medium text-foreground">
                       {job.location}
                     </p>
                     <StatusPill status={job.status} />
@@ -228,7 +228,7 @@ export default function Dashboard() {
                     {job.cleaner} · {job.startTime} - {job.endTime}
                   </p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <ArrowRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
               </Link>
             ))
           )}
