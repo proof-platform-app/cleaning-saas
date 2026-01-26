@@ -8,13 +8,13 @@ type BackendManagerJob = {
   scheduled_start_time: string | null;
   scheduled_end_time: string | null;
   location: {
-    id: number | null;
-    name: string | null;
-    address: string | null;
+    id: number;
+    name: string;
+    address: string;
   };
   cleaner: {
-    id: number | null;
-    full_name: string | null;
+    id: number;
+    full_name: string;
     phone?: string | null;
   };
   proof?: {
@@ -35,10 +35,8 @@ function encodeQS(params: Record<string, string>) {
 }
 
 function mapBackendJobToPlanningJob(j: BackendManagerJob): PlanningJob {
-  const before =
-    j.proof?.before_uploaded ?? j.proof?.before_photo ?? false;
-  const after =
-    j.proof?.after_uploaded ?? j.proof?.after_photo ?? false;
+  const before = j.proof?.before_uploaded ?? j.proof?.before_photo ?? false;
+  const after = j.proof?.after_uploaded ?? j.proof?.after_photo ?? false;
   const checklist =
     j.proof?.checklist_completed ?? j.proof?.checklist ?? false;
 
@@ -106,9 +104,13 @@ type BackendCreatedJob = {
   scheduled_start_time: string | null;
   scheduled_end_time: string | null;
   status: "scheduled" | "in_progress" | "completed";
-  location: { id: number | null; name: string | null; address: string | null };
-  cleaner: { id: number | null; full_name: string | null; phone?: string | null };
-  proof?: { before_photo?: boolean; after_photo?: boolean; checklist?: boolean };
+  location: { id: number; name: string; address: string };
+  cleaner: { id: number; full_name: string; phone?: string | null };
+  proof?: {
+    before_photo?: boolean;
+    after_photo?: boolean;
+    checklist?: boolean;
+  };
 };
 
 export async function fetchPlanningMeta(): Promise<PlanningMeta> {
@@ -119,9 +121,11 @@ export async function fetchPlanningMeta(): Promise<PlanningMeta> {
 export async function createPlanningJob(
   payload: CreateJobPayload
 ): Promise<PlanningJob> {
-  const res = await apiClient.post<BackendCreatedJob>("/api/manager/jobs/", payload);
+  const res = await apiClient.post<BackendCreatedJob>(
+    "/api/manager/jobs/",
+    payload
+  );
 
-  // backend create-job уже возвращает proof в формате before_photo/after_photo/checklist
   const created = res.data;
 
   return {

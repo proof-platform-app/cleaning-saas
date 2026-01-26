@@ -1,18 +1,26 @@
 // dubai-control/src/pages/JobPlanning.tsx
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
 import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
 import { CreateJobDrawer } from "@/components/planning/CreateJobDrawer";
-import { PlanningJob, PlanningFilters } from "@/types/planning";
+
+import type {
+  PlanningFilters,
+  PlanningJob,
+  PlanningJobStatus,
+} from "@/types/planning";
 import { fetchPlanningJobs } from "@/api/planning";
 
 export default function JobPlanning() {
   const today = format(new Date(), "yyyy-MM-dd");
 
+  // Единственный источник правды по дате — внутри filters
   const [filters, setFilters] = useState<PlanningFilters>({
     date: today,
     cleanerIds: [],
@@ -20,47 +28,27 @@ export default function JobPlanning() {
     statuses: [],
   });
 
-  const [jobs, setJobs] = useState<PlanningJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const {
+    data: planningJobs,
+    isLoading: isPlanningLoading,
+    isError: isPlanningError,
+    error: planningError,
+    refetch: refetchPlanning,
+  } = useQuery<PlanningJob[], Error>({
+    queryKey: ["manager-planning-jobs", filters.date],
+    queryFn: () => fetchPlanningJobs(filters),
+    enabled: !!filters.date,
+  });
 
+  const jobs: PlanningJob[] = planningJobs ?? [];
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
-  const loadJobs = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const loadError = isPlanningError
+    ? planningError?.message || "Failed to load jobs. Please try again."
+    : null;
 
-    try {
-      const data = await fetchPlanningJobs(filters);
-      setJobs(data);
-
-      // Поддерживаем side panel в консистентном состоянии:
-      // если выбранная job исчезла/обновилась — обновим ссылку или закроем панель.
-      setSelectedJob((prev) => {
-        if (!prev) return prev;
-        const next = data.find((j) => j.id === prev.id);
-        return next ?? null;
-      });
-    } catch (err: any) {
-      console.error("[JobPlanning] failed to load jobs", err);
-      setLoadError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to load jobs. Please try again.",
-      );
-      setJobs([]);
-      setSelectedJob(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    loadJobs();
-  }, [loadJobs]);
-
-  // Локальная фильтрация (не ходим в бэкенд за каждым кликом)
+  // Локальная фильтрация (backend отдаёт только список на дату)
   const visibleJobs = useMemo(() => {
     let out = jobs;
 
@@ -75,22 +63,29 @@ export default function JobPlanning() {
       out = out.filter((j) => j.location?.id === filters.locationId);
     }
 
+    // statuses
+    if (filters.statuses && filters.statuses.length > 0) {
+      const statusSet = new Set<PlanningJobStatus>(filters.statuses);
+      out = out.filter((j) => statusSet.has(j.status));
+    }
+
     return out;
-  }, [jobs, filters.cleanerIds, filters.locationId]);
+  }, [jobs, filters.cleanerIds, filters.locationId, filters.statuses]);
+
+  const handleFiltersChange = (next: PlanningFilters) => {
+    setFilters(next);
+  };
 
   const handleJobCreated = (newJob: PlanningJob) => {
-    if (newJob.scheduled_date !== filters.date) return;
+    // Если job создана на другой день — просто перезагружаем
+    if (newJob.scheduled_date !== filters.date) {
+      void refetchPlanning();
+      return;
+    }
 
-    setJobs((prev) =>
-      [...prev, newJob].sort((a, b) => {
-        const timeA = a.scheduled_start_time || "00:00:00";
-        const timeB = b.scheduled_start_time || "00:00:00";
-        return timeA.localeCompare(timeB);
-      }),
-    );
-
-    // Опционально, но очень удобно: сразу открыть созданную job
+    // Для текущей даты: покажем созданную job и обновим список
     setSelectedJob(newJob);
+    void refetchPlanning();
   };
 
   return (
@@ -122,7 +117,7 @@ export default function JobPlanning() {
           <div className="w-full lg:w-72 flex-shrink-0">
             <PlanningFiltersPanel
               filters={filters}
-              onFiltersChange={setFilters}
+              onFiltersChange={handleFiltersChange}
             />
           </div>
 
@@ -138,14 +133,18 @@ export default function JobPlanning() {
               </p>
 
               <p className="text-sm text-muted-foreground">
-                {loading ? "Loading…" : `${visibleJobs.length} jobs`}
+                {isPlanningLoading ? "Loading…" : `${visibleJobs.length} jobs`}
               </p>
             </div>
 
             {loadError && (
               <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 flex items-center justify-between gap-3">
                 <div className="text-sm text-destructive">{loadError}</div>
-                <Button size="sm" variant="outline" onClick={loadJobs}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => refetchPlanning()}
+                >
                   Retry
                 </Button>
               </div>
@@ -153,7 +152,7 @@ export default function JobPlanning() {
 
             <JobsTable
               jobs={visibleJobs}
-              loading={loading}
+              loading={isPlanningLoading}
               onJobClick={setSelectedJob}
             />
           </div>

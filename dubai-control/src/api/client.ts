@@ -102,7 +102,7 @@ export interface ManagerJobDetail extends ManagerJobSummary {
   checklist?: { item: string; completed: boolean }[];
 }
 
-// ---------- Company & Cleaners types ----------
+// ---------- Company, Cleaners & Locations types ----------
 
 export interface CompanyProfile {
   id: number;
@@ -118,6 +118,22 @@ export interface Cleaner {
   email: string | null;
   phone: string | null;
   is_active: boolean;
+}
+
+// единственный тип Location для всего фронта
+export interface Location {
+  id: number;
+  name: string;
+  address: string | null;
+
+  // возможные поля, которые уже были в UI/бэке
+  latitude?: number | null;
+  longitude?: number | null;
+
+  created_at?: string | null; // backend
+  createdAt?: string | null; // старый фронт
+
+  [key: string]: any;
 }
 
 // ---------- Auth state ----------
@@ -729,6 +745,41 @@ export async function updateCleaner(
   });
 }
 
+// ---------- Locations API ----------
+
+export async function getLocations(): Promise<Location[]> {
+  await loginManager();
+  return apiFetch<Location[]>("/api/manager/locations/");
+}
+
+export async function createLocation(input: {
+  name: string;
+  address?: string;
+  [key: string]: any;
+}): Promise<Location> {
+  await loginManager();
+  return apiFetch<Location>("/api/manager/locations/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateLocation(
+  id: number,
+  input: Partial<{
+    name: string;
+    address: string | null;
+    is_active: boolean;
+    [key: string]: any;
+  }>
+): Promise<Location> {
+  await loginManager();
+  return apiFetch<Location>(`/api/manager/locations/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 // ---- Backward-compatible exports ----
 export const fetchManagerJobsToday = getManagerTodayJobs;
 
@@ -764,3 +815,42 @@ export const apiClient = {
 
 // ----- explicit exports for other modules -----
 export { API_BASE_URL };
+
+// ---------- Manager Planning Jobs ----------
+
+export type ManagerPlanningJob = {
+  id: number;
+  scheduled_date: string; // "YYYY-MM-DD"
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+  status: string;
+  location: {
+    id: number;
+    name: string;
+    address: string;
+  } | null;
+  cleaner: {
+    id: number;
+    full_name: string;
+  } | null;
+  proof: {
+    before_uploaded: boolean;
+    after_uploaded: boolean;
+    checklist_completed: boolean;
+    before_photo: boolean;
+    after_photo: boolean;
+    checklist: boolean;
+  };
+};
+
+export async function getManagerPlanningJobs(
+  date: string
+): Promise<ManagerPlanningJob[]> {
+  await loginManager();
+
+  const { data } = await apiClient.get<ManagerPlanningJob[]>(
+    `/api/manager/jobs/planning/?date=${date}`
+  );
+
+  return data;
+}

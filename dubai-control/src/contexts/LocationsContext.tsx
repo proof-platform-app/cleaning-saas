@@ -1,70 +1,134 @@
-import { createContext, useContext, useState, ReactNode } from "react";
-import { initialLocations, Location } from "@/data/locationsData";
+// dubai-control/src/contexts/LocationsContext.tsx
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import {
+  getLocations,
+  createLocation as apiCreateLocation,
+  updateLocation as apiUpdateLocation,
+  type Location as LocationModel,
+} from "@/api/client";
 
-interface LocationsContextType {
-  locations: Location[];
+type LocationsContextValue = {
+  locations: LocationModel[];
   isLoading: boolean;
-  addLocation: (location: Omit<Location, "id" | "createdAt">) => Location;
-  updateLocation: (
-    id: string,
-    data: Omit<Location, "id" | "createdAt">
-  ) => void;
-}
+  error: string | null;
+  reload: () => Promise<void>;
 
-const LocationsContext = createContext<LocationsContextType | undefined>(
+  createLocation: (input: {
+    name: string;
+    address?: string;
+    [key: string]: any;
+  }) => Promise<LocationModel>;
+
+  // алиас под старый код
+  addLocation: (input: {
+    name: string;
+    address?: string;
+    [key: string]: any;
+  }) => Promise<LocationModel>;
+
+  updateLocation: (
+    id: number,
+    input: Partial<{
+      name: string;
+      address: string | null;
+      is_active: boolean;
+      [key: string]: any;
+    }>
+  ) => Promise<LocationModel>;
+};
+
+const LocationsContext = createContext<LocationsContextValue | undefined>(
   undefined
 );
 
-export function LocationsProvider({ children }: { children: ReactNode }) {
-  const [locations, setLocations] =
-    useState<Location[]>(initialLocations);
+type LocationsProviderProps = {
+  children: ReactNode;
+};
 
-  const isLoading = false;
+export function LocationsProvider({ children }: LocationsProviderProps) {
+  const [locations, setLocations] = useState<LocationModel[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const addLocation = (
-    data: Omit<Location, "id" | "createdAt">
-  ): Location => {
-    const newLocation: Location = {
-      ...data,
-      id: `loc_${Date.now()}`,
-      createdAt: new Date().toISOString().split("T")[0],
-    };
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-    setLocations((prev) => [...prev, newLocation]);
-    return newLocation;
-  };
+    try {
+      const data = await getLocations();
+      setLocations(data);
+    } catch (err: any) {
+      console.error("[Locations] load error", err);
+      setError(err?.message || "Failed to load locations");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const updateLocation = (
-    id: string,
-    data: Omit<Location, "id" | "createdAt">
-  ) => {
-    setLocations((prev) =>
-      prev.map((loc) =>
-        loc.id === id ? { ...loc, ...data } : loc
-      )
-    );
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleCreate = useCallback(
+    async (input: {
+      name: string;
+      address?: string;
+      [key: string]: any;
+    }) => {
+      const created = await apiCreateLocation(input);
+      setLocations((prev) => [created, ...prev]);
+      return created;
+    },
+    []
+  );
+
+  const handleUpdate = useCallback(
+    async (
+      id: number,
+      input: Partial<{
+        name: string;
+        address: string | null;
+        is_active: boolean;
+        [key: string]: any;
+      }>
+    ) => {
+      const updated = await apiUpdateLocation(id, input);
+      setLocations((prev) =>
+        prev.map((loc) => (loc.id === id ? { ...loc, ...updated } : loc))
+      );
+      return updated;
+    },
+    []
+  );
+
+  const value: LocationsContextValue = {
+    locations,
+    isLoading,
+    error,
+    reload: load,
+    createLocation: handleCreate,
+    addLocation: handleCreate,
+    updateLocation: handleUpdate,
   };
 
   return (
-    <LocationsContext.Provider
-      value={{
-        locations,
-        isLoading,
-        addLocation,
-        updateLocation,
-      }}
-    >
+    <LocationsContext.Provider value={value}>
       {children}
     </LocationsContext.Provider>
   );
 }
 
-export function useLocations() {
-  const context = useContext(LocationsContext);
-  if (!context) {
-    throw new Error(
-      "useLocations must be used within a LocationsProvider"
-    );
+export function useLocations(): LocationsContextValue {
+  const ctx = useContext(LocationsContext);
+  if (!ctx) {
+    throw new Error("useLocations must be used within a LocationsProvider");
   }
-  return context;
+  return ctx;
 }

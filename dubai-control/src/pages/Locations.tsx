@@ -1,9 +1,11 @@
+// dubai-control/src/pages/Locations.tsx
+
 import { useState } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { LocationForm } from "@/components/locations/LocationForm";
-import { Location } from "@/data/locationsData";
 import { useLocations } from "@/contexts/LocationsContext";
+import { type Location as ApiLocation } from "@/api/client";
 import {
   Table,
   TableBody,
@@ -16,14 +18,29 @@ import { Plus, ArrowLeft } from "lucide-react";
 
 type ViewMode = "list" | "create" | "edit";
 
+// UI-тип: backend Location + опциональный createdAt в camelCase
+type UILocation = ApiLocation & {
+  createdAt?: string | null;
+};
+
+// Данные, которые реально приходят из формы
+type LocationFormData = {
+  name: string;
+  address?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
 export default function Locations() {
   const { locations, addLocation, updateLocation } = useLocations();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<UILocation | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const handleRowClick = (location: Location) => {
+  const handleRowClick = (location: UILocation) => {
     setSelectedLocation(location);
     setApiError(null);
     setViewMode("edit");
@@ -41,22 +58,20 @@ export default function Locations() {
     setApiError(null);
   };
 
-  const handleSave = async (data: Omit<Location, "id" | "createdAt">) => {
+  const handleSave = async (data: LocationFormData) => {
     setIsLoading(true);
     setApiError(null);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
     try {
       if (viewMode === "create") {
-        addLocation(data);
+        await addLocation(data);
       } else if (viewMode === "edit" && selectedLocation) {
-        updateLocation(selectedLocation.id, data);
+        await updateLocation(selectedLocation.id, data);
       }
       setViewMode("list");
       setSelectedLocation(null);
     } catch (error) {
+      console.error("[Locations] save error", error);
       setApiError("Failed to save location. Please try again.");
     } finally {
       setIsLoading(false);
@@ -80,7 +95,7 @@ export default function Locations() {
           </h1>
 
           <LocationForm
-            location={selectedLocation}
+            location={selectedLocation as any}
             onSave={handleSave}
             onCancel={handleCancel}
             isLoading={isLoading}
@@ -122,29 +137,44 @@ export default function Locations() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {locations.map((location) => (
-              <TableRow
-                key={location.id}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => handleRowClick(location)}
-              >
-                <TableCell className="font-medium">{location.name}</TableCell>
-                <TableCell className="text-muted-foreground max-w-xs">
-                  <span className="line-clamp-2 whitespace-pre-line">
-                    {location.address}
-                  </span>
-                </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {location.latitude.toFixed(6)}
-                </TableCell>
-                <TableCell className="font-mono text-sm">
-                  {location.longitude.toFixed(6)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {format(new Date(location.createdAt), "MMM d, yyyy")}
-                </TableCell>
-              </TableRow>
-            ))}
+            {locations.map((location) => {
+              const lat =
+                typeof location.latitude === "number"
+                  ? location.latitude.toFixed(6)
+                  : "—";
+              const lng =
+                typeof location.longitude === "number"
+                  ? location.longitude.toFixed(6)
+                  : "—";
+
+              const createdRaw =
+                (location as UILocation).createdAt ?? location.created_at;
+              const createdLabel = createdRaw
+                ? format(new Date(createdRaw), "MMM d, yyyy")
+                : "—";
+
+              return (
+                <TableRow
+                  key={location.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleRowClick(location as UILocation)}
+                >
+                  <TableCell className="font-medium">
+                    {location.name}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground max-w-xs">
+                    <span className="line-clamp-2 whitespace-pre-line">
+                      {location.address}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">{lat}</TableCell>
+                  <TableCell className="font-mono text-sm">{lng}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {createdLabel}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
 

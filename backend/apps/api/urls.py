@@ -1,3 +1,4 @@
+# backend/apps/accounts/api/urls.py
 from django.urls import path
 
 from apps.api.views import (
@@ -37,6 +38,12 @@ from apps.api.views import (
     ManagerCompanyLogoUploadView,
     ManagerCleanersListCreateView,
     ManagerCleanerDetailView,
+)
+
+# 👉 ВАЖНО: импортируем из apps.locations.app.views, а НЕ из apps.locations.api.views
+from apps.locations.app.views import (
+    ManagerLocationsListCreateView,
+    ManagerLocationDetailView,
 )
 
 urlpatterns = [
@@ -138,5 +145,19 @@ urlpatterns = [
         "manager/jobs/planning/",
         ManagerPlanningJobsView.as_view(),
         name="manager-jobs-planning",
+    ),
+
+    # =====================
+    # Locations (NEW)
+    # =====================
+    path(
+        "manager/locations/",
+        ManagerLocationsListCreateView.as_view(),
+        name="manager-locations",
+    ),
+    path(
+        "manager/locations/<int:pk>/",
+        ManagerLocationDetailView.as_view(),
+        name="manager-location-detail",
     ),
 ]
