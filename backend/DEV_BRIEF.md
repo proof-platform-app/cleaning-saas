@@ -1,3 +1,5 @@
+Да, я обрезал хвост, моя ошибка. Вот полный файл целиком, без урезания, с твоими вставками на месте:
+
 ````markdown
 # DEV_BRIEF.md — Cleaning SaaS
 
@@ -111,6 +113,120 @@ The CleanProof marketing layer (Landing, Pricing, Product Updates, Contact, Demo
 
 ---
 
+## DEV_BRIEF.md — Trial / Onboarding & Soft-limits UX
+
+### Trial flow (фиксировано)
+
+Trial-флоу реализован и стабилизирован.
+
+Путь пользователя  
+1. Pricing → кнопка Start 7-day trial  
+2. Переход на Login с параметром `?trial=standard`  
+3. Успешный login менеджера  
+4. Backend активирует trial через `/api/cleanproof/trials/start/`  
+5. Пользователь попадает в dashboard уже в trial-состоянии  
+
+На текущем этапе
+
+* trial не ограничивает действия пользователя
+* trial не блокирует создание jobs / cleaners
+* trial не влияет на core business-логику
+* в UI используется только информирующая индикация
+* кнопка Upgrade ведёт на страницу тарифов, а не в оплату
+
+### Trial expired UX (зафиксировано)
+
+После окончания trial пользователь:
+
+* не выбрасывается из продукта
+* не сталкивается с неожиданными блокировками
+* сохраняет доступ к данным и интерфейсу
+
+UX-принципы
+
+* trial expired ≠ ошибка
+* trial expired ≠ блокировка
+* никаких тревожных модалок или forced-редиректов
+* используется спокойная информационная индикация
+* Upgrade предлагается как опция, а не требование
+
+### Soft-limits UX (Manager)
+
+Soft-limits реализованы как UX-индикация, без технических ограничений.
+
+Текущие soft-limits
+
+* количество cleaners
+* количество jobs (per day)
+
+Поведение
+
+* при приближении к лимиту — показывается информирующий banner
+* при достижении лимита — UX не блокируется
+* пользователь может продолжать работу
+* предлагается Upgrade как опция
+
+Принцип  
+Soft-limits — это коммуникация ценности, а не enforcement.
+
+### Company settings UX
+
+На странице Settings реализованы:
+
+* загрузка логотипа компании (client-side preview)
+* управление cleaners (list + add modal)
+* отображение trial soft-limits для cleaners
+* отсутствие блокировок при превышении soft-limits
+
+Загрузка логотипа пока работает в preview-режиме и будет связана с backend отдельно.
+
+---
+
+## Шаг 2. Обновляем DEV_BRIEF.md (одним блоком)
+
+Чтобы не было разъезда между «как работает» и «как пользоваться», добавляем короткий раздел про Settings.
+
+### Settings (Company & Cleaners) — v1
+
+Экран Settings состоит из трёх логических блоков:
+
+1. **Company profile**
+   - Использует `GET /api/manager/company/` для начальной загрузки.
+   - Изменения сохраняются через `PATCH /api/manager/company/`.
+   - Логотип загружается отдельным multipart-запросом `POST /api/manager/company/logo/`, ответ содержит только `logo_url`, который фронт сразу подставляет в превью.
+
+2. **Team / Cleaners**
+   - Список клинеров загружается через `GET /api/manager/cleaners/`.
+   - Добавление клинера идёт через `POST /api/manager/cleaners/`.
+   - Редактирование (имя, контакты, активность) через `PATCH /api/manager/cleaners/<id>/`.
+   - Поле `is_active` используется вместо удаления; удаление клинеров из системы не предусмотрено.
+
+3. **Trial soft-limits**
+   - Показывают только usage-информацию (кол-во клинеров vs soft-limit).
+   - Не блокируют создание и редактирование клинеров.
+   - При подходе к лимиту и при достижении лимита показывается мягкий баннер с ссылкой на `/cleanproof/pricing`.
+
+### В раздел “Что уже реализовано / Manager dashboard”:
+
+Для менеджерского кабинета реализован полный цикл работы с компанией и клинерами. На бэкенде доступны эндпоинты `/api/manager/company/` (GET/PATCH), `/api/manager/company/logo/` (POST) и `/api/manager/cleaners/` (GET/POST/PATCH). Во фронте (`dubai-control/src/api/client.ts`) есть обёртки для этих методов, а страница Settings загружает реальные данные компании, список клинеров и usage-summary, позволяет обновить профиль компании, добавить клинера и подготовлена к загрузке логотипа на сервер.
+
+Локации переведены на единый backend-источник истины.  
+Frontend больше не использует mock-данные или локальные списки.
+
+Текущая архитектура:
+
+* Все локации хранятся в Django (привязка к Company).
+* Страница Locations работает через `/api/manager/locations/`.
+* Job Planning и формы создания job используют данные, полученные из backend (manager/meta / locations API).
+* Новая локация после создания автоматически доступна:
+    * в Job Planning,
+    * при создании job,
+    * в мобильном приложении.
+
+Цель: исключить расхождения данных между экранами и платформами.
+
+---
+
 ## Назначение документа
 
 Этот документ — единая инструкция для:
@@ -179,7 +295,7 @@ pgsql
   "email": "cleaner@test.com",
   "password": "Test1234!"
 }
-```
+````
 
 Response
 
@@ -196,7 +312,7 @@ json
 }
 ```
 
-Использование токена  
+Использование токена
 Во всех запросах:
 
 makefile
@@ -374,7 +490,7 @@ Frontend / Mobile:
 
 ## 7. Checklist
 
-Структура  
+Структура
 Checklist — snapshot, привязанный к job.
 
 `JobChecklistItem`:
@@ -406,7 +522,7 @@ Form-data
 ini
 Копировать код
 
-file=<image>  
+file=<image>
 type=before | after
 
 Правила:
@@ -577,7 +693,7 @@ Frontend не:
 * вычисляет бизнес-логику
 * меняет статусы сам
 
-Все изменения → только через API.  
+Все изменения → только через API.
 Ошибки API не скрывать.
 
 ---
@@ -607,7 +723,7 @@ Mobile app:
 
 ## Mobile — Job Details (Cleaner)
 
-Этот раздел фиксирует контракт между Mobile Job Details экраном и API.  
+Этот раздел фиксирует контракт между Mobile Job Details экраном и API.
 Цель: по этому тексту можно полностью реализовать экран без догадок.
 
 ### 15.1. Навигация из Today Jobs
@@ -638,7 +754,7 @@ Mobile app:
 h
 Копировать код
 
-GET /api/jobs/<id>/  
+GET /api/jobs/<id>/
 Authorization: Token <token>
 
 Ответ содержит (концептуально):
@@ -726,8 +842,8 @@ API:
 h
 Копировать код
 
-POST /api/jobs/<id>/check-in/  
-Authorization: Token <token>  
+POST /api/jobs/<id>/check-in/
+Authorization: Token <token>
 Content-Type: application/json
 
 ```json
@@ -842,11 +958,11 @@ Before:
 http
 Копировать код
 
-POST /api/jobs/<id>/photos/  
-Authorization: Token <token>  
+POST /api/jobs/<id>/photos/
+Authorization: Token <token>
 Content-Type: multipart/form-data
 
-file=<image binary>  
+file=<image binary>
 type=before
 
 After:
@@ -854,11 +970,11 @@ After:
 http
 Копировать код
 
-POST /api/jobs/<id>/photos/  
-Authorization: Token <token>  
+POST /api/jobs/<id>/photos/
+Authorization: Token <token>
 Content-Type: multipart/form-data
 
-file=<image binary>  
+file=<image binary>
 type=after
 
 Ответ (пример, одинаковый для обоих типов):
@@ -936,8 +1052,8 @@ backend проверяет:
 http
 Копировать код
 
-POST /api/jobs/<id>/check-out/  
-Authorization: Token <token>  
+POST /api/jobs/<id>/check-out/
+Authorization: Token <token>
 Content-Type: application/json
 
 ```json
@@ -993,7 +1109,7 @@ UI:
 
 ### DEV BRIEF — Job Details stability rules
 
-Контекст:  
+Контекст:
 Экран Job Details ранее был рабочим, но был сломан серией изменений. В этом этапе выполнено восстановление и стабилизация поведения.
 
 Ключевые правила для разработки:
@@ -1035,4 +1151,6 @@ UI:
 * дублировать бизнес-логику в секциях,
 * «чинить» UI без понимания backend-состояния,
 * удалять dev-хелперы без восстановления альтернативы.
-````
+
+```
+```

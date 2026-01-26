@@ -25,7 +25,9 @@
  */
 
 // Базовый URL API (IP твоего Mac + порт backend'а)
-export const API_BASE_URL = "http://192.168.0.162:8001";
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.0.162:8000";
+
 
 // ===== Простое хранение токена в памяти =====
 

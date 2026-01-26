@@ -14,10 +14,11 @@ from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.models import User
+from apps.accounts.models import Company, User
 from apps.jobs.models import File, Job, JobCheckEvent, JobChecklistItem, JobPhoto
 from apps.jobs.utils import distance_m, extract_exif_data
 from apps.jobs.image_utils import normalize_job_photo_to_jpeg
@@ -858,6 +859,323 @@ class JobPhotoDeleteView(APIView):
                 pass
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+class ManagerCompanyView(APIView):
+    """
+    Профиль компании менеджера.
+
+    GET /api/manager/company/
+    PATCH /api/manager/company/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _ensure_manager(self, request):
+        user = request.user
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return None, Response(
+                {"detail": "Only managers can access company profile."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return company, None
+
+    def get(self, request):
+        company, error_response = self._ensure_manager(request)
+        if error_response is not None:
+            return error_response
+
+        data = {
+            "id": company.id,
+            "name": company.name,
+            "contact_email": company.contact_email,
+            "contact_phone": company.contact_phone,
+            "logo_url": company.logo_url,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        company, error_response = self._ensure_manager(request)
+        if error_response is not None:
+            return error_response
+
+        name = request.data.get("name", company.name)
+        contact_email = request.data.get("contact_email", company.contact_email)
+        contact_phone = request.data.get("contact_phone", company.contact_phone)
+
+        if name is not None and not str(name).strip():
+            return Response(
+                {"name": ["Company name cannot be empty."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        company.name = name
+        company.contact_email = contact_email
+        company.contact_phone = contact_phone
+        company.save(update_fields=["name", "contact_email", "contact_phone"])
+
+        data = {
+            "id": company.id,
+            "name": company.name,
+            "contact_email": company.contact_email,
+            "contact_phone": company.contact_phone,
+            "logo_url": company.logo_url,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class ManagerCompanyLogoUploadView(APIView):
+    """
+    Загрузка логотипа компании.
+
+    POST /api/manager/company/logo/
+    multipart/form-data, поле "file"
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        user = request.user
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can upload company logo."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        file_obj = request.FILES.get("file")
+        if not file_obj:
+            return Response(
+                {"detail": "No file provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Можно добавить базовую валидацию размера/типа, если нужно
+        file_name = file_obj.name
+        path = f"company_logos/{company.id}/{file_name}"
+
+        saved_path = default_storage.save(path, ContentFile(file_obj.read()))
+        logo_url = default_storage.url(saved_path)
+
+        company.logo_url = logo_url
+        company.save(update_fields=["logo_url"])
+
+        return Response({"logo_url": logo_url}, status=status.HTTP_200_OK)
+
+
+class ManagerCleanersListCreateView(APIView):
+    """
+    Список и создание клинеров.
+
+    GET  /api/manager/cleaners/
+    POST /api/manager/cleaners/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _ensure_manager(self, request):
+        user = request.user
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return None, Response(
+                {"detail": "Only managers can manage cleaners."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return company, None
+
+    def get(self, request):
+        company, error_response = self._ensure_manager(request)
+        if error_response is not None:
+            return error_response
+
+        cleaners = (
+            User.objects.filter(company=company, role=User.ROLE_CLEANER)
+            .order_by("full_name", "id")
+        )
+
+        data = []
+        for cleaner in cleaners:
+            data.append(
+                {
+                    "id": cleaner.id,
+                    "full_name": cleaner.full_name,
+                    "email": cleaner.email,
+                    "phone": cleaner.phone,
+                    "is_active": cleaner.is_active,
+                }
+            )
+        return Response(data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        company, error_response = self._ensure_manager(request)
+        if error_response is not None:
+            return error_response
+
+        full_name = request.data.get("full_name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        is_active = request.data.get("is_active", True)
+
+        if not full_name or not str(full_name).strip():
+            return Response(
+                {"full_name": ["Full name is required."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not email and not phone:
+            return Response(
+                {
+                    "non_field_errors": [
+                        "Either email or phone must be provided."
+                    ]
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = User.objects.filter(company=company, role=User.ROLE_CLEANER)
+        if email and qs.filter(email__iexact=email).exists():
+            return Response(
+                {"email": ["Cleaner with this email already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if phone and qs.filter(phone=phone).exists():
+            return Response(
+                {"phone": ["Cleaner with this phone already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cleaner = User.objects.create(
+            company=company,
+            role=User.ROLE_CLEANER,
+            full_name=full_name,
+            email=email,
+            phone=phone,
+            is_active=bool(is_active),
+        )
+
+        data = {
+            "id": cleaner.id,
+            "full_name": cleaner.full_name,
+            "email": cleaner.email,
+            "phone": cleaner.phone,
+            "is_active": cleaner.is_active,
+        }
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class ManagerCleanerDetailView(APIView):
+    """
+    Обновление одного клинера.
+
+    PATCH /api/manager/cleaners/<id>/
+    (GET тоже будет работать при желании)
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _get_cleaner(self, request, pk: int):
+        user = request.user
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return None, Response(
+                {"detail": "Only managers can manage cleaners."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        cleaner = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role=User.ROLE_CLEANER,
+        )
+        return cleaner, None
+
+    def get(self, request, pk: int):
+        cleaner, error_response = self._get_cleaner(request, pk)
+        if error_response is not None:
+            return error_response
+
+        data = {
+            "id": cleaner.id,
+            "full_name": cleaner.full_name,
+            "email": cleaner.email,
+            "phone": cleaner.phone,
+            "is_active": cleaner.is_active,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk: int):
+        cleaner, error_response = self._get_cleaner(request, pk)
+        if error_response is not None:
+            return error_response
+
+        full_name = request.data.get("full_name", cleaner.full_name)
+        email = request.data.get("email", cleaner.email)
+        phone = request.data.get("phone", cleaner.phone)
+        is_active = request.data.get("is_active", cleaner.is_active)
+
+        if not full_name or not str(full_name).strip():
+            return Response(
+                {"full_name": ["Full name cannot be empty."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = User.objects.filter(
+            company=cleaner.company,
+            role=User.ROLE_CLEANER,
+        ).exclude(pk=cleaner.pk)
+
+        if email and qs.filter(email__iexact=email).exists():
+            return Response(
+                {"email": ["Cleaner with this email already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if phone and qs.filter(phone=phone).exists():
+            return Response(
+                {"phone": ["Cleaner with this phone already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cleaner.full_name = full_name
+        cleaner.email = email
+        cleaner.phone = phone
+        cleaner.is_active = bool(is_active)
+        cleaner.save(update_fields=["full_name", "email", "phone", "is_active"])
+
+        data = {
+            "id": cleaner.id,
+            "full_name": cleaner.full_name,
+            "email": cleaner.email,
+            "phone": cleaner.phone,
+            "is_active": cleaner.is_active,
+        }
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class ManagerJobsTodayView(APIView):

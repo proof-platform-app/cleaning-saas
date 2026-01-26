@@ -1,32 +1,54 @@
 from django.urls import path
 
 from apps.api.views import (
+    # Auth
     LoginView,
     ManagerLoginView,
+
+    # Cleaner jobs
     TodayJobsView,
     JobDetailView,
     JobCheckInView,
     JobCheckOutView,
+
+    # Checklist
     ChecklistBulkUpdateView,
     ChecklistItemToggleView,
+
+    # Photos
     JobPhotosView,
     JobPhotoDeleteView,
+
+    # PDF
     JobPdfReportView,
     ManagerJobPdfEmailView,
+
+    # Manager jobs
     ManagerJobsTodayView,
     ManagerJobDetailView,
     ManagerPlanningJobsView,
-    # ✅ NEW
+
+    # Create Job
     ManagerMetaView,
     ManagerJobsCreateView,
+
+    # Company & Cleaners (NEW)
+    ManagerCompanyView,
+    ManagerCompanyLogoUploadView,
+    ManagerCleanersListCreateView,
+    ManagerCleanerDetailView,
 )
 
 urlpatterns = [
+    # =====================
     # Auth
+    # =====================
     path("auth/login/", LoginView.as_view(), name="api-login"),
     path("manager/auth/login/", ManagerLoginView.as_view(), name="api-manager-login"),
 
+    # =====================
     # Cleaner jobs
+    # =====================
     path("jobs/today/", TodayJobsView.as_view(), name="jobs-today"),
     path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
 
@@ -68,10 +90,38 @@ urlpatterns = [
         name="manager-job-report-email",
     ),
 
-    # ===== Manager =====
-    # ✅ Meta for Create Job Drawer
+    # =====================
+    # Manager
+    # =====================
+
+    # Company profile & logo
+    path(
+        "manager/company/",
+        ManagerCompanyView.as_view(),
+        name="manager-company",
+    ),
+    path(
+        "manager/company/logo/",
+        ManagerCompanyLogoUploadView.as_view(),
+        name="manager-company-logo",
+    ),
+
+    # Team / Cleaners
+    path(
+        "manager/cleaners/",
+        ManagerCleanersListCreateView.as_view(),
+        name="manager-cleaners",
+    ),
+    path(
+        "manager/cleaners/<int:pk>/",
+        ManagerCleanerDetailView.as_view(),
+        name="manager-cleaner-detail",
+    ),
+
+    # Meta for Create Job Drawer
     path("manager/meta/", ManagerMetaView.as_view(), name="manager-meta"),
-    # ✅ Create job
+
+    # Create job
     path("manager/jobs/", ManagerJobsCreateView.as_view(), name="manager-jobs-create"),
 
     path(

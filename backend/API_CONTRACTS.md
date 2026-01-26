@@ -19,7 +19,7 @@
 
 ```text
 http://127.0.0.1:8001
-```
+````
 
 Все эндпоинты ниже указываются относительно этого base URL в DEV.
 
@@ -90,10 +90,10 @@ Location `latitude` and `longitude` values are treated as the authoritative sour
 
 #### Pricing & Trial Flow (v1)
 
-Кнопка `Start 7-day trial` на странице `/cleanproof/pricing` инициирует старт бесплатного пробного периода тарифа Standard.  
-На текущем этапе кнопка ведёт на существующий экран авторизации (`/`) с передачей параметра `?trial=standard`.  
-Backend обязан поддерживать сценарий создания компании в статусе `trial` сроком 7 дней после успешного логина или регистрации.  
-Платёжные данные на этапе trial не требуются.  
+Кнопка `Start 7-day trial` на странице `/cleanproof/pricing` инициирует старт бесплатного пробного периода тарифа Standard.
+На текущем этапе кнопка ведёт на существующий экран авторизации (`/`) с передачей параметра `?trial=standard`.
+Backend обязан поддерживать сценарий создания компании в статусе `trial` сроком 7 дней после успешного логина или регистрации.
+Платёжные данные на этапе trial не требуются.
 По окончании trial доступ ограничивается до выбора платного тарифа.
 
 #### Marketing Pages & Demo Flow Alignment
@@ -808,6 +808,362 @@ Manager Portal на основе этого:
 
 ---
 
+### 3.2. Trial activation, expired & usage (Manager)
+
+#### 3.2.1. Trial activation (Manager)
+
+Trial запускается явно через backend endpoint и не зависит от оплаты или биллинга.
+
+**Endpoint**
+
+```http
+POST /api/cleanproof/trials/start/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Поведение**
+
+* если trial уже активен и не истёк → возвращается текущий статус;
+* если trial отсутствует или истёк → активируется новый trial на 7 дней;
+* повторный вызов в dev-среде разрешён;
+* endpoint может вызываться безопасно несколько раз без побочных эффектов.
+
+**Response 200 OK (пример)**
+
+```json
+{
+  "plan": "trial",
+  "trial_started_at": "ISO datetime",
+  "trial_expires_at": "ISO datetime",
+  "is_trial_active": true,
+  "is_trial_expired": false,
+  "days_left": 7
+}
+```
+
+---
+
+#### 3.2.2. Trial expired state (Manager)
+
+Истечение trial определяется исключительно backend.
+
+**Состояние**
+
+* `is_trial_active === false`
+* `is_trial_expired === true`
+* `days_left === 0`
+
+**Принципы**
+
+* Backend является единственным источником истины по статусу trial.
+* Frontend не вычисляет даты и не хранит бизнес-логику trial.
+* Поле `days_left` используется только для UX-индикации.
+* Trial-статус не инициирует оплату и не меняет доступность функциональности.
+* Истечение trial не вызывает автоматических блокировок.
+* Любые ограничения реализуются отдельно (guards), вне trial-механизма.
+
+---
+
+#### 3.2.3. Usage summary & soft-limits (Manager)
+
+Для UX-индикации soft-limits используется агрегированный usage endpoint.
+
+**Endpoint**
+
+```http
+GET /api/cleanproof/usage-summary/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+* предоставить frontend агрегированное состояние trial + usage;
+* исключить дублирование бизнес-логики на клиенте;
+* использовать данные исключительно для UX-индикации.
+
+**Response 200 OK (пример)**
+
+```json
+{
+  "plan": "trial",
+  "is_trial_active": true,
+  "is_trial_expired": false,
+  "days_left": 7,
+  "jobs_today_count": 0,
+  "jobs_today_soft_limit": 20,
+  "cleaners_count": 1,
+  "cleaners_soft_limit": 5
+}
+```
+
+**Принципы**
+
+* `usage-summary` не блокирует действия;
+* soft-limits ≠ guards;
+* данные используются только для баннеров и подсказок.
+
+---
+
+### 3.3. Company profile (Manager)
+
+**Endpoint**
+
+```http
+GET /api/manager/company/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+Вернуть профиль компании менеджера для экрана Settings.
+
+**Response 200 OK**
+
+```json
+{
+  "id": 1,
+  "name": "Dev Company",
+  "contact_email": "info@devcompany.com",
+  "contact_phone": "+971500000000",
+  "logo_url": "https://cdn.example.com/logos/dev-company.png"
+}
+```
+
+**Гарантии**
+
+* Возвращается ровно одна компания — та, к которой принадлежит менеджер.
+* Если `logo_url = null`, фронт показывает плейсхолдер.
+
+---
+
+**Endpoint**
+
+```http
+PATCH /api/manager/company/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: application/json
+```
+
+**Назначение**
+
+Обновить базовые настройки компании: название и контактные данные.
+
+**Request (JSON)**
+
+```json
+{
+  "name": "New Company Name",
+  "contact_email": "ops@company.com",
+  "contact_phone": "+971511111111"
+}
+```
+
+Все поля опциональные: можно отправлять только те, которые меняются.
+
+**Response 200 OK**
+
+```json
+{
+  "id": 1,
+  "name": "New Company Name",
+  "contact_email": "ops@company.com",
+  "contact_phone": "+971511111111",
+  "logo_url": "https://cdn.example.com/logos/dev-company.png"
+}
+```
+
+---
+
+#### 3.3.1. Company logo upload
+
+**Endpoint**
+
+```http
+POST /api/manager/company/logo/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: multipart/form-data
+```
+
+**Поля формы**
+
+* `file`: бинарный PNG/JPG логотип компании.
+
+**Response 200 OK**
+
+```json
+{
+  "logo_url": "https://cdn.example.com/logos/dev-company-new.png"
+}
+```
+
+**Правила**
+
+* При загрузке старый логотип может быть перезаписан.
+* Backend отвечает только новым `logo_url`, фронт:
+
+  * обновляет превью;
+  * не хранит файл локально.
+
+---
+
+### 3.4. Cleaners management (Manager)
+
+Все эндпоинты требуют:
+
+```http
+Authorization: Token <MANAGER_TOKEN>
+```
+
+и `role = "manager"`.
+
+---
+
+#### 3.4.1. List cleaners
+
+**Endpoint**
+
+```http
+GET /api/manager/cleaners/
+```
+
+**Назначение**
+
+Вернуть список клинеров компании для блока Team / Cleaners в Settings.
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": 3,
+    "full_name": "Dev Cleaner",
+    "email": "cleaner1@devcompany.com",
+    "phone": "+971500000001",
+    "is_active": true
+  }
+]
+```
+
+**Особенности**
+
+* Возвращаются только пользователи с `role = "cleaner"`.
+* `email` может быть `null`.
+* `phone` может быть `null`, но хотя бы одно из полей (`email`/`phone`) должно быть заполнено при создании.
+
+---
+
+#### 3.4.2. Create cleaner
+
+**Endpoint**
+
+```http
+POST /api/manager/cleaners/
+Content-Type: application/json
+```
+
+**Request (JSON)**
+
+```json
+{
+  "full_name": "New Cleaner",
+  "email": "new.cleaner@devcompany.com",
+  "phone": "+971500000002",
+  "is_active": true
+}
+```
+
+**Правила**
+
+* `full_name` — обязательно.
+* `email` и `phone` — оба необязательные, но хотя бы одно из них должно быть передано.
+* `is_active` по умолчанию `true`, если не указано.
+
+**Response 201 Created**
+
+```json
+{
+  "id": 4,
+  "full_name": "New Cleaner",
+  "email": "new.cleaner@devcompany.com",
+  "phone": "+971500000002",
+  "is_active": true
+}
+```
+
+**Типичные ошибки**
+
+* `400 Bad Request` — нет `full_name` или не передан ни `email`, ни `phone`.
+* `409 Conflict` — попытка создать клинера с уже существующим `phone` или `email` в рамках компании.
+
+---
+
+#### 3.4.3. Update cleaner
+
+**Endpoint**
+
+```http
+PATCH /api/manager/cleaners/<id>/
+Content-Type: application/json
+```
+
+**Request (JSON)**
+
+```json
+{
+  "full_name": "Updated Cleaner Name",
+  "email": "updated.cleaner@devcompany.com",
+  "phone": "+971500000003",
+  "is_active": false
+}
+```
+
+Все поля опциональные.
+
+**Response 200 OK**
+
+```json
+{
+  "id": 4,
+  "full_name": "Updated Cleaner Name",
+  "email": "updated.cleaner@devcompany.com",
+  "phone": "+971500000003",
+  "is_active": false
+}
+```
+
+**Правила**
+
+* Менеджер не может менять `role` и `company` клинера.
+* Отключение клинера (`is_active = false`) не удаляет его задачи и историю.
+
+**Типичные ошибки**
+
+* `404 Not Found` — клинер не найден или не принадлежит компании менеджера.
+* `409 Conflict` — конфликт по `email` или `phone` (дубликат в компании).
+
+---
+
+### 3.5. Locations (Manager API)
+
+Локации являются серверным источником истины и хранятся в backend.
+Все операции с локациями выполняются через Manager API и привязаны к компании менеджера.
+
+**Доступные эндпоинты:**
+
+* `GET /api/manager/locations/` — получить список локаций компании;
+* `POST /api/manager/locations/` — создать новую локацию;
+* `PATCH /api/manager/locations/{id}/` — обновить локацию.
+
+Каждая локация используется:
+
+* при создании job;
+* в Job Planning;
+* в мобильном приложении (через связанные job’ы).
+
+Frontend не хранит и не кэширует собственные списки локаций — используется только API.
+
+---
+
 ## 4. Manager — Job Planning & Create Job (NEW, зафиксированный контракт)
 
 ### 4.1. Получение справочников: meta для Planning / Create Job
@@ -1299,4 +1655,3 @@ Backend **не обязан** гарантировать наличие коор
 
 1. укладываться в контракты, зафиксированные здесь, **либо**
 2. сначала обновить этот файл (`API_CONTRACT.md`) с чётким описанием изменений и только потом реализовывать их в коде.
-````
