@@ -860,6 +860,7 @@ class JobPhotoDeleteView(APIView):
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+
 class ManagerCompanyView(APIView):
     """
     Профиль компании менеджера.
@@ -1258,6 +1259,28 @@ class ManagerJobsCreateView(APIView):
         if user.role != User.ROLE_MANAGER:
             return Response(
                 {"detail": "Only managers can create jobs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 🔴 Trial enforcement: запрещаем создание jobs,
+        # если trial закончился
+        if company.is_trial_expired():
+            return Response(
+                {
+                    "code": "trial_expired",
+                    "detail": (
+                        "Your free trial has ended. "
+                        "You can still view existing jobs and download reports, "
+                        "but creating new jobs requires an upgrade."
+                    ),
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 

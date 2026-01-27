@@ -35,19 +35,15 @@ class StartStandardTrialView(APIView):
         now = timezone.now()
 
         # Если trial уже активен и не истёк — просто возвращаем статус
-        if (
-            company.trial_expires_at
-            and company.trial_expires_at > now
-            and company.plan == "trial"
-        ):
-            data = self._serialize_company(company, now)
+        if company.trial_expires_at and company.trial_expires_at > now and company.plan == Company.PLAN_TRIAL:
+            data = self._serialize_company(company)
             return Response(data, status=status.HTTP_200_OK)
 
         # В DEV-среде сознательно разрешаем перезапуск trial
         # (в проде это правило можно будет ужесточить)
         from datetime import timedelta
 
-        company.plan = "trial"
+        company.plan = Company.PLAN_TRIAL
         company.trial_started_at = now
         company.trial_expires_at = now + timedelta(days=7)
         company.updated_at = now
@@ -60,20 +56,17 @@ class StartStandardTrialView(APIView):
             ]
         )
 
-        data = self._serialize_company(company, now)
+        data = self._serialize_company(company)
         return Response(data, status=status.HTTP_200_OK)
 
-    def _serialize_company(self, company: Company, now):
-        if company.trial_expires_at:
-            delta = company.trial_expires_at.date() - now.date()
-            days_left = max(delta.days, 0)
-        else:
-            days_left = None
-
-        is_expired = bool(
-            company.trial_expires_at and company.trial_expires_at <= now
-        )
-        is_active = company.plan == "trial" and not is_expired
+    def _serialize_company(self, company: Company):
+        """
+        Единая точка сериализации trial-состояния компании.
+        Логика завязана на методы Company, чтобы не расходиться.
+        """
+        is_active = company.is_trial_active
+        is_expired = company.is_trial_expired()
+        days_left = company.trial_days_left()
 
         serializer = TrialStatusSerializer(
             {
@@ -107,19 +100,11 @@ class UsageSummaryView(APIView):
     def get(self, request, *args, **kwargs):
         user = request.user
         company: Company = user.company
-        now = timezone.now()
 
-        # Trial-состояние (логика согласована с StartStandardTrialView)
-        if company.trial_expires_at:
-            delta = company.trial_expires_at.date() - now.date()
-            days_left = max(delta.days, 0)
-        else:
-            days_left = None
-
-        is_expired = bool(
-            company.trial_expires_at and company.trial_expires_at <= now
-        )
-        is_active = company.plan == "trial" and not is_expired
+        # Trial-состояние — через методы Company
+        is_active = company.is_trial_active
+        is_expired = company.is_trial_expired()
+        days_left = company.trial_days_left()
 
         # Usage: jobs за сегодня (кроме отменённых)
         today = timezone.localdate()

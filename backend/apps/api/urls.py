@@ -1,4 +1,4 @@
-# backend/apps/accounts/api/urls.py
+# backend/apps/api/urls.py
 from django.urls import path
 
 from apps.api.views import (

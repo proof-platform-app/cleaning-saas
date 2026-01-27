@@ -1,5 +1,3 @@
-# SCALE_BRIEF.md
-
 ## Layer 5 — Scale & Enterprise Readiness (Direction Only)
 
 This layer defines **meaningful scale improvements**, not feature expansion for its own sake.  
@@ -7,6 +5,45 @@ The goal is to reduce operational friction, human overhead, and risk as customer
 
 Layer 5 is intentionally **not part of the MVP** and does not represent current product state.  
 It exists to define a clean, logical path to higher-value customers and pricing tiers.
+
+---
+
+## 0. Trial, Usage & Pre-Billing Architecture (Foundation for Scale)
+
+Before introducing enterprise features, CleanProof establishes a **clear separation between operational truth and commercial logic**.
+
+### Source of truth
+
+- Trial state, expiration, and usage metrics are calculated **only on the backend**
+- Frontend consumes a single aggregated endpoint:
+  - `GET /api/cleanproof/usage-summary/`
+- UI never infers trial state locally
+
+### What exists today
+
+- Trial lifecycle:
+  - start
+  - active
+  - expired
+- Usage visibility:
+  - jobs created today
+  - active cleaners
+  - soft-limits exposed to UI
+- UX enforcement:
+  - informational banners
+  - upgrade CTAs
+  - limited hard-blocking (job creation after trial expiry)
+
+### Why this matters for scale
+
+This architecture allows CleanProof to:
+
+- Add billing (Stripe / Paddle) **without rewriting business logic**
+- Introduce plan enforcement gradually
+- Support multiple pricing tiers cleanly
+- Avoid hidden coupling between UI and billing rules
+
+Layer 5 builds **on top of this foundation**, not around it.
 
 ---
 
