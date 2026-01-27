@@ -146,6 +146,22 @@ const auth: AuthState = {
   token: null,
 };
 
+// хелпер: подтянуть токен из localStorage, если он есть
+function syncTokenFromStorage(): string | null {
+  if (typeof window === "undefined") {
+    return auth.token;
+  }
+
+  const stored =
+    localStorage.getItem("authToken") || localStorage.getItem("auth_token");
+
+  if (stored && stored !== auth.token) {
+    auth.token = stored;
+  }
+
+  return auth.token;
+}
+
 // ---------- Low-level fetch helpers ----------
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -156,8 +172,11 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     ...(options.headers || {}),
   };
 
-  if (auth.token && !("Authorization" in headers)) {
-    headers["Authorization"] = `Token ${auth.token}`;
+  // перед каждым запросом синкаемся с localStorage
+  const currentToken = syncTokenFromStorage();
+
+  if (currentToken && !("Authorization" in headers)) {
+    headers["Authorization"] = `Token ${currentToken}`;
   }
 
   const resp = await fetch(url, {
@@ -191,8 +210,10 @@ async function apiFetchBlob(
     ...(options.headers || {}),
   };
 
-  if (auth.token && !("Authorization" in headers)) {
-    headers["Authorization"] = `Token ${auth.token}`;
+  const currentToken = syncTokenFromStorage();
+
+  if (currentToken && !("Authorization" in headers)) {
+    headers["Authorization"] = `Token ${currentToken}`;
   }
 
   const resp = await fetch(url, {
@@ -214,8 +235,18 @@ async function apiFetchBlob(
 // ---------- Auth ----------
 
 export async function loginManager(): Promise<void> {
-  if (auth.token) return;
+  // 1) Всегда сначала смотрим в localStorage (новый login flow)
+  const storedToken = syncTokenFromStorage();
+  if (storedToken) {
+    return;
+  }
 
+  // 2) Если токена в storage нет, но уже есть в памяти — тоже ок
+  if (auth.token) {
+    return;
+  }
+
+  // 3) Fallback: dev-логин через ENV / дефолтные креды
   const payload = {
     email: DEV_MANAGER_EMAIL,
     password: DEV_MANAGER_PASSWORD,
@@ -233,7 +264,18 @@ export async function loginManager(): Promise<void> {
   });
 
   auth.token = data.token;
-  console.log("[api] Logged in as manager", data.email);
+
+  // кладём токен и в localStorage, чтобы всё было единообразно
+  if (typeof window !== "undefined") {
+    localStorage.setItem("authToken", data.token);
+    localStorage.setItem("auth_token", data.token);
+    localStorage.setItem("authUserEmail", data.email);
+    if (data.role) {
+      localStorage.setItem("authUserRole", data.role);
+    }
+  }
+
+  console.log("[api] Logged in as manager (dev fallback)", data.email);
 }
 
 // ---------- Helpers ----------
@@ -688,8 +730,9 @@ export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
   const url = `${API_BASE_URL}/api/manager/company/logo/`;
 
   const headers: HeadersInit = {};
-  if (auth.token) {
-    headers["Authorization"] = `Token ${auth.token}`;
+  const currentToken = syncTokenFromStorage();
+  if (currentToken) {
+    headers["Authorization"] = `Token ${currentToken}`;
   }
 
   const resp = await fetch(url, {

@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
@@ -44,6 +45,13 @@ export default function JobPlanning() {
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
+  const navigate = useNavigate();
+
+  // null — trial ещё не трогали, объект — trial истёк
+  const [trialExpired, setTrialExpired] = useState<null | { detail: string }>(
+    null,
+  );
+
   const loadError = isPlanningError
     ? planningError?.message || "Failed to load jobs. Please try again."
     : null;
@@ -77,6 +85,9 @@ export default function JobPlanning() {
   };
 
   const handleJobCreated = (newJob: PlanningJob) => {
+    // успешное создание — очищаем возможный баннер про истёкший trial
+    setTrialExpired(null);
+
     // Если job создана на другой день — просто перезагружаем
     if (newJob.scheduled_date !== filters.date) {
       void refetchPlanning();
@@ -123,6 +134,26 @@ export default function JobPlanning() {
 
           {/* Jobs Table - Right Column */}
           <div className="flex-1 min-w-0">
+            {/* Trial expired banner */}
+            {trialExpired && (
+              <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div>
+                  <p className="font-medium">Your free trial has ended.</p>
+                  <p className="mt-1">
+                    {trialExpired.detail ||
+                      "You can still view existing jobs and download reports, but creating new jobs requires an upgrade."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/cleanproof/pricing")}
+                  className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Upgrade
+                </button>
+              </div>
+            )}
+
             <div className="mb-4 flex items-start justify-between gap-4">
               <p className="text-sm text-muted-foreground">
                 Showing jobs for{" "}

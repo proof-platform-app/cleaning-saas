@@ -113,6 +113,11 @@ type BackendCreatedJob = {
   };
 };
 
+// Ошибка, которую будем кидать при истёкшем trial
+export type TrialExpiredError = Error & {
+  code?: string;
+};
+
 export async function fetchPlanningMeta(): Promise<PlanningMeta> {
   const res = await apiClient.get<PlanningMeta>("/api/manager/meta/");
   return res.data;
@@ -121,31 +126,57 @@ export async function fetchPlanningMeta(): Promise<PlanningMeta> {
 export async function createPlanningJob(
   payload: CreateJobPayload
 ): Promise<PlanningJob> {
-  const res = await apiClient.post<BackendCreatedJob>(
-    "/api/manager/jobs/",
-    payload
-  );
+  try {
+    const res = await apiClient.post<BackendCreatedJob>(
+      "/api/manager/jobs/",
+      payload
+    );
 
-  const created = res.data;
+    const created = res.data;
 
-  return {
-    id: created.id,
-    status: created.status,
-    scheduled_date: created.scheduled_date,
-    scheduled_start_time: created.scheduled_start_time,
-    scheduled_end_time: created.scheduled_end_time,
-    location: created.location,
-    cleaner: {
-      id: created.cleaner.id,
-      full_name: created.cleaner.full_name,
-      phone: created.cleaner.phone ?? null,
-    },
-    proof: {
-      check_in: false,
-      before_photo: Boolean(created.proof?.before_photo),
-      checklist: Boolean(created.proof?.checklist),
-      after_photo: Boolean(created.proof?.after_photo),
-      check_out: false,
-    },
-  };
+    return {
+      id: created.id,
+      status: created.status,
+      scheduled_date: created.scheduled_date,
+      scheduled_start_time: created.scheduled_start_time,
+      scheduled_end_time: created.scheduled_end_time,
+      location: created.location,
+      cleaner: {
+        id: created.cleaner.id,
+        full_name: created.cleaner.full_name,
+        phone: created.cleaner.phone ?? null,
+      },
+      proof: {
+        check_in: false,
+        before_photo: Boolean(created.proof?.before_photo),
+        checklist: Boolean(created.proof?.checklist),
+        after_photo: Boolean(created.proof?.after_photo),
+        check_out: false,
+      },
+    };
+  } catch (error: any) {
+    // axios-ошибка с ответом от бэка
+    const status = error?.response?.status;
+    const data = error?.response?.data;
+
+    if (status === 403) {
+      if (data?.code === "trial_expired") {
+        const err: TrialExpiredError = new Error(
+          data?.detail ||
+            "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade."
+        );
+        err.code = "trial_expired";
+        throw err;
+      }
+
+      const err: TrialExpiredError = new Error(
+        data?.detail || "You are not allowed to create jobs."
+      );
+      err.code = data?.code || "forbidden";
+      throw err;
+    }
+
+    // всё остальное — как обычная ошибка
+    throw error;
+  }
 }

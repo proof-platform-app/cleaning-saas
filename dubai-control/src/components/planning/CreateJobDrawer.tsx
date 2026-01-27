@@ -59,8 +59,9 @@ export function CreateJobDrawer({
   // ===== ui state =====
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [trialExpired, setTrialExpired] = useState(false);
 
-  const canInteract = !metaLoading && !submitting;
+  const canInteract = !metaLoading && !submitting && !trialExpired;
 
   // ===== utils =====
   function normalizeTimeToSeconds(value: string): string {
@@ -105,6 +106,7 @@ export function CreateJobDrawer({
     setEndTime("12:00");
     setManagerNotes("");
     setSubmitError(null);
+    setTrialExpired(false);
 
     if (!meta && !metaLoading && !metaError) {
       loadMeta();
@@ -158,6 +160,7 @@ export function CreateJobDrawer({
 
     setSubmitting(true);
     setSubmitError(null);
+    setTrialExpired(false);
 
     try {
       const job = await createPlanningJob({
@@ -174,11 +177,25 @@ export function CreateJobDrawer({
       onClose();
     } catch (err: any) {
       console.error("Failed to create job", err);
-      setSubmitError(
-        err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to create job.",
-      );
+
+      const msg = String(err?.message ?? "");
+
+      const isTrialExpired =
+        msg.includes('"code":"trial_expired"') ||
+        msg.includes("trial_expired");
+
+      if (isTrialExpired) {
+        setTrialExpired(true);
+        setSubmitError(
+          "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade.",
+        );
+      } else {
+        setSubmitError(
+          err?.response?.data?.detail ||
+            err?.message ||
+            "Failed to create job.",
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -362,7 +379,11 @@ export function CreateJobDrawer({
                   Cancel
                 </Button>
                 <Button type="submit" className="flex-1" disabled={!canInteract}>
-                  {submitting ? "Creating…" : "Create job"}
+                  {trialExpired
+                    ? "Upgrade required"
+                    : submitting
+                      ? "Creating…"
+                      : "Create job"}
                 </Button>
               </div>
             </form>

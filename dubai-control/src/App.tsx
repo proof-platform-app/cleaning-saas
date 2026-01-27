@@ -20,6 +20,7 @@ import NotFound from "./pages/NotFound";
 import JobPlanning from "@/pages/JobPlanning";
 import Locations from "@/pages/Locations";
 import PricingPage from "@/pages/PricingPage";
+import Signup from "./pages/Signup";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -60,6 +61,7 @@ const App = () => (
                 Auth
                 ========================= */}
             <Route path="/" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
 
             {/* =========================
                 Protected app (with layout)

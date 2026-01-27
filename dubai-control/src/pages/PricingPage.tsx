@@ -1,4 +1,5 @@
 // dubai-control/src/pages/PricingPage.tsx
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -10,9 +11,58 @@ import PricingFAQSection from "@/components/pricing/PricingFAQSection";
 import PricingCTASection from "@/components/pricing/PricingCTASection";
 
 import CleanProofHeader from "@/marketing/cleanproof/CleanProofHeader";
+import { API_BASE_URL } from "@/api/client";
 
-const PricingPage = () => {
+export type PricingMode = "anonymous" | "trial_active" | "trial_expired" | "other";
+
+export default function PricingPage() {
   const navigate = useNavigate();
+
+  const [mode, setMode] = useState<PricingMode>("anonymous");
+  const [isCheckingMode, setIsCheckingMode] = useState(false);
+
+  useEffect(() => {
+    const token =
+      localStorage.getItem("authToken") || localStorage.getItem("auth_token");
+
+    if (!token) {
+      // гость — оставляем "anonymous"
+      return;
+    }
+
+    setIsCheckingMode(true);
+
+    fetch(`${API_BASE_URL}/api/cleanproof/usage-summary/`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Token ${token}`,
+      },
+    })
+      .then(async (resp) => {
+        if (!resp.ok) return null;
+        try {
+          return await resp.json();
+        } catch {
+          return null;
+        }
+      })
+      .then((data) => {
+        if (!data) return;
+
+        if (data.is_trial_expired) {
+          setMode("trial_expired");
+        } else if (data.is_trial_active) {
+          setMode("trial_active");
+        } else {
+          setMode("other");
+        }
+      })
+      .catch(() => {
+        // молча падаем в anonymous
+      })
+      .finally(() => setIsCheckingMode(false));
+  }, []);
 
   /**
    * Start 7-day trial flow (Standard plan)
@@ -82,7 +132,8 @@ const PricingPage = () => {
       {/* Основные секции страницы */}
       <main className="overflow-hidden">
         <PricingHeroSection />
-        <PricingPlansSection />
+        {/* сюда пробрасываем режим, чтобы Standard-кнопка знала про истёкший trial */}
+        <PricingPlansSection mode={mode} />
         {/* Здесь триал секция получает хендлер для кнопки */}
         <PricingTrialSection onStartStandardTrial={handleStartStandardTrial} />
         <PricingFAQSection />
@@ -126,13 +177,13 @@ const PricingPage = () => {
               Contact
             </Link>
             <a
-              href="#"
+              href="#" // TODO: заменить на реальный путь Privacy
               className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Privacy
             </a>
             <a
-              href="#"
+              href="#" // TODO: заменить на реальный путь Terms
               className="text-primary-foreground/40 hover:text-primary-foreground transition-colors"
             >
               Terms
@@ -142,6 +193,4 @@ const PricingPage = () => {
       </footer>
     </div>
   );
-};
-
-export default PricingPage;
+}

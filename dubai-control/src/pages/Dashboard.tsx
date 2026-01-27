@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -11,7 +11,7 @@ import {
   Plus,
   ArrowRight,
 } from "lucide-react";
-import { getManagerTodayJobs } from "@/api/client";
+import { getManagerTodayJobs, getUsageSummary } from "@/api/client";
 
 type ApiJob = {
   id: number;
@@ -34,8 +34,15 @@ type UiJob = {
   endTime: string;
 };
 
+type UsageSummary = {
+  is_trial_active: boolean;
+  is_trial_expired: boolean;
+  days_left?: number | null;
+};
+
 function mapApiJobToUi(job: ApiJob): UiJob {
   let uiStatus: UiJobStatus;
+
   if (job.status === "in_progress") {
     uiStatus = "in-progress";
   } else if (job.status === "completed") {
@@ -63,31 +70,34 @@ function mapApiJobToUi(job: ApiJob): UiJob {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const [todayJobs, setTodayJobs] = useState<UiJob[]>([]);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
-  // TEMP: trial context (will be wired to API later)
-  const trialInfo = {
-    isActive: true,
-    daysLeft: 6,
-  };
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadJobs() {
+    async function loadData() {
       try {
         setLoading(true);
         setError(null);
-        const apiJobs = await getManagerTodayJobs();
+
+        const [apiJobs, usageSummary] = await Promise.all([
+          getManagerTodayJobs(),
+          getUsageSummary(),
+        ]);
+
         if (!isMounted) return;
 
-        const mapped = (apiJobs as ApiJob[]).map(mapApiJobToUi);
-        setTodayJobs(mapped);
+        const mappedJobs = (apiJobs as ApiJob[]).map(mapApiJobToUi);
+        setTodayJobs(mappedJobs);
+        setUsage(usageSummary as UsageSummary);
       } catch (err: any) {
         if (!isMounted) return;
-        setError(err.message || "Failed to load jobs");
+        setError(err.message || "Failed to load dashboard data");
         setTodayJobs([]);
       } finally {
         if (isMounted) {
@@ -96,7 +106,7 @@ export default function Dashboard() {
       }
     }
 
-    loadJobs();
+    loadData();
 
     return () => {
       isMounted = false;
@@ -110,13 +120,30 @@ export default function Dashboard() {
     issues: todayJobs.filter((j) => j.status === "issue").length,
   };
 
+  // Banner texts
+  const bannerTitle =
+    usage && usage.is_trial_expired
+      ? "Trial ended"
+      : usage && usage.is_trial_active
+      ? `Trial active · ${usage.days_left ?? 0} day${
+          (usage.days_left ?? 0) === 1 ? "" : "s"
+        } left`
+      : "Standard plan";
+
+  const bannerDescription =
+    usage && usage.is_trial_expired
+      ? "Your 7-day free trial has ended. You can still view existing jobs and download reports, but to create new jobs you'll need to upgrade."
+      : usage && usage.is_trial_active
+      ? "You're exploring CleanProof with full access. Upgrade anytime — no changes to your data."
+      : "You’re on a paid plan. All features are available.";
+
   return (
     <div className="p-8 animate-fade-in">
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {"Today's Overview"}
+            Today&apos;s Overview
           </h1>
           <p className="mt-1 text-muted-foreground">
             Monday, January 15, 2024 · GST (UTC+4)
@@ -131,27 +158,25 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Trial banner */}
-      {trialInfo.isActive && (
-        <div className="mb-6">
-          <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm">
-            <div>
-              <p className="font-medium text-slate-900">
-                Trial active · {trialInfo.daysLeft}{" "}
-                {trialInfo.daysLeft === 1 ? "day" : "days"} left
-              </p>
-              <p className="mt-0.5 text-xs text-slate-600">
-                You&apos;re exploring CleanProof with full access. Upgrade
-                anytime — no changes to your data.
-              </p>
-            </div>
-            <Link
-              to="/cleanproof/pricing"
-              className="ml-4 whitespace-nowrap text-xs font-medium text-blue-700 hover:text-blue-800"
-            >
-              Upgrade
-            </Link>
+      {/* Usage / Trial banner */}
+      {usage && (
+        <div className="mb-6 rounded-xl border border-border bg-muted/40 px-4 py-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {bannerTitle}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {bannerDescription}
+            </p>
           </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/cleanproof/pricing")}
+          >
+            Upgrade
+          </Button>
         </div>
       )}
 
@@ -201,6 +226,7 @@ export default function Dashboard() {
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
+
         <div className="divide-y divide-border">
           {loading ? (
             <div className="px-6 py-4 text-sm text-muted-foreground">

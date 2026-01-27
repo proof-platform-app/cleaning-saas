@@ -1,27 +1,24 @@
-// dubai-control/src/pages/Login.tsx
-import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+// dubai-control/src/pages/Signup.tsx
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-// Базовый URL для API — тот же, что и для всего проекта
 const API_BASE_URL = "http://127.0.0.1:8000";
 
-export default function Login() {
+export default function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [email, setEmail] = useState("manager@test.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("Test1234!");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Если пришли с /?trial=standard — показываем текст про trial
-  const isTrialFlow = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("trial") === "standard";
-  }, [location.search]);
+  // Если пришли с лендинга с trial-параметром — можем пометить источник
+  const searchParams = new URLSearchParams(location.search);
+  const trialSource = searchParams.get("trial") || "self_serve";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +26,7 @@ export default function Login() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/manager/auth/login/`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -40,41 +37,40 @@ export default function Login() {
       if (!response.ok) {
         const detail =
           (data && typeof data.detail === "string" && data.detail) ||
-          "Unable to sign in. Please check your credentials.";
+          "Unable to sign up. Please check your details.";
         throw new Error(detail);
       }
 
       // Ожидаемый формат ответа:
       // {
       //   "token": "...",
-      //   "user_id": 2,
-      //   "email": "manager@test.com",
-      //   "full_name": "Dev Manager",
-      //   "role": "manager"
+      //   "user": {
+      //     "id": 7,
+      //     "email": "newmanager@test.com",
+      //     "full_name": "Manager",
+      //     "role": "manager"
+      //   },
+      //   "company": { ... },
+      //   "trial": { ... }
       // }
 
       if (data?.token) {
-        // новый ключ — используется новым кодом
         localStorage.setItem("authToken", data.token);
-        // старый ключ — на всякий случай, для старого кода
-        localStorage.setItem("auth_token", data.token);
       }
-      if (data?.role) {
-        localStorage.setItem("authUserRole", data.role);
+      if (data?.user?.role) {
+        localStorage.setItem("authUserRole", data.user.role);
       }
-      if (data?.email) {
-        localStorage.setItem("authUserEmail", data.email);
+      if (data?.user?.email) {
+        localStorage.setItem("authUserEmail", data.user.email);
       }
 
-      // Помечаем, что зашли через trial-флоу — пригодится для баннера
-      if (isTrialFlow) {
-        localStorage.setItem("cleanproof_trial_entry", "standard");
-      }
+      // Помечаем, что зашли через self-serve signup
+      localStorage.setItem("cleanproof_trial_entry", trialSource || "self_serve");
 
       navigate("/dashboard");
     } catch (err: any) {
       setError(
-        err?.message || "Unable to sign in. Please check your credentials.",
+        err?.message || "Unable to sign up. Please check your details."
       );
     } finally {
       setIsLoading(false);
@@ -101,12 +97,11 @@ export default function Login() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              Welcome back
+              Start your 7-day free trial
             </h1>
             <p className="mt-2 text-muted-foreground text-sm">
-              {isTrialFlow
-                ? "Sign in to start your 7-day free trial"
-                : "Sign in to manage your cleaning operations"}
+              Create your CleanProof account and get instant access to the
+              manager dashboard.
             </p>
           </div>
 
@@ -117,7 +112,7 @@ export default function Login() {
                 htmlFor="email"
                 className="text-sm font-medium text-foreground"
               >
-                Email address
+                Work email
               </Label>
               <Input
                 id="email"
@@ -146,6 +141,9 @@ export default function Login() {
                 className="h-11 bg-background border-border focus:border-primary focus:ring-primary/20"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                You can change this later in Settings.
+              </p>
             </div>
 
             {error && <p className="text-sm text-red-500">{error}</p>}
@@ -155,25 +153,25 @@ export default function Login() {
               className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-soft"
               disabled={isLoading}
             >
-              {isLoading ? "Signing in..." : "Sign in"}
+              {isLoading ? "Creating account..." : "Create account"}
             </Button>
           </form>
 
-          {/* Link to signup */}
+          {/* Link to login */}
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
+            Already have an account?{" "}
             <button
               type="button"
-              onClick={() => navigate("/signup")}
+              onClick={() => navigate("/")}
               className="text-primary hover:underline font-medium"
             >
-              Start free trial
+              Sign in
             </button>
           </p>
 
           {/* Footer */}
           <p className="mt-8 text-center text-sm text-muted-foreground">
-            Trusted by cleaning professionals across the UAE
+            No credit card required during trial.
           </p>
         </div>
       </div>
@@ -189,11 +187,11 @@ export default function Login() {
             </div>
           </div>
           <h2 className="text-2xl font-semibold text-foreground mb-4">
-            Proof of work you can trust
+            Every job becomes proof
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            GPS verification, timestamped photos, and detailed checklists. Every
-            job documented, every report client-ready.
+            GPS-verified check-ins, before/after photos, and completed
+            checklists. One PDF report your clients can trust.
           </p>
         </div>
       </div>
