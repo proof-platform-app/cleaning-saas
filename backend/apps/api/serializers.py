@@ -1,4 +1,3 @@
-# backend/apps/api/serializers.py
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -6,6 +5,50 @@ from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent
 from apps.locations.models import Location, ChecklistTemplate, ChecklistTemplateItem
 
 User = get_user_model()
+
+
+def compute_sla_status_for_job(obj) -> str:
+    """
+    Минимальный SLA-слой:
+    - "violated", если нет полного proof
+    - иначе "ok"
+    """
+
+    # SLA считаем только для завершённых работ
+    if getattr(obj, "status", None) != "completed":
+        return "ok"
+
+    # Check-in / Check-out
+    has_check_in = getattr(obj, "has_check_in", None)
+    has_check_out = getattr(obj, "has_check_out", None)
+
+    if has_check_in is None:
+        has_check_in = getattr(obj, "actual_start_time", None) is not None
+    if has_check_out is None:
+        has_check_out = getattr(obj, "actual_end_time", None) is not None
+
+    if not has_check_in or not has_check_out:
+        return "violated"
+
+    # Фото before / after
+    before_uploaded = getattr(obj, "before_uploaded", None)
+    after_uploaded = getattr(obj, "after_uploaded", None)
+
+    if before_uploaded is False or after_uploaded is False:
+        return "violated"
+
+    # Чеклист
+    checklist_completed = getattr(obj, "checklist_completed", None)
+
+    if checklist_completed is False:
+        return "violated"
+
+    if checklist_completed is None:
+        qs = JobChecklistItem.objects.filter(job=obj)
+        if qs.exists() and qs.filter(is_completed=False).exists():
+            return "violated"
+
+    return "ok"
 
 
 class JobCheckInSerializer(serializers.Serializer):
@@ -48,16 +91,14 @@ class JobCheckEventSerializer(serializers.ModelSerializer):
 class JobDetailSerializer(serializers.ModelSerializer):
     """
     Job detail для Cleaner (и частично для Mobile).
-
-    Важно:
-    - Оставляем location_name для обратной совместимости (старые клиенты).
-    - Добавляем вложенный location с координатами для Mobile Navigate.
     """
     location_name = serializers.CharField(source="location.name", read_only=True)
     location = serializers.SerializerMethodField()
 
     checklist_items = JobChecklistItemSerializer(many=True, read_only=True)
     check_events = JobCheckEventSerializer(many=True, read_only=True)
+
+    sla_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -75,6 +116,7 @@ class JobDetailSerializer(serializers.ModelSerializer):
             "cleaner_notes",
             "checklist_items",
             "check_events",
+            "sla_status",
         )
 
     def get_location(self, obj):
@@ -89,6 +131,9 @@ class JobDetailSerializer(serializers.ModelSerializer):
             "latitude": getattr(loc, "latitude", None),
             "longitude": getattr(loc, "longitude", None),
         }
+
+    def get_sla_status(self, obj):
+        return compute_sla_status_for_job(obj)
 
 
 class ChecklistToggleSerializer(serializers.Serializer):
@@ -115,8 +160,6 @@ class ChecklistBulkUpdateSerializer(serializers.Serializer):
 class JobPhotoUploadSerializer(serializers.Serializer):
     """
     Upload job photo (before / after).
-    На уровне сериализатора принимаем любой файл.
-    Валидация "это картинка + EXIF + расстояние" — в доменной логике.
     """
     photo_type = serializers.ChoiceField(choices=["before", "after"])
     file = serializers.FileField()
@@ -136,7 +179,7 @@ class JobPhotoSerializer(serializers.Serializer):
 
 class ManagerJobCreateSerializer(serializers.Serializer):
     """
-    Payload для создания Job менеджером (Job Planning → Create job).
+    Payload для создания Job менеджером.
     """
     scheduled_date = serializers.DateField()
     scheduled_start_time = serializers.TimeField(required=False, allow_null=True)
@@ -154,7 +197,6 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         if not company:
             raise serializers.ValidationError("Manager has no company")
 
-        # location
         try:
             location = Location.objects.get(
                 id=attrs["location_id"],
@@ -163,7 +205,6 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         except Location.DoesNotExist:
             raise serializers.ValidationError({"location_id": "Invalid location"})
 
-        # cleaner
         try:
             cleaner = User.objects.get(
                 id=attrs["cleaner_id"],
@@ -173,7 +214,6 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({"cleaner_id": "Invalid cleaner"})
 
-        # checklist template (опционально)
         template = None
         template_id = attrs.get("checklist_template_id")
         if template_id:
@@ -207,9 +247,7 @@ class ManagerJobCreateSerializer(serializers.Serializer):
             status="scheduled",
         )
 
-        # Если передан checklist_template_id — создаём JobChecklistItem по TemplateItems.
         if template:
-            # предполагаем, что в ChecklistTemplateItem FK называется `template`
             template_items = ChecklistTemplateItem.objects.filter(
                 template=template
             ).order_by("order", "id")
@@ -267,7 +305,6 @@ class PlanningJobSerializer(serializers.ModelSerializer):
         }
 
     def get_proof(self, obj):
-        # Для только что созданной job всё ещё не выполнено.
         return {
             "before_photo": False,
             "after_photo": False,

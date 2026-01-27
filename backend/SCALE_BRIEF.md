@@ -90,6 +90,99 @@ Jobs may be flagged as:
 - Make issues visible before clients complain  
 
 ---
+### micro-SLA v2 — Time-Based Rules & Repeated Violations (Future Extension)
+
+micro-SLA v2 extends basic SLA flags by adding **temporal context and behavioral patterns**.  
+This layer does not introduce contractual enforcement.  
+It exists to support **operational coaching, quality management, and escalation logic** at scale.
+
+micro-SLA v2 is intentionally **not part of the MVP**.
+
+---
+
+#### Time-based rules (contextual violations)
+
+Instead of binary states (OK / Violated), SLA violations gain **time deltas**:
+
+Examples:
+
+- Check-in late by X minutes  
+- Job completed after scheduled end time  
+- After photo uploaded X minutes after check-out  
+
+This allows managers to distinguish between:
+
+- Minor delays  
+- Systematic timing issues  
+- Critical breaches  
+
+Time deltas are calculated **only on the backend** using recorded timestamps.
+
+Frontend displays them as read-only context.
+
+---
+
+#### Repeated violations (pattern detection)
+
+micro-SLA v2 introduces **rolling window aggregation**:
+
+Examples:
+
+- Cleaner has 3 SLA violations in last 7 days  
+- 2 consecutive jobs missing after photo  
+- 5 of last 10 jobs violated SLA  
+
+This transforms SLA from single-job auditing into **behavioral insight**.
+
+No new actions are triggered automatically.
+
+The system only exposes:
+
+- counts  
+- frequency  
+- recent patterns  
+
+Decision-making remains human.
+
+---
+
+#### Scope & Constraints
+
+Explicitly excluded from micro-SLA v2:
+
+- Automatic penalties  
+- Job blocking  
+- Score systems  
+- AI-based judgment  
+
+The goal is **visibility and clarity**, not automation.
+
+---
+
+#### Why micro-SLA v2 exists
+
+micro-SLA v2 enables:
+
+- Cleaner coaching instead of punishment  
+- Early detection of reliability issues  
+- Better escalation conversations  
+- Stronger Pro / Enterprise value proposition  
+
+It supports growth without increasing operational friction.
+
+---
+
+#### Pricing alignment
+
+micro-SLA v2 capabilities are aligned with higher tiers:
+
+- **Standard**: micro-SLA v1 (status + reasons)  
+- **Pro**: time-based context + repeated violations  
+- **Enterprise**: configurable rules and reporting windows  
+
+This ensures SLA sophistication scales with customer maturity.
+
+---
 
 ## 3. Performance Reports (Management-Level)
 

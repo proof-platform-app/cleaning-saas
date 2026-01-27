@@ -37,6 +37,7 @@ from .serializers import (
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
 )
+from .serializers import compute_sla_status_for_job
 
 
 class LoginView(APIView):
@@ -1487,7 +1488,7 @@ def build_planning_job_payload(job: Job):
             after_uploaded = True
 
     # proof: checklist (required)
-    checklist_completed = False  # ✅ по умолчанию НЕ ок, пока не докажем обратное
+    checklist_completed = False  # по умолчанию НЕ ok, пока не докажем обратное
     try:
         items = list(job.checklist_items.all())
     except Exception:
@@ -1506,7 +1507,7 @@ def build_planning_job_payload(job: Job):
 
         if required_attr:
             required_items = [it for it in items if bool(getattr(it, required_attr, False))]
-            # ✅ Если required_items пустой (все required-флаги False) — считаем required ВСЕ
+            # Если required_items пустой (все required-флаги False) — считаем required ВСЕ
             if not required_items:
                 required_items = items
         else:
@@ -1515,6 +1516,19 @@ def build_planning_job_payload(job: Job):
         checklist_completed = all(
             bool(getattr(it, "is_completed", False)) for it in required_items
         )
+
+    # --- SLA: статус + причины на основе proof-флагов ---
+    sla_reasons: list[str] = []
+
+    if job.status == Job.STATUS_COMPLETED:
+        if not before_uploaded:
+            sla_reasons.append("missing_before_photo")
+        if not after_uploaded:
+            sla_reasons.append("missing_after_photo")
+        if not checklist_completed:
+            sla_reasons.append("checklist_not_completed")
+
+    sla_status = "violated" if sla_reasons else "ok"
 
     return {
         "id": job.id,
@@ -1536,12 +1550,15 @@ def build_planning_job_payload(job: Job):
             "before_uploaded": bool(before_uploaded),
             "after_uploaded": bool(after_uploaded),
             "checklist_completed": bool(checklist_completed),
-            # ✅ алиасы под UI / lovable
+            # алиасы под UI / lovable
             "before_photo": bool(before_uploaded),
             "after_photo": bool(after_uploaded),
             "checklist": bool(checklist_completed),
         },
+        "sla_status": sla_status,
+        "sla_reasons": sla_reasons,
     }
+
 
 
 class ManagerPlanningJobsView(APIView):
