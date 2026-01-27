@@ -1,6 +1,7 @@
 # backend/apps/api/views.py
 import os
 import uuid
+from datetime import datetime  # ✅ NEW
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
@@ -13,15 +14,15 @@ from django.utils.dateparse import parse_date  # ✅ NEW
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Company, User
+from apps.jobs.image_utils import normalize_job_photo_to_jpeg
 from apps.jobs.models import File, Job, JobCheckEvent, JobChecklistItem, JobPhoto
 from apps.jobs.utils import distance_m, extract_exif_data
-from apps.jobs.image_utils import normalize_job_photo_to_jpeg
 from apps.locations.models import Location, ChecklistTemplate
 
 from .pdf import generate_job_report_pdf
@@ -137,6 +138,77 @@ class ManagerLoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+class ManagerSignupView(APIView):
+    """
+    Public signup endpoint.
+
+    Создаёт новую компанию + первого менеджера.
+    Не требует аутентификации.
+    """
+
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    def post(self, request, *args, **kwargs):
+        company_name = (request.data.get("company_name") or "").strip()
+        full_name = (request.data.get("full_name") or "").strip()
+        email = (request.data.get("email") or "").strip()
+        password = request.data.get("password") or ""
+
+        errors: dict[str, list[str]] = {}
+
+        if not company_name:
+            errors.setdefault("company_name", []).append("This field is required.")
+        if not full_name:
+            errors.setdefault("full_name", []).append("This field is required.")
+        if not email:
+            errors.setdefault("email", []).append("This field is required.")
+        if not password:
+            errors.setdefault("password", []).append("This field is required.")
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Проверяем уникальность email среди менеджеров
+        if User.objects.filter(
+            email__iexact=email,
+            role=User.ROLE_MANAGER,
+        ).exists():
+            return Response(
+                {"email": ["A manager with this email already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Создаём компанию (остальные поля по умолчанию)
+        company = Company.objects.create(
+            name=company_name,
+            contact_email=email,
+        )
+
+        # Создаём менеджера
+        manager = User.objects.create(
+            company=company,
+            role=User.ROLE_MANAGER,
+            email=email,
+            full_name=full_name,
+            is_active=True,
+        )
+        manager.set_password(password)
+        manager.save(update_fields=["password"])
+
+        data = {
+            "company": {
+                "id": company.id,
+                "name": company.name,
+            },
+            "user": {
+                "id": manager.id,
+                "email": manager.email,
+                "full_name": manager.full_name,
+            },
+        }
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class ManagerMetaView(APIView):
@@ -360,7 +432,11 @@ class JobCheckInView(APIView):
         )
 
         return Response(
-            {"detail": "Check in successful.", "job_id": job.id, "job_status": job.status},
+            {
+                "detail": "Check in successful.",
+                "job_id": job.id,
+                "job_status": job.status,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -433,7 +509,11 @@ class JobCheckOutView(APIView):
         )
 
         return Response(
-            {"detail": "Check out successful.", "job_id": job.id, "job_status": job.status},
+            {
+                "detail": "Check out successful.",
+                "job_id": job.id,
+                "job_status": job.status,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -605,10 +685,6 @@ class ManagerJobPdfEmailView(APIView):
             )
 
         # ⚠️ ВАЖНО: реальную отправку письма в MVP НЕ делаем.
-        # Здесь можно было бы:
-        #   - сгенерировать PDF,
-        #   - положить в очередь,
-        #   - или отправить напрямую.
         # Сейчас просто возвращаем "ок, запланировали".
         return Response(
             {
@@ -965,7 +1041,6 @@ class ManagerCompanyLogoUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Можно добавить базовую валидацию размера/типа, если нужно
         file_name = file_obj.name
         path = f"company_logos/{company.id}/{file_name}"
 
@@ -1032,46 +1107,62 @@ class ManagerCleanersListCreateView(APIView):
         if error_response is not None:
             return error_response
 
+        # ⛔ Компания заблокирована
+        if company.is_blocked():
+            code = "trial_expired" if company.is_trial_expired() else "company_blocked"
+            if code == "trial_expired":
+                detail = (
+                    "Your free trial has ended. You can still view existing jobs and "
+                    "download reports, but adding new cleaners requires an upgrade."
+                )
+            else:
+                detail = "Your account is currently blocked. Please contact support."
+
+            return Response(
+                {"code": code, "detail": detail},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # ⛔ Trial-лимит по клинерам
+        if company.is_trial_active and company.trial_cleaners_limit_reached():
+            return Response(
+                {
+                    "code": "trial_cleaners_limit_reached",
+                    "detail": (
+                        "Your free trial allows up to "
+                        f"{Company.TRIAL_MAX_CLEANERS} active cleaners. "
+                        "Deactivate an existing cleaner or upgrade to add more."
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         full_name = request.data.get("full_name")
         email = request.data.get("email")
         phone = request.data.get("phone")
         is_active = request.data.get("is_active", True)
 
-        if not full_name or not str(full_name).strip():
+        if not full_name:
             return Response(
-                {"full_name": ["Full name is required."]},
+                {"detail": "Full name is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not email and not phone:
+        if not phone and not email:
             return Response(
-                {
-                    "non_field_errors": [
-                        "Either email or phone must be provided."
-                    ]
-                },
+                {"detail": "Phone or email is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qs = User.objects.filter(company=company, role=User.ROLE_CLEANER)
-        if email and qs.filter(email__iexact=email).exists():
-            return Response(
-                {"email": ["Cleaner with this email already exists."]},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if phone and qs.filter(phone=phone).exists():
-            return Response(
-                {"phone": ["Cleaner with this phone already exists."]},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        cleaner = User.objects.create(
-            company=company,
+        # Создаём пользователя-клинера
+        cleaner = User.objects.create_user(
+            email=email or None,
+            phone=phone or None,
+            password=None,
             role=User.ROLE_CLEANER,
+            company=company,
             full_name=full_name,
-            email=email,
-            phone=phone,
-            is_active=bool(is_active),
+            is_active=is_active,
         )
 
         data = {
@@ -1234,22 +1325,6 @@ class ManagerJobsTodayView(APIView):
 
 
 class ManagerJobsCreateView(APIView):
-    """
-    Создание job менеджером.
-
-    POST /api/manager/jobs/
-
-    Request:
-    {
-      "scheduled_date": "2026-01-19",
-      "scheduled_start_time": "09:00:00",
-      "scheduled_end_time": "12:00:00",
-      "location_id": 1,
-      "cleaner_id": 2,
-      "checklist_template_id": 1
-    }
-    """
-
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
@@ -1262,23 +1337,31 @@ class ManagerJobsCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        company = getattr(user, "company", None)
-        if company is None:
+        company = user.company
+
+        # ⛔ Компания заблокирована (истёк trial или явно заблокирована)
+        if company.is_blocked():
+            code = "trial_expired" if company.is_trial_expired() else "company_blocked"
+            detail = (
+                "Your free trial has ended. You can still view existing jobs and "
+                "download reports, but creating new jobs requires an upgrade."
+                if code == "trial_expired"
+                else "Your account is currently blocked. Please contact support."
+            )
             return Response(
-                {"detail": "Company not found for this manager."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"code": code, "detail": detail},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
-        # 🔴 Trial enforcement: запрещаем создание jobs,
-        # если trial закончился
-        if company.is_trial_expired():
+        # ⛔ Trial-лимит по количеству jobs
+        if company.is_trial_active and company.trial_jobs_limit_reached():
             return Response(
                 {
-                    "code": "trial_expired",
+                    "code": "trial_jobs_limit_reached",
                     "detail": (
-                        "Your free trial has ended. "
-                        "You can still view existing jobs and download reports, "
-                        "but creating new jobs requires an upgrade."
+                        "Your free trial allows up to "
+                        f"{Company.TRIAL_MAX_JOBS} jobs. "
+                        "Please upgrade your plan to create more jobs."
                     ),
                 },
                 status=status.HTTP_403_FORBIDDEN,
@@ -1289,11 +1372,10 @@ class ManagerJobsCreateView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-
         job = serializer.save()
-
         out = PlanningJobSerializer(job).data
         return Response(out, status=status.HTTP_201_CREATED)
+
 
 
 class ManagerJobDetailView(APIView):
@@ -1383,17 +1465,90 @@ class ManagerJobDetailView(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+def build_planning_job_payload(job: Job):
+    """
+    Helper: единый payload для planning/history (один и тот же формат).
+    """
+    location = job.location
+    cleaner = job.cleaner
+
+    # proof: photos
+    before_uploaded = False
+    after_uploaded = False
+    try:
+        photos = list(job.photos.all())
+    except Exception:
+        photos = []
+
+    for p in photos:
+        if p.photo_type == JobPhoto.TYPE_BEFORE:
+            before_uploaded = True
+        elif p.photo_type == JobPhoto.TYPE_AFTER:
+            after_uploaded = True
+
+    # proof: checklist (required)
+    checklist_completed = False  # ✅ по умолчанию НЕ ок, пока не докажем обратное
+    try:
+        items = list(job.checklist_items.all())
+    except Exception:
+        items = []
+
+    if not items:
+        checklist_completed = False
+    else:
+        # Поле required в модели может называться по-разному или отсутствовать.
+        required_attr = None
+        sample = items[0]
+        if hasattr(sample, "required"):
+            required_attr = "required"
+        elif hasattr(sample, "is_required"):
+            required_attr = "is_required"
+
+        if required_attr:
+            required_items = [it for it in items if bool(getattr(it, required_attr, False))]
+            # ✅ Если required_items пустой (все required-флаги False) — считаем required ВСЕ
+            if not required_items:
+                required_items = items
+        else:
+            required_items = items
+
+        checklist_completed = all(
+            bool(getattr(it, "is_completed", False)) for it in required_items
+        )
+
+    return {
+        "id": job.id,
+        "scheduled_date": job.scheduled_date,
+        "scheduled_start_time": job.scheduled_start_time,
+        "scheduled_end_time": job.scheduled_end_time,
+        "status": job.status,
+        "location": {
+            "id": getattr(location, "id", None),
+            "name": getattr(location, "name", None),
+            "address": getattr(location, "address", None),
+        },
+        "cleaner": {
+            "id": getattr(cleaner, "id", None),
+            "full_name": getattr(cleaner, "full_name", None),
+        },
+        "proof": {
+            # текущие (как сейчас)
+            "before_uploaded": bool(before_uploaded),
+            "after_uploaded": bool(after_uploaded),
+            "checklist_completed": bool(checklist_completed),
+            # ✅ алиасы под UI / lovable
+            "before_photo": bool(before_uploaded),
+            "after_photo": bool(after_uploaded),
+            "checklist": bool(checklist_completed),
+        },
+    }
+
+
 class ManagerPlanningJobsView(APIView):
     """
     Job Planning list для менеджера (read-only).
 
     GET /api/manager/jobs/planning/?date=YYYY-MM-DD
-
-    Возвращает jobs за дату с агрегированными данными:
-    - job (schedule, status)
-    - location (id, name, address)
-    - cleaner (id, full_name)
-    - proof (before/after/checklist) — только флаги
     """
 
     authentication_classes = [TokenAuthentication]
@@ -1444,87 +1599,79 @@ class ManagerPlanningJobsView(APIView):
             .order_by("scheduled_start_time", "id")
         )
 
-        data = []
-        for job in qs:
-            location = job.location
-            cleaner = job.cleaner
+        data = [build_planning_job_payload(job) for job in qs]
+        return Response(data, status=status.HTTP_200_OK)
 
-            # proof: photos
-            before_uploaded = False
-            after_uploaded = False
-            try:
-                photos = list(job.photos.all())
-            except Exception:
-                photos = []
 
-            for p in photos:
-                if p.photo_type == JobPhoto.TYPE_BEFORE:
-                    before_uploaded = True
-                elif p.photo_type == JobPhoto.TYPE_AFTER:
-                    after_uploaded = True
+class ManagerJobsHistoryView(APIView):
+    """
+    Job History list для менеджера (read-only).
 
-            # proof: checklist (required)
-            checklist_completed = False  # ✅ по умолчанию НЕ ок, пока не докажем обратное
-            try:
-                items = list(job.checklist_items.all())
-            except Exception:
-                items = []
+    GET /api/manager/jobs/history/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    Optional:
+      - status
+      - cleaner_id
+      - location_id
 
-            if not items:
-                checklist_completed = False
-            else:
-                # Поле required в модели может называться по-разному или отсутствовать.
-                required_attr = None
-                sample = items[0]
-                if hasattr(sample, "required"):
-                    required_attr = "required"
-                elif hasattr(sample, "is_required"):
-                    required_attr = "is_required"
+    Payload: такой же, как в /api/manager/jobs/planning/
+    """
 
-                if required_attr:
-                    required_items = [
-                        it
-                        for it in items
-                        if bool(getattr(it, required_attr, False))
-                    ]
-                    # ✅ Если required_items пустой (все required-флаги False) — считаем required ВСЕ
-                    if not required_items:
-                        required_items = items
-                else:
-                    required_items = items
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
-                checklist_completed = all(
-                    bool(getattr(it, "is_completed", False)) for it in required_items
-                )
+    def get(self, request, *args, **kwargs):
+        user = request.user
 
-            data.append(
-                {
-                    "id": job.id,
-                    "scheduled_date": job.scheduled_date,
-                    "scheduled_start_time": job.scheduled_start_time,
-                    "scheduled_end_time": job.scheduled_end_time,
-                    "status": job.status,
-                    "location": {
-                        "id": getattr(location, "id", None),
-                        "name": getattr(location, "name", None),
-                        "address": getattr(location, "address", None),
-                    },
-                    "cleaner": {
-                        "id": getattr(cleaner, "id", None),
-                        "full_name": getattr(cleaner, "full_name", None),
-                    },
-                    "proof": {
-                        # текущие (как сейчас)
-                        "before_uploaded": bool(before_uploaded),
-                        "after_uploaded": bool(after_uploaded),
-                        "checklist_completed": bool(checklist_completed),
-
-                        # ✅ алиасы под UI / lovable
-                        "before_photo": bool(before_uploaded),
-                        "after_photo": bool(after_uploaded),
-                        "checklist": bool(checklist_completed),
-                    },
-                }
+        # защита: только менеджер
+        if getattr(user, "role", None) not in (User.ROLE_MANAGER, "manager"):
+            return Response(
+                {"detail": "Only managers can access job history."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
+        date_from_str = request.query_params.get("date_from")
+        date_to_str = request.query_params.get("date_to")
+
+        if not date_from_str or not date_to_str:
+            return Response(
+                {"detail": "date_from and date_to are required in format YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # парсим даты
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # базовый queryset: только по компании менеджера + диапазон дат
+        qs = (
+            Job.objects.filter(
+                company=user.company,
+                scheduled_date__gte=date_from,
+                scheduled_date__lte=date_to,
+            )
+            .select_related("location", "cleaner")
+            .prefetch_related("photos", "checklist_items")
+            .order_by("-scheduled_date", "-scheduled_start_time", "-id")
+        )
+
+        # опциональные фильтры
+        status_param = request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+
+        cleaner_id = request.query_params.get("cleaner_id")
+        if cleaner_id:
+            qs = qs.filter(cleaner_id=cleaner_id)
+
+        location_id = request.query_params.get("location_id")
+        if location_id:
+            qs = qs.filter(location_id=location_id)
+
+        data = [build_planning_job_payload(job) for job in qs]
         return Response(data, status=status.HTTP_200_OK)

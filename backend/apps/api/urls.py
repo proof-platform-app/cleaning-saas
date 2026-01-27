@@ -5,6 +5,7 @@ from apps.api.views import (
     # Auth
     LoginView,
     ManagerLoginView,
+    ManagerSignupView,  # 👈 NEW
 
     # Cleaner jobs
     TodayJobsView,
@@ -28,12 +29,13 @@ from apps.api.views import (
     ManagerJobsTodayView,
     ManagerJobDetailView,
     ManagerPlanningJobsView,
+    ManagerJobsHistoryView,
 
     # Create Job
     ManagerMetaView,
     ManagerJobsCreateView,
 
-    # Company & Cleaners (NEW)
+    # Company & Cleaners
     ManagerCompanyView,
     ManagerCompanyLogoUploadView,
     ManagerCleanersListCreateView,
@@ -52,6 +54,11 @@ urlpatterns = [
     # =====================
     path("auth/login/", LoginView.as_view(), name="api-login"),
     path("manager/auth/login/", ManagerLoginView.as_view(), name="api-manager-login"),
+    path(
+        "auth/signup/",
+        ManagerSignupView.as_view(),
+        name="api-auth-signup",
+    ),
 
     # =====================
     # Cleaner jobs
@@ -147,8 +154,15 @@ urlpatterns = [
         name="manager-jobs-planning",
     ),
 
+    # Jobs history
+    path(
+        "manager/jobs/history/",
+        ManagerJobsHistoryView.as_view(),
+        name="manager-jobs-history",
+    ),
+
     # =====================
-    # Locations (NEW)
+    # Locations
     # =====================
     path(
         "manager/locations/",

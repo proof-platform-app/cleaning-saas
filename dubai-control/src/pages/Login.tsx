@@ -1,4 +1,5 @@
 // dubai-control/src/pages/Login.tsx
+
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -159,15 +160,17 @@ export default function Login() {
             </Button>
           </form>
 
-          {/* Link to signup */}
-          <p className="mt-4 text-center text-sm text-muted-foreground">
+          {/* Sign up link (trial-aware) */}
+          <p className="mt-4 text-sm text-muted-foreground text-center">
             Don&apos;t have an account?{" "}
             <button
               type="button"
-              onClick={() => navigate("/signup")}
+              onClick={() =>
+                navigate(isTrialFlow ? "/signup?trial=standard" : "/signup")
+              }
               className="text-primary hover:underline font-medium"
             >
-              Start free trial
+              Sign up
             </button>
           </p>
 

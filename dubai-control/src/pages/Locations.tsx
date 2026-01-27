@@ -95,7 +95,7 @@ export default function Locations() {
           </h1>
 
           <LocationForm
-            location={selectedLocation as any}
+            location={selectedLocation}
             onSave={handleSave}
             onCancel={handleCancel}
             isLoading={isLoading}

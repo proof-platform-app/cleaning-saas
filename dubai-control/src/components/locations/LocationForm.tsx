@@ -1,16 +1,21 @@
+// dubai-control/src/components/locations/LocationForm.tsx
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { LocationMapPicker } from "./LocationMapPicker";
-import { Location } from "@/data/locationsData";
+import type { Location as ApiLocation } from "@/api/client";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 interface LocationFormProps {
-  location?: Location | null;
-  onSave: (data: Omit<Location, "id" | "createdAt">) => void | Promise<void>;
+  location?: ApiLocation | null;
+  onSave: (data: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+  }) => void | Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
   apiError?: string | null;
@@ -30,7 +35,6 @@ export function LocationForm({
   isLoading,
   apiError,
 }: LocationFormProps) {
-  const navigate = useNavigate();
   const [name, setName] = useState(location?.name || "");
   const [address, setAddress] = useState(location?.address || "");
   const [latitude, setLatitude] = useState<string>(
@@ -44,10 +48,23 @@ export function LocationForm({
 
   useEffect(() => {
     if (location) {
-      setName(location.name);
-      setAddress(location.address);
-      setLatitude(location.latitude.toString());
-      setLongitude(location.longitude.toString());
+      setName(location.name || "");
+      setAddress(location.address || "");
+      setLatitude(
+        typeof location.latitude === "number"
+          ? location.latitude.toString()
+          : ""
+      );
+      setLongitude(
+        typeof location.longitude === "number"
+          ? location.longitude.toString()
+          : ""
+      );
+    } else {
+      setName("");
+      setAddress("");
+      setLatitude("");
+      setLongitude("");
     }
   }, [location]);
 
@@ -86,20 +103,14 @@ export function LocationForm({
     e.preventDefault();
     setLocalError(null);
 
+    if (!validateForm()) {
+      return;
+    }
+
     const trimmedName = name.trim();
     const trimmedAddress = address.trim();
     const latRaw = latitude?.toString() ?? "";
     const lngRaw = longitude?.toString() ?? "";
-
-    if (!trimmedName) {
-      setLocalError("Name is required.");
-      return;
-    }
-
-    if (!trimmedAddress) {
-      setLocalError("Address is required.");
-      return;
-    }
 
     // Нормализуем запятые → точки
     const normalizedLat = latRaw.replace(",", ".").trim();
@@ -113,7 +124,7 @@ export function LocationForm({
       return;
     }
 
-    // Дополнительно проверяем диапазон, как в подсказке под полями
+    // Дополнительно проверяем диапазон
     if (parsedLat < -90 || parsedLat > 90) {
       setLocalError("Latitude must be between -90 and 90.");
       return;
@@ -291,7 +302,8 @@ export function LocationForm({
         <Button
           type="button"
           variant="outline"
-          onClick={() => navigate("/locations")}
+          onClick={onCancel}
+          disabled={isLoading}
         >
           Cancel
         </Button>

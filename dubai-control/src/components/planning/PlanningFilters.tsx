@@ -19,6 +19,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { useLocations } from "@/contexts/LocationsContext";
 
 type Props = {
   filters: PlanningFilters;
@@ -32,6 +33,15 @@ const STATUSES: { label: string; value: PlanningJobStatus }[] = [
 ];
 
 export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
+  // Единственный источник истины по locations
+  const {
+    locations,
+    isLoading: locationsLoading,
+    error: locationsError,
+    reload: reloadLocations,
+  } = useLocations();
+
+  // meta — только для cleaners (+ возможное прочее), но НЕ для locations
   const [meta, setMeta] = useState<PlanningMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -79,7 +89,7 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
     });
   };
 
-  // === META LOAD ===
+  // === META LOAD (cleaners) ===
   const loadMeta = () => {
     if (metaLoading) return;
     setMetaLoading(true);
@@ -94,7 +104,7 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
         setMetaError(
           err?.response?.data?.detail ||
             err?.message ||
-            "Failed to load filters data.",
+            "Failed to load filters data."
         );
       })
       .finally(() => setMetaLoading(false));
@@ -102,6 +112,10 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
 
   useEffect(() => {
     loadMeta();
+    // locations грузятся в LocationsProvider автоматически, но можно “пингануть” reload,
+    // если вдруг провайдер когда-то станет ленивым.
+    // Сейчас это безопасно и дешево.
+    void reloadLocations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -113,6 +127,9 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
       statuses: [],
     });
   };
+
+  const showLoading = (metaLoading && !meta) || locationsLoading;
+  const showError = metaError || locationsError;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-5">
@@ -134,7 +151,7 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
         </Button>
       </div>
 
-      {/* DATE: как в Lovable — своё поле + поповер */}
+      {/* DATE */}
       <div className="space-y-2">
         <div className="text-xs text-muted-foreground">Date</div>
         <Popover>
@@ -164,7 +181,7 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
         </Popover>
       </div>
 
-      {/* STATUS: круглые мульти-чекбоксы */}
+      {/* STATUS */}
       <div>
         <div className="text-xs text-muted-foreground mb-2">Status</div>
         <div className="space-y-2">
@@ -189,29 +206,35 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
         </div>
       </div>
 
-      {/* META LOAD STATE */}
-      {metaLoading && !meta && (
+      {/* LOAD STATE */}
+      {showLoading && (
         <p className="text-xs text-muted-foreground">
           Loading cleaners and locations…
         </p>
       )}
 
-      {metaError && (
+      {showError && (
         <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 flex items-center justify-between gap-2">
-          <span className="text-xs text-destructive">{metaError}</span>
+          <span className="text-xs text-destructive">
+            {metaError || locationsError}
+          </span>
           <Button
             type="button"
             size="sm"
             variant="outline"
             className="h-7 px-2 text-xs"
-            onClick={loadMeta}
-            disabled={metaLoading}
+            onClick={() => {
+              loadMeta();
+              void reloadLocations();
+            }}
+            disabled={metaLoading || locationsLoading}
           >
             Retry
           </Button>
         </div>
       )}
 
+      {/* CLEANER + LOCATION */}
       {meta && (
         <>
           {/* CLEANER */}
@@ -220,11 +243,10 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
 
             <Select
               value={
-                selectedCleanerId != null
-                  ? String(selectedCleanerId)
-                  : "all"
+                selectedCleanerId != null ? String(selectedCleanerId) : "all"
               }
               onValueChange={(v) => handleCleanerChange(v)}
+              disabled={metaLoading}
             >
               <SelectTrigger className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
                 <SelectValue placeholder="All cleaners" />
@@ -259,15 +281,16 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
             <div className="text-xs text-muted-foreground mb-2">Location</div>
 
             <Select
-              value={
-                filters.locationId != null
-                  ? String(filters.locationId)
-                  : "all"
-              }
+              value={filters.locationId != null ? String(filters.locationId) : "all"}
               onValueChange={(v) => handleLocationChange(v)}
+              disabled={locationsLoading || locations.length === 0}
             >
               <SelectTrigger className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
-                <SelectValue placeholder="All locations" />
+                <SelectValue
+                  placeholder={
+                    locations.length === 0 ? "No locations yet" : "All locations"
+                  }
+                />
               </SelectTrigger>
 
               <SelectContent
@@ -281,7 +304,7 @@ export function PlanningFiltersPanel({ filters, onFiltersChange }: Props) {
                   All locations
                 </SelectItem>
 
-                {meta.locations.map((loc) => (
+                {locations.map((loc) => (
                   <SelectItem
                     key={loc.id}
                     value={String(loc.id)}

@@ -4,6 +4,7 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.utils import timezone
+from django.apps import apps  # 👈 добавлено для доступа к Job через apps.get_model
 
 
 class Company(models.Model):
@@ -112,8 +113,11 @@ class Company(models.Model):
         if not self.is_trial_active:
             return False
 
-        # не предполагаем наличие is_active у Job, просто считаем все
-        return self.job_set.count() >= self.TRIAL_MAX_JOBS
+        # Импортируем здесь, чтобы не ловить циклические импорты при загрузке моделей
+        from apps.jobs.models import Job
+
+        return Job.objects.filter(company=self).count() >= self.TRIAL_MAX_JOBS
+
 
     # -------- helpers (совместимость с существующей логикой) --------
 

@@ -1,5 +1,9 @@
 import { apiClient } from "@/api/client";
-import type { PlanningFilters, PlanningJob } from "@/types/planning";
+import type {
+  PlanningFilters,
+  PlanningJob,
+  PlanningJobStatus,
+} from "@/types/planning";
 
 type BackendManagerJob = {
   id: number;
@@ -179,4 +183,43 @@ export async function createPlanningJob(
     // всё остальное — как обычная ошибка
     throw error;
   }
+}
+
+// ===============================
+// Jobs History
+// ===============================
+
+export type JobsHistoryFilters = {
+  dateFrom: string; // "YYYY-MM-DD"
+  dateTo: string; // "YYYY-MM-DD"
+  status?: PlanningJobStatus;
+  cleanerId?: number | null;
+  locationId?: number | null;
+};
+
+export async function fetchJobsHistory(
+  filters: JobsHistoryFilters
+): Promise<PlanningJob[]> {
+  const params = new URLSearchParams({
+    date_from: filters.dateFrom,
+    date_to: filters.dateTo,
+  });
+
+  if (filters.status) {
+    params.set("status", filters.status);
+  }
+
+  if (filters.cleanerId) {
+    params.set("cleaner_id", String(filters.cleanerId));
+  }
+
+  if (filters.locationId) {
+    params.set("location_id", String(filters.locationId));
+  }
+
+  const res = await apiClient.get<PlanningJob[]>(
+    `/api/manager/jobs/history/?${params.toString()}`
+  );
+
+  return res.data;
 }

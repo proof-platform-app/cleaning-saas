@@ -3,9 +3,29 @@
 import { Link } from "react-router-dom";
 import { ChevronRight, Camera, ListChecks } from "lucide-react";
 
-import { StatusPill } from "@/components/ui/status-pill";
-import type { PlanningJob } from "@/types/planning";
+import type { PlanningJob, PlanningJobStatus } from "@/types/planning";
 import { cn } from "@/lib/utils";
+
+/**
+ * Status appearance config
+ */
+const STATUS_CONFIG: Record<
+  PlanningJobStatus,
+  { label: string; className: string }
+> = {
+  scheduled: {
+    label: "Scheduled",
+    className: "bg-blue-50 text-blue-700 border-blue-100",
+  },
+  in_progress: {
+    label: "In progress",
+    className: "bg-amber-50 text-amber-700 border-amber-100",
+  },
+  completed: {
+    label: "Completed",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  },
+};
 
 function ProofBadges({ job }: { job: PlanningJob }) {
   const before = Boolean(job.proof?.before_photo);
@@ -27,10 +47,7 @@ function ProofBadges({ job }: { job: PlanningJob }) {
       {/* Before */}
       <span className={cn(base, before ? onCls : offCls)}>
         <Camera
-          className={cn(
-            "w-3.5 h-3.5",
-            before ? "" : "opacity-40"
-          )}
+          className={cn("w-3.5 h-3.5", before ? "" : "opacity-40")}
         />
         <span>Before</span>
       </span>
@@ -38,10 +55,7 @@ function ProofBadges({ job }: { job: PlanningJob }) {
       {/* After */}
       <span className={cn(base, after ? onCls : offCls)}>
         <Camera
-          className={cn(
-            "w-3.5 h-3.5",
-            after ? "" : "opacity-40"
-          )}
+          className={cn("w-3.5 h-3.5", after ? "" : "opacity-40")}
         />
         <span>After</span>
       </span>
@@ -49,10 +63,7 @@ function ProofBadges({ job }: { job: PlanningJob }) {
       {/* Checklist */}
       <span className={cn(base, list ? onCls : offCls)}>
         <ListChecks
-          className={cn(
-            "w-3.5 h-3.5",
-            list ? "" : "opacity-40"
-          )}
+          className={cn("w-3.5 h-3.5", list ? "" : "opacity-40")}
         />
         <span>List</span>
       </span>
@@ -110,6 +121,7 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
             {jobs.map((job) => {
               const start = formatTime(job.scheduled_start_time);
               const end = formatTime(job.scheduled_end_time);
+              const statusCfg = STATUS_CONFIG[job.status];
 
               return (
                 <tr
@@ -148,8 +160,16 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                     {start && end ? `${start} - ${end}` : "—"}
                   </td>
 
+                  {/* Status */}
                   <td className="px-4 py-4">
-                    <StatusPill status={job.status as any} />
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                        statusCfg.className
+                      )}
+                    >
+                      {statusCfg.label}
+                    </span>
                   </td>
 
                   <td className="px-4 py-4">
@@ -165,9 +185,7 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                           onJobClick(job);
                         }
                       }}
-                      className={cn(
-                        "inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                      )}
+                      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
                     >
                       View
                       <ChevronRight className="w-4 h-4" />

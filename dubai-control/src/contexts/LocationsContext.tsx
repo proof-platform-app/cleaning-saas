@@ -23,14 +23,14 @@ type LocationsContextValue = {
   createLocation: (input: {
     name: string;
     address?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }) => Promise<LocationModel>;
 
   // алиас под старый код
   addLocation: (input: {
     name: string;
     address?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }) => Promise<LocationModel>;
 
   updateLocation: (
@@ -39,7 +39,7 @@ type LocationsContextValue = {
       name: string;
       address: string | null;
       is_active: boolean;
-      [key: string]: any;
+      [key: string]: unknown;
     }>
   ) => Promise<LocationModel>;
 };
@@ -64,9 +64,11 @@ export function LocationsProvider({ children }: LocationsProviderProps) {
     try {
       const data = await getLocations();
       setLocations(data);
-    } catch (err: any) {
+    } catch (err) {
       console.error("[Locations] load error", err);
-      setError(err?.message || "Failed to load locations");
+      const message =
+        err instanceof Error ? err.message : "Failed to load locations";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +82,7 @@ export function LocationsProvider({ children }: LocationsProviderProps) {
     async (input: {
       name: string;
       address?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     }) => {
       const created = await apiCreateLocation(input);
       setLocations((prev) => [created, ...prev]);
@@ -96,7 +98,7 @@ export function LocationsProvider({ children }: LocationsProviderProps) {
         name: string;
         address: string | null;
         is_active: boolean;
-        [key: string]: any;
+        [key: string]: unknown;
       }>
     ) => {
       const updated = await apiUpdateLocation(id, input);

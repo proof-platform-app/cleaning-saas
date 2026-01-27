@@ -9,12 +9,14 @@ import {
   Settings,
   LogOut,
   MapPin,
+  Clock3, // 👈 добавили иконку для Job History
 } from "lucide-react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Jobs", href: "/jobs", icon: Briefcase },
   { name: "Job Planning", href: "/planning", icon: CalendarDays },
+  { name: "Job History", href: "/history", icon: Clock3 }, // 👈 новый пункт
   { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

@@ -1,3 +1,4 @@
+// dubai-control/src/types/plannig.ts
 export type PlanningJobStatus = "scheduled" | "in_progress" | "completed";
 
 export type PlanningProof = {

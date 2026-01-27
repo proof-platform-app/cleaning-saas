@@ -151,9 +151,12 @@ export default function Settings() {
     }
   };
 
-  const handleChange = (field: keyof SettingsState, value: string | boolean) => {
-    setSettings((prev) => ({ ...prev, [field]: value as any }));
-  };
+  const handleChange = <K extends keyof SettingsState>(
+  field: K,
+  value: SettingsState[K]
+) => {
+  setSettings((prev) => ({ ...prev, [field]: value }));
+};
 
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
