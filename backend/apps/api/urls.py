@@ -1,11 +1,10 @@
-# backend/apps/api/urls.py
 from django.urls import path
 
 from apps.api.views import (
     # Auth
     LoginView,
     ManagerLoginView,
-    ManagerSignupView,  # 👈 NEW
+    ManagerSignupView,
 
     # Cleaner jobs
     TodayJobsView,
@@ -30,6 +29,7 @@ from apps.api.views import (
     ManagerJobDetailView,
     ManagerPlanningJobsView,
     ManagerJobsHistoryView,
+    ManagerPerformanceView,
 
     # Create Job
     ManagerMetaView,
@@ -40,6 +40,12 @@ from apps.api.views import (
     ManagerCompanyLogoUploadView,
     ManagerCleanersListCreateView,
     ManagerCleanerDetailView,
+
+    # Reports
+    ManagerWeeklyReportView,
+    ManagerMonthlyReportView,
+    ManagerWeeklyReportPdfView,    
+    ManagerMonthlyReportPdfView,     
 )
 
 # 👉 ВАЖНО: импортируем из apps.locations.app.views, а НЕ из apps.locations.api.views
@@ -148,17 +154,26 @@ urlpatterns = [
         ManagerJobDetailView.as_view(),
         name="manager-job-detail",
     ),
-    path(
-        "manager/jobs/planning/",
-        ManagerPlanningJobsView.as_view(),
-        name="manager-jobs-planning",
-    ),
 
     # Jobs history
     path(
         "manager/jobs/history/",
         ManagerJobsHistoryView.as_view(),
         name="manager-jobs-history",
+    ),
+
+    # Manager performance
+    path(
+        "manager/performance/",
+        ManagerPerformanceView.as_view(),
+        name="manager-performance",
+    ),
+
+    # Jobs planning
+    path(
+        "manager/jobs/planning/",
+        ManagerPlanningJobsView.as_view(),
+        name="manager-jobs-planning",
     ),
 
     # =====================
@@ -173,5 +188,29 @@ urlpatterns = [
         "manager/locations/<int:pk>/",
         ManagerLocationDetailView.as_view(),
         name="manager-location-detail",
+    ),
+
+    # =====================
+    # Reports
+    # =====================
+    path(
+        "manager/reports/weekly/",
+        ManagerWeeklyReportView.as_view(),
+        name="manager-reports-weekly",
+    ),
+    path(
+        "manager/reports/monthly/",
+        ManagerMonthlyReportView.as_view(),
+        name="manager-reports-monthly",
+    ),
+        path(
+        "manager/reports/weekly/pdf/",
+        ManagerWeeklyReportPdfView.as_view(),
+        name="manager-reports-weekly-pdf",
+    ),
+    path(
+        "manager/reports/monthly/pdf/",
+        ManagerMonthlyReportPdfView.as_view(),
+        name="manager-reports-monthly-pdf",
     ),
 ]

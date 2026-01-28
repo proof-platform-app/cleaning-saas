@@ -32,7 +32,6 @@ function ProofBadges({ job }: { job: PlanningJob }) {
   const after = Boolean(job.proof?.after_photo);
   const list = Boolean(job.proof?.checklist);
 
-  // если вообще нет пруфов — показываем просто "—"
   if (!before && !after && !list) {
     return <span className="text-sm text-muted-foreground">—</span>;
   }
@@ -44,23 +43,16 @@ function ProofBadges({ job }: { job: PlanningJob }) {
 
   return (
     <div className="flex items-center gap-4">
-      {/* Before */}
       <span className={cn(base, before ? onCls : offCls)}>
-        <Camera
-          className={cn("w-3.5 h-3.5", before ? "" : "opacity-40")}
-        />
+        <Camera className={cn("w-3.5 h-3.5", before ? "" : "opacity-40")} />
         <span>Before</span>
       </span>
 
-      {/* After */}
       <span className={cn(base, after ? onCls : offCls)}>
-        <Camera
-          className={cn("w-3.5 h-3.5", after ? "" : "opacity-40")}
-        />
+        <Camera className={cn("w-3.5 h-3.5", after ? "" : "opacity-40")} />
         <span>After</span>
       </span>
 
-      {/* Checklist */}
       <span className={cn(base, list ? onCls : offCls)}>
         <ListChecks
           className={cn("w-3.5 h-3.5", list ? "" : "opacity-40")}
@@ -79,7 +71,6 @@ type Props = {
 
 function formatTime(value: string | null | undefined): string | null {
   if (!value) return null;
-  // "09:00:00" -> "09:00"
   if (value.length >= 5) {
     return value.slice(0, 5);
   }
@@ -122,6 +113,7 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
               const start = formatTime(job.scheduled_start_time);
               const end = formatTime(job.scheduled_end_time);
               const statusCfg = STATUS_CONFIG[job.status];
+              const hasSlaIssue = job.sla_status === "violated";
 
               return (
                 <tr
@@ -160,15 +152,27 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                     {start && end ? `${start} - ${end}` : "—"}
                   </td>
 
-                  {/* Status */}
+                  {/* Status + SLA indicator */}
                   <td className="px-4 py-4">
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                        statusCfg.className
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                          statusCfg.className
+                        )}
+                      >
+                        {statusCfg.label}
+                      </span>
+
+                      {hasSlaIssue && (
+                        <span
+                          className="text-amber-600 text-sm"
+                          aria-label="SLA issue"
+                          title="Proof of work is incomplete"
+                        >
+                          ⚠️
+                        </span>
                       )}
-                    >
-                      {statusCfg.label}
                     </span>
                   </td>
 

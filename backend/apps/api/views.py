@@ -1,7 +1,9 @@
 # backend/apps/api/views.py
 import os
 import uuid
-from datetime import datetime  # ✅ NEW
+from collections import Counter, defaultdict
+from datetime import timedelta, date, datetime
+from typing import List, Tuple
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
@@ -9,7 +11,7 @@ from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.dateparse import parse_date  # ✅ NEW
+from django.utils.dateparse import parse_date
 
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -25,7 +27,7 @@ from apps.jobs.models import File, Job, JobCheckEvent, JobChecklistItem, JobPhot
 from apps.jobs.utils import distance_m, extract_exif_data
 from apps.locations.models import Location, ChecklistTemplate
 
-from .pdf import generate_job_report_pdf
+from .pdf import generate_job_report_pdf, generate_company_sla_report_pdf
 from .serializers import (
     ChecklistBulkUpdateSerializer,
     ChecklistToggleSerializer,
@@ -37,8 +39,6 @@ from .serializers import (
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
 )
-from .serializers import compute_sla_status_for_job
-
 
 class LoginView(APIView):
     """
@@ -1692,3 +1692,462 @@ class ManagerJobsHistoryView(APIView):
 
         data = [build_planning_job_payload(job) for job in qs]
         return Response(data, status=status.HTTP_200_OK)
+    
+def _get_company_report(company, days: int) -> dict:
+    """
+    Собирает weekly/monthly report по SLA для компании.
+    days=7 -> weekly, days=30 -> monthly.
+    Работает напрямую с моделью Job через compute_sla_status_and_reasons_for_job.
+    """
+    # Период
+    date_to = timezone.localdate()
+    date_from = date_to - timedelta(days=days - 1)
+
+    qs = (
+        Job.objects.filter(
+            company=company,
+            scheduled_date__range=(date_from, date_to),
+        )
+        .select_related("cleaner", "location")
+        .prefetch_related("photos", "checklist_items")
+    )
+
+    jobs_count = qs.count()
+
+    cleaners_stats: dict[object, dict] = defaultdict(
+        lambda: {"id": None, "name": "—", "jobs_count": 0, "violations_count": 0}
+    )
+    locations_stats: dict[object, dict] = defaultdict(
+        lambda: {"id": None, "name": "—", "jobs_count": 0, "violations_count": 0}
+    )
+
+    reasons_counter: Counter[str] = Counter()
+    violations_count = 0
+
+    for job in qs:
+        # Новый helper, который работает с Job-моделью
+        sla_status, reasons = compute_sla_status_and_reasons_for_job(job)
+        violated = sla_status == "violated"
+
+        if isinstance(reasons, str):
+            reasons = [reasons]
+        elif not isinstance(reasons, (list, tuple)):
+            reasons = []
+
+        # --- Cleaner bucket (включая None) ---
+        cleaner = getattr(job, "cleaner", None)
+        cleaner_id = getattr(cleaner, "id", None)
+        c = cleaners_stats[cleaner_id]
+        c["id"] = cleaner_id
+        c["name"] = (
+            getattr(cleaner, "full_name", None)
+            or getattr(cleaner, "email", None)
+            or "—"
+        )
+        c["jobs_count"] += 1
+
+        # --- Location bucket (включая None) ---
+        location = getattr(job, "location", None)
+        location_id = getattr(location, "id", None)
+        l = locations_stats[location_id]
+        l["id"] = location_id
+        l["name"] = getattr(location, "name", None) or "—"
+        l["jobs_count"] += 1
+
+        if not violated:
+            continue
+
+        violations_count += 1
+        c["violations_count"] += 1
+        l["violations_count"] += 1
+
+        for code in reasons:
+            if code:
+                reasons_counter[str(code)] += 1
+
+    issue_rate = float(violations_count) / float(jobs_count) if jobs_count else 0.0
+
+    cleaners = sorted(
+        list(cleaners_stats.values()),
+        key=lambda x: (-x["violations_count"], -x["jobs_count"], str(x["name"])),
+    )
+    locations = sorted(
+        list(locations_stats.values()),
+        key=lambda x: (-x["violations_count"], -x["jobs_count"], str(x["name"])),
+    )
+
+    top_reasons = [
+        {"code": code, "count": count}
+        for code, count in reasons_counter.most_common(5)
+    ]
+
+    return {
+        "period": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+        "summary": {
+            "jobs_count": jobs_count,
+            "violations_count": violations_count,
+            "issue_rate": issue_rate,
+        },
+        "cleaners": cleaners,
+        "locations": locations,
+        "top_reasons": top_reasons,
+    }
+
+def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
+    """
+    Вариант SLA-логики, который работает прямо с моделью Job.
+
+    Возвращает:
+    - sla_status: "ok" или "violated"
+    - reasons: список строковых кодов причин нарушения
+      ("missing_before_photo", "missing_after_photo", "checklist_not_completed")
+    """
+    # Фотографии
+    before_exists = JobPhoto.objects.filter(
+        job=job,
+        photo_type=JobPhoto.TYPE_BEFORE,
+    ).exists()
+
+    after_exists = JobPhoto.objects.filter(
+        job=job,
+        photo_type=JobPhoto.TYPE_AFTER,
+    ).exists()
+
+    # Чеклист
+    checklist_qs = JobChecklistItem.objects.filter(job=job)
+
+    if hasattr(JobChecklistItem, "is_required"):
+        required_qs = checklist_qs.filter(is_required=True)
+        # На случай, если флагов is_required нет — считаем все обязательными
+        if not required_qs.exists():
+            required_qs = checklist_qs
+    else:
+        required_qs = checklist_qs
+
+    if required_qs.exists():
+        checklist_completed = all(bool(item.is_completed) for item in required_qs)
+    else:
+        # если чеклиста нет вообще — считаем, что по чеклисту всё ок
+        checklist_completed = True
+
+    reasons: list[str] = []
+
+    # SLA считаем только для completed jobs
+    if job.status == Job.STATUS_COMPLETED:
+        if not before_exists:
+            reasons.append("missing_before_photo")
+        if not after_exists:
+            reasons.append("missing_after_photo")
+        if not checklist_completed:
+            reasons.append("checklist_not_completed")
+
+    sla_status = "violated" if reasons else "ok"
+    return sla_status, reasons
+
+class ManagerPerformanceView(APIView):
+    """
+    SLA performance summary для менеджера.
+
+    GET /api/manager/performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+    Возвращает агрегаты по SLA-нарушениям для клинеров и локаций:
+    - только completed jobs
+    - только за указанный период
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        company = getattr(user, "company", None)
+
+        if not company:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        date_from_str = (request.query_params.get("date_from") or "").strip()
+        date_to_str = (request.query_params.get("date_to") or "").strip()
+
+        if not date_from_str or not date_to_str:
+            return Response(
+                {
+                    "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if date_from > date_to:
+            return Response(
+                {"detail": "date_from cannot be greater than date_to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # только completed jobs компании за период
+        qs = (
+            Job.objects.filter(
+                company=company,
+                status="completed",
+                scheduled_date__gte=date_from,
+                scheduled_date__lte=date_to,
+            )
+            .select_related("cleaner", "location")
+        )
+
+        # агрегаты по клинерам и локациям
+        cleaners_stats: dict[int, dict] = defaultdict(
+            lambda: {
+                "jobs_total": 0,
+                "jobs_with_sla_violations": 0,
+                "reason_counts": defaultdict(int),
+                "cleaner": None,
+            }
+        )
+        locations_stats: dict[int, dict] = defaultdict(
+            lambda: {
+                "jobs_total": 0,
+                "jobs_with_sla_violations": 0,
+                "reason_counts": defaultdict(int),
+                "location": None,
+            }
+        )
+
+        for job in qs:
+            sla_status, reasons = compute_sla_status_and_reasons_for_job(job)
+            violated = sla_status == "violated"
+
+            cleaner = job.cleaner
+            location = job.location
+
+            # клинер
+            if cleaner is not None:
+                c_stats = cleaners_stats[cleaner.id]
+                c_stats["cleaner"] = cleaner
+                c_stats["jobs_total"] += 1
+
+            # локация
+            if location is not None:
+                l_stats = locations_stats[location.id]
+                l_stats["location"] = location
+                l_stats["jobs_total"] += 1
+
+            if not violated:
+                continue
+
+            # если есть нарушение — учитываем его и по клинеру, и по локации
+            reasons = reasons or []
+
+            if cleaner is not None:
+                c_stats = cleaners_stats[cleaner.id]
+                c_stats["jobs_with_sla_violations"] += 1
+                for r in reasons:
+                    c_stats["reason_counts"][r] += 1
+
+            if location is not None:
+                l_stats = locations_stats[location.id]
+                l_stats["jobs_with_sla_violations"] += 1
+                for r in reasons:
+                    l_stats["reason_counts"][r] += 1
+
+        # формируем ответ по клинерам
+        cleaners_list: list[dict] = []
+        for stats in cleaners_stats.values():
+            cleaner = stats.get("cleaner")
+            if not cleaner:
+                continue
+
+            jobs_total = stats["jobs_total"]
+            violations = stats["jobs_with_sla_violations"]
+
+            violation_rate = violations / jobs_total if jobs_total else 0.0
+            has_repeated_violations = any(
+                count >= 2 for count in stats["reason_counts"].values()
+            )
+
+            cleaners_list.append(
+                {
+                    "id": cleaner.id,
+                    "name": getattr(cleaner, "full_name", None)
+                    or getattr(cleaner, "email", ""),
+                    "jobs_total": jobs_total,
+                    "jobs_with_sla_violations": violations,
+                    "violation_rate": violation_rate,
+                    "has_repeated_violations": has_repeated_violations,
+                }
+            )
+
+        # формируем ответ по локациям
+        locations_list: list[dict] = []
+        for stats in locations_stats.values():
+            location = stats.get("location")
+            if not location:
+                continue
+
+            jobs_total = stats["jobs_total"]
+            violations = stats["jobs_with_sla_violations"]
+
+            violation_rate = violations / jobs_total if jobs_total else 0.0
+            has_repeated_violations = any(
+                count >= 2 for count in stats["reason_counts"].values()
+            )
+
+            locations_list.append(
+                {
+                    "id": location.id,
+                    "name": getattr(location, "name", ""),
+                    "jobs_total": jobs_total,
+                    "jobs_with_sla_violations": violations,
+                    "violation_rate": violation_rate,
+                    "has_repeated_violations": has_repeated_violations,
+                }
+            )
+
+        # сортировка: сначала по количеству нарушений, потом по общему числу jobs
+        cleaners_list = sorted(
+            cleaners_list,
+            key=lambda x: (-x["jobs_with_sla_violations"], -x["jobs_total"]),
+        )
+        locations_list = sorted(
+            locations_list,
+            key=lambda x: (-x["jobs_with_sla_violations"], -x["jobs_total"]),
+        )
+
+        payload = {
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "cleaners": cleaners_list,
+            "locations": locations_list,
+        }
+
+        return Response(payload, status=status.HTTP_200_OK)
+    
+class ManagerWeeklyReportView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = _get_company_report(company, days=7)
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class ManagerMonthlyReportView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = _get_company_report(company, days=30)
+        return Response(data, status=status.HTTP_200_OK)
+
+class ManagerWeeklyReportPdfView(APIView):
+    """
+    PDF-снимок weekly-отчёта по SLA.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        report_data = _get_company_report(company, days=7)
+        pdf_bytes = generate_company_sla_report_pdf(company, report_data)
+
+        period = report_data.get("period", {}) or {}
+        date_from = period.get("from", "")
+        date_to = period.get("to", "")
+
+        filename = f"weekly_report_{date_from}_to_{date_to}.pdf"
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
+        return resp
+
+
+class ManagerMonthlyReportPdfView(APIView):
+    """
+    PDF-снимок monthly-отчёта по SLA.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        report_data = _get_company_report(company, days=30)
+        pdf_bytes = generate_company_sla_report_pdf(company, report_data)
+
+        period = report_data.get("period", {}) or {}
+        date_from = period.get("from", "")
+        date_to = period.get("to", "")
+
+        filename = f"monthly_report_{date_from}_to_{date_to}.pdf"
+        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        resp["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
+        return resp

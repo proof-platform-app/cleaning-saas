@@ -1,4 +1,3 @@
-````markdown
 # API Contracts (DEV) — Cleaning SaaS
 
 Документ фиксирует контракт между Backend (Django / DRF) и Frontend (React / Vite / Mobile).
@@ -200,6 +199,27 @@ Content-Type: application/json
 
 * `400 Bad Request` при пустых полях.
 * `401 Unauthorized` при неверных кредах.
+
+---
+
+### 1.3. Self-serve signup (Manager)
+
+**Endpoint**
+
+```http
+POST /api/auth/signup/
+Content-Type: application/json
+```
+
+**Назначение**
+
+Self-serve signup для менеджеров. При успешной регистрации:
+
+* создаётся новая `Company`;
+* создаётся пользователь-менеджер, привязанный к этой компании;
+* автоматически запускается стандартный 7-дневный trial-план.
+
+Trial-состояния (`is_trial_active`, `is_trial_expired`, `days_left`) и usage-лимиты (jobs, cleaners) далее вычисляются **исключительно** на backend и отдаются через `GET /api/cleanproof/usage-summary/` (см. 3.2).
 
 ---
 
@@ -902,6 +922,17 @@ Authorization: Token <MANAGER_TOKEN>
 * soft-limits ≠ guards;
 * данные используются только для баннеров и подсказок.
 
+**Trial & Usage — source of truth**
+
+* Trial и usage-статусы считаются **исключительно** на backend.
+* `GET /api/cleanproof/usage-summary/` — единственный источник истины для UI по плану (`plan`), флагам `is_trial_active / is_trial_expired`, `days_left` и usage-метрикам (`jobs_today_count`, `cleaners_count`) и их soft-limits.
+* Frontend не содержит бизнес-логики расчёта trial или лимитов, а только отображает состояние, полученное от backend.
+
+**Enforcement**
+
+* Применение trial-ограничений (блокировка создания jobs / cleaners и т.п.) выполняется только backend’ом.
+* В случае превышения лимитов backend возвращает `403 Forbidden` и стабильные коды ошибок; фронт показывает сообщение и не дублирует логику.
+
 ---
 
 ### 3.3. Company profile (Manager)
@@ -1160,6 +1191,12 @@ Content-Type: application/json
 * в Job Planning;
 * в мобильном приложении (через связанные job’ы).
 
+Дополнительно:
+
+* Все job-сущности ссылаются на локацию через `location_id`.
+* Backend фильтрует локации по `company`; фронт не использует mock-данные и не хранит свои списки локаций.
+* Локации также возвращаются агрегированно через `GET /api/manager/meta/` (см. 4.1) для UX-оптимизации Create Job и Planning.
+
 Frontend не хранит и не кэширует собственные списки локаций — используется только API.
 
 ---
@@ -1319,7 +1356,9 @@ GET /api/manager/jobs/planning/?date=YYYY-MM-DD
       "before_photo": false,
       "after_photo": false,
       "checklist": false
-    }
+    },
+    "sla_status": "ok",
+    "sla_reasons": []
   }
 ]
 ```
@@ -1332,6 +1371,7 @@ GET /api/manager/jobs/planning/?date=YYYY-MM-DD
   * `before_uploaded` / `after_uploaded` / `checklist_completed` — backend-истина.
   * `before_photo` / `after_photo` / `checklist` — UI-совместимость (алиасы под фронт).
 * **Переименование** существующих полей в `proof` **запрещено** без слоя совместимости.
+* SLA-слой (`sla_status`, `sla_reasons`) — вычисляемый (см. 4.5), read-only, не влияет на бизнес-логику выполнения job.
 
 ---
 
@@ -1379,7 +1419,7 @@ GET /api/manager/jobs/<id>/
       "event_type": "check_out",
       "created_at": "2026-01-15T10:58:03+04:00",
       "latitude": 25.08913,
-      "longitude": 55.14568
+      "longitude": 55.14568"
     }
   ],
   "photos": [
@@ -1423,6 +1463,87 @@ GET /api/manager/jobs/<id>/
 
 ---
 
+### 4.5. SLA & Exceptions (micro-SLA v1)
+
+Для job-сущностей введён вычисляемый SLA-слой, формируемый **исключительно на backend** и возвращаемый:
+
+* в ответах Planning (`GET /api/manager/jobs/planning/`);
+* в ответах History (`GET /api/manager/jobs/history/`, см. ниже);
+* в агрегирующих аналитических эндпоинтах (Performance, Reports).
+
+**Семантика**
+
+* `sla_status` — `"ok"` / `"violated"` для завершённых jobs (`status = "completed"`).
+* `sla_reasons` — массив machine-readable reason-codes, описывающих нарушения, например:
+
+  * `missing_before_photo`
+  * `missing_after_photo`
+  * `checklist_not_completed`
+
+**Правила**
+
+* SLA **не хранится** в базе данных как отдельная сущность, а вычисляется на лету из фактических proof-артефактов (check-in/out, photos, checklist).
+* SLA не влияет на базовую бизнес-логику выполнения job — это derived-слой представления.
+* Frontend **не содержит** SLA-логики и не пересчитывает статусы, а использует только `sla_status` и `sla_reasons` для:
+
+  * индикации (бейджи, подсветка);
+  * фильтрации / сортировки в UI.
+
+---
+
+### 4.6. Job History (Manager)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/history/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+```
+
+**Назначение**
+
+Исторический список jobs за период для экрана History / Reports.
+
+**Правила**
+
+* Учитываются только jobs компании текущего менеджера.
+* Фильтрация по диапазону дат выполняется на backend.
+* Структура job-объектов совместима с Planning (4.3) и дополнена SLA-слоем.
+
+**Response 200 OK (концептуально)**
+
+```json
+[
+  {
+    "id": 10,
+    "status": "completed",
+    "scheduled_date": "2026-01-15",
+    "scheduled_start_time": "09:00:00",
+    "scheduled_end_time": "11:00:00",
+    "location": {
+      "id": 5,
+      "name": "Marina Heights Tower",
+      "address": "Dubai Marina, Dubai, UAE"
+    },
+    "cleaner": {
+      "id": 3,
+      "full_name": "Dev Cleaner"
+    },
+    "proof": {
+      "before_uploaded": true,
+      "after_uploaded": true,
+      "checklist_completed": true,
+      "before_photo": true,
+      "after_photo": true,
+      "checklist": true
+    },
+    "sla_status": "ok",
+    "sla_reasons": []
+  }
+]
+```
+
+---
+
 ## 5. Ошибки (общий паттерн)
 
 Во всех эндпоинтах ошибки отдаются в едином формате:
@@ -1437,7 +1558,7 @@ GET /api/manager/jobs/<id>/
 
 * `400 Bad Request` — бизнес-ошибка (GPS далеко, не все пункты чеклиста закрыты и т.п.).
 * `401 Unauthorized` — нет токена / токен неверен.
-* `403 Forbidden` — не та роль / чужая job.
+* `403 Forbidden` — не та роль / чужая job / trial или usage-ограничение.
 * `404 Not Found` — job не найдена / не принадлежит пользователю.
 * `409 Conflict` — неверный статус для операции (double check-in, double photo upload и т.п.).
 
@@ -1506,14 +1627,147 @@ Backend может **добавлять новые поля**, но:
 
 ---
 
-## 8. API Contract — зафиксированные поля для Mobile Layer 1
+## 8. Performance API (Manager scope)
+
+В проекте реализован performance-эндпоинт для анализа SLA-нарушений на уровне клинеров и локаций.
+
+**Endpoint**
+
+```http
+GET /api/manager/performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Правила**
+
+* учитываются только `completed` jobs;
+* данные фильтруются по `company` текущего менеджера;
+* SLA-статус и причины нарушений вычисляются backend’ом (frontend не агрегирует данные и не пересчитывает SLA).
+
+**Response 200 OK (концептуально)**
+
+```json
+{
+  "date_from": "2026-01-01",
+  "date_to": "2026-01-31",
+  "cleaners": [
+    {
+      "cleaner_id": 3,
+      "cleaner_name": "Dev Cleaner",
+      "jobs_total": 25,
+      "jobs_with_sla_violations": 3,
+      "violation_rate": 0.12,
+      "has_repeated_violations": true
+    }
+  ],
+  "locations": [
+    {
+      "location_id": 5,
+      "location_name": "Marina Heights Tower",
+      "jobs_total": 10,
+      "jobs_with_sla_violations": 1,
+      "violation_rate": 0.1,
+      "has_repeated_violations": false
+    }
+  ]
+}
+```
+
+**Принципы**
+
+* Performance API — read-only слой.
+* Не вводит новых сущностей или бизнес-логики.
+* Агрегирует существующие job-данные и SLA-метаданные (`sla_status`, `sla_reasons`).
+
+---
+
+## 9. SLA Reports (Weekly / Monthly)
+
+API предоставляет агрегированные SLA-отчёты для менеджеров, предназначенные для просмотра стейкхолдерами и экспорта.
+
+**Endpoints**
+
+```http
+GET /api/manager/reports/weekly/
+GET /api/manager/reports/monthly/
+GET /api/manager/reports/weekly/pdf/
+GET /api/manager/reports/monthly/pdf/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Scope & rules**
+
+* Данные ограничены компанией текущего менеджера.
+
+* Период рассчитывается только на backend:
+
+  * `weekly` — последние 7 дней;
+  * `monthly` — последние 30 дней.
+
+* Учитываются только `completed` jobs для SLA-оценки.
+
+* Логика SLA и reason-codes та же, что в Job History и Performance (единый source of truth).
+
+**JSON-ответ (концептуально)**
+
+```json
+{
+  "period": {
+    "from": "2026-01-01",
+    "to": "2026-01-07"
+  },
+  "summary": {
+    "jobs_count": 100,
+    "violations_count": 12,
+    "issue_rate": 0.12
+  },
+  "cleaners": [
+    {
+      "cleaner_id": 3,
+      "cleaner_name": "Dev Cleaner",
+      "jobs_total": 20,
+      "violations": 3,
+      "violation_rate": 0.15
+    }
+  ],
+  "locations": [
+    {
+      "location_id": 5,
+      "location_name": "Marina Heights Tower",
+      "jobs_total": 10,
+      "violations": 1,
+      "violation_rate": 0.1
+    }
+  ],
+  "top_sla_reasons": [
+    { "reason": "missing_after_photo", "count": 7 },
+    { "reason": "checklist_not_completed", "count": 5 }
+  ]
+}
+```
+
+**PDF-эндпоинты**
+
+* `GET /api/manager/reports/weekly/pdf/`
+* `GET /api/manager/reports/monthly/pdf/`
+
+возвращают бинарный PDF-файл с тем же набором данных, что и JSON-ответы, в формате отчёта:
+
+```http
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="cleanproof-weekly-report.pdf"
+```
+
+---
+
+## 10. API Contract — зафиксированные поля для Mobile Layer 1
 
 Секция описывает **минимально необходимый контракт** для Mobile Layer 1 (логика без финального дизайна).
 Эти поля уже используются и должны считаться стабильными.
 
 ---
 
-### 8.1. Job Details payload (мобильное приложение)
+### 10.1. Job Details payload (мобильное приложение)
 
 Фактически используется мобильным приложением:
 
@@ -1548,7 +1802,7 @@ Backend **не обязан** гарантировать наличие коор
 
 ---
 
-### 8.2. Job Photos (Mobile Layer 1)
+### 10.2. Job Photos (Mobile Layer 1)
 
 **Контракт для получения фото (упрощённая форма)**
 
@@ -1574,7 +1828,7 @@ Backend **не обязан** гарантировать наличие коор
 
 ---
 
-### 8.3. Checklist Items (Mobile Layer 1)
+### 10.3. Checklist Items (Mobile Layer 1)
 
 ```json
 {
@@ -1596,7 +1850,7 @@ Backend **не обязан** гарантировать наличие коор
 
 ---
 
-### 8.4. Job Events / Timeline (Mobile Layer 1)
+### 10.4. Job Events / Timeline (Mobile Layer 1)
 
 ```json
 {
@@ -1614,7 +1868,7 @@ Backend **не обязан** гарантировать наличие коор
 
 ---
 
-### 8.5. Guard Rails (API + UI договорённость)
+### 10.5. Guard Rails (API + UI договорённость)
 
 **Backend**
 
@@ -1634,7 +1888,7 @@ Backend **не обязан** гарантировать наличие коор
 
 ---
 
-### 8.6. Статус API для Mobile Layer 1
+### 10.6. Статус API для Mobile Layer 1
 
 Контракты на текущий момент **достаточны** для:
 
@@ -1655,3 +1909,6 @@ Backend **не обязан** гарантировать наличие коор
 
 1. укладываться в контракты, зафиксированные здесь, **либо**
 2. сначала обновить этот файл (`API_CONTRACT.md`) с чётким описанием изменений и только потом реализовывать их в коде.
+
+```
+```

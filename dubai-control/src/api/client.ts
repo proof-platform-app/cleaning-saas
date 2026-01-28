@@ -1,5 +1,3 @@
-// dubai-control/src/api/client.ts
-
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -886,6 +884,37 @@ export type ManagerPlanningJob = {
   };
 };
 
+// ---------- Reports types ----------
+
+export type ReportSummary = {
+  jobs_count: number;
+  violations_count: number;
+  issue_rate: number;
+};
+
+export type ReportEntityStat = {
+  id: number | null;
+  name: string;
+  jobs_count: number;
+  violations_count: number;
+};
+
+export type ReportReasonStat = {
+  code: string;
+  count: number;
+};
+
+export type ManagerReport = {
+  period: {
+    from: string; // "YYYY-MM-DD"
+    to: string; // "YYYY-MM-DD"
+  };
+  summary: ReportSummary;
+  cleaners: ReportEntityStat[];
+  locations: ReportEntityStat[];
+  top_reasons: ReportReasonStat[];
+};
+
 export async function getManagerPlanningJobs(
   date: string
 ): Promise<ManagerPlanningJob[]> {
@@ -896,4 +925,18 @@ export async function getManagerPlanningJobs(
   );
 
   return data;
+}
+
+// ---------- Reports API ----------
+
+export async function getWeeklyReport(): Promise<ManagerReport> {
+  const res = await apiClient.get<ManagerReport>("/api/manager/reports/weekly/");
+  return res.data;
+}
+
+export async function getMonthlyReport(): Promise<ManagerReport> {
+  const res = await apiClient.get<ManagerReport>(
+    "/api/manager/reports/monthly/"
+  );
+  return res.data;
 }

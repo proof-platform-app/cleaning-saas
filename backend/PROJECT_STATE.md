@@ -174,6 +174,34 @@
   * параметры: `date_from`, `date_to` (обязательные)
   * отдаёт список jobs, совместимый по типу с Planning (дата, время, локация, клинер, статус, proof-флаги) ✅
 
+  ---
+
+### Performance Layer (SLA aggregation v1.5)
+
+**Backend**
+
+* `/api/manager/performance/?date_from=&date_to=` ✅
+* агрегирует SLA-нарушения по клинерам и локациям
+* учитываются только `completed jobs` за период и компанию менеджера
+* вычисляются:
+  * `jobs_total`
+  * `jobs_with_sla_violations`
+  * `violation_rate` (violations / jobs_total)
+  * `has_repeated_violations` (≥2 нарушений с одинаковым SLA reason-code) ✅
+
+**Frontend**
+
+* страница `/performance` ✅
+* раздельные списки:
+  * Cleaners — зона ответственности
+  * Locations — операционный риск
+* отображаются относительные показатели (`violation_rate`)
+* повторяемые проблемы помечаются бейджем (Recurring / Repeated issues)
+* экран read-only, без графиков и скорингов
+
+👉 Performance Layer усиливает SLA и замыкает цепочку:
+**Execution → SLA → Performance → History → Evidence**
+
 **Frontend**
 
 * страница `/history` ✅
@@ -291,6 +319,7 @@
 
 * Аналитика ⛔
 * SLA / Exception management 🟡
+* Performance aggregation (SLA-based) ✅
 * Performance reports ⛔
 * Multi-company roles ⛔
 * Audit exports ⛔

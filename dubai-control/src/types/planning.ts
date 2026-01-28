@@ -16,6 +16,10 @@ export type PlanningJob = {
   scheduled_start_time: string | null;
   scheduled_end_time: string | null;
 
+  // ✅ новое поле из backend
+  sla_status?: "ok" | "violated";
+  sla_reasons?: string[];
+
   location: {
     id: number | null;
     name: string | null;
@@ -36,4 +40,27 @@ export type PlanningFilters = {
   cleanerIds: number[];
   locationId: number | null;
   statuses: PlanningJobStatus[];
+};
+// ---- Performance (SLA summary) ----
+
+// Фильтры для performance-экрана
+export type PerformanceFilters = {
+  dateFrom: string; // "YYYY-MM-DD"
+  dateTo: string;   // "YYYY-MM-DD"
+};
+
+// Один элемент агрегата (и для клинеров, и для локаций)
+export type PerformanceStatItem = {
+  id: number;
+  name: string;
+  jobs_total: number;
+  jobs_with_sla_violations: number;
+};
+
+// Payload от /api/manager/performance/
+export type PerformanceSummary = {
+  date_from: string;
+  date_to: string;
+  cleaners: PerformanceStatItem[];
+  locations: PerformanceStatItem[];
 };

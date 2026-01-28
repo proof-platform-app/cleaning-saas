@@ -1,4 +1,3 @@
-```markdown
 MASTER BRIEF — Cleaning SaaS (MVP)
 
 (актуальная версия для продолжения работы)
@@ -817,4 +816,64 @@ job без координат.
 фиксации UX-поведения.
 
 Текущие упрощения UI — осознанные и временные.
-```
+
+Locations — принципиальное решение
+Locations считаются закрытой backend-сущностью:
+* backend — единственный источник истины,
+* frontend не хранит и не генерирует mock-локации,
+* все job-сценарии используют location_id.
+Карта в Locations используется не как продуктовая фича, а как утилитарный элемент:
+* для визуальной ориентации,
+* для GPS-валидации check-in / check-out,
+* для включения адреса в PDF-отчёт.
+Сознательно принято решение не инвестировать в улучшение карты, поиск домов или смену map-провайдера на данном этапе.
+Приоритет смещён в сторону:
+* monetization readiness,
+* trial → paid конверсии,
+* демонстрации ценности proof-of-work, а не UX-полировки.
+
+### Pricing & Upgrade Flow (Pre-billing)
+
+Pricing-страница и Upgrade-флоу интегрированы с реальным состоянием компании через `usage-summary`. UI различает анонимных пользователей, активный trial и истёкший trial, адаптируя тексты и CTA. После истечения trial Standard-план больше не предлагает повторный trial и используется как точка входа в коммерческий диалог (до подключения биллинга). Текущий Upgrade-флоу является временным и архитектурно подготовлен к интеграции Stripe / Paddle без изменения backend-контрактов.
+
+Фактический статус продукта
+CleanProof достиг состояния устойчивого операционного продукта без биллинга: backend-ядро job execution закрыто, Manager Portal покрывает Planning, Create Job, Job Details и Job History, реализован self-serve signup с полноценным trial и реальными backend-ограничениями. Trial-UX честный и синхронизирован с backend-статусом, без фейковых checkout или скрытых условий. Архитектура готова к подключению биллинга, но осознанно работает в режиме trial + contact-upgrade. Проект вышел за рамки прототипа и стабилен для демо, пилотов и ранних пользователей.
+
+SLA / Quality Control (micro-SLA v1)
+В CleanProof реализован первый слой автоматического контроля качества исполнения работ (micro-SLA v1).
+Система сама определяет, выполнена ли job корректно, и помечает проблемные случаи без участия менеджера.
+SLA является вычисляемым backend-слоем и не хранится в базе данных: для завершённых jobs рассчитывается sla_status (ok / violated) и список причин нарушения (sla_reasons).
+SLA-индикация встроена в ключевые менеджерские экраны (Planning, History, Job Details) и позволяет менеджеру фокусироваться только на проблемных работах.
+Этот слой принципиально переводит CleanProof из “хранилища доказательств” в систему активного контроля качества и напрямую усиливает продуктовую ценность перед подключением биллинга.
+В проект добавлен micro-SLA v1, ориентированный не на контроль или наказание, а на разбор фактов. SLA теперь состоит из трёх уровней: факт (sla_status), причина (sla_reasons) и прямой переход к доказательству (Evidence Jump). Это превращает Job History и Job Details в инструмент аудита и разрешения споров: менеджер видит проблему, понимает причину и сразу переходит к конкретному доказательству, не покидая текущий контекст. Архитектурно SLA реализован без усложнения системы и готов к дальнейшему расширению на следующих слоях.
+
+Performance Layer — управленческий контроль качества
+В CleanProof реализован Performance Layer как следующий уровень после SLA.
+Ключевая идея слоя — не аналитика ради графиков, а ответы на управленческие вопросы:
+* где возникают системные проблемы;
+* кто регулярно нарушает SLA;
+* являются ли нарушения случайными или повторяющимися.
+Performance Layer:
+* агрегирует SLA-нарушения по клинерам и локациям;
+* показывает относительные показатели (violation rate), а не только абсолютные числа;
+* выявляет повторяемость нарушений на основе reason-codes;
+* полностью основан на существующих job-данных и SLA-вычислениях.
+Слой реализован без усложнения архитектуры и логически замыкает цепочку:
+Job execution → SLA → Performance → History → Evidence
+Это усиливает ценность CleanProof как системы контроля качества, а не просто хранилища отчётов.
+
+### SLA Reports (Value Layer)
+
+SLA Reports package operational evidence into a manager-ready format.
+
+They do not introduce new business logic.
+Instead, they reframe existing execution, SLA, and performance data into:
+- weekly and monthly summaries
+- clear accountability by cleaner and location
+- exportable PDF reports suitable for owners and external stakeholders
+
+This layer closes the loop:
+Execution → SLA → Performance → Reports → Evidence
+
+Reports strengthen perceived product value without increasing system complexity.
+They are intentionally conservative in scope and rely entirely on verified backend data.

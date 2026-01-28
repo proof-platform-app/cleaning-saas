@@ -13,6 +13,13 @@ class Company(models.Model):
     """
 
     name = models.CharField(max_length=100)
+
+    logo = models.ImageField(
+        upload_to="company_logos/",
+        null=True,
+        blank=True,
+    )
+
     logo_url = models.TextField(null=True, blank=True)
     contact_email = models.EmailField(max_length=255, null=True, blank=True)
     contact_phone = models.CharField(max_length=20, null=True, blank=True)
@@ -117,7 +124,6 @@ class Company(models.Model):
         from apps.jobs.models import Job
 
         return Job.objects.filter(company=self).count() >= self.TRIAL_MAX_JOBS
-
 
     # -------- helpers (совместимость с существующей логикой) --------
 

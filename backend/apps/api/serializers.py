@@ -310,3 +310,39 @@ class PlanningJobSerializer(serializers.ModelSerializer):
             "after_photo": False,
             "checklist": False,
         }
+# --- SLA helpers -------------------------------------------------------------
+
+def compute_sla_reasons_for_job(job) -> list[str]:
+    """
+    Возвращает список причин нарушения SLA для конкретной job.
+
+    Кодовые значения:
+    - "missing_before_photo"      — нет фото "до"
+    - "missing_after_photo"       — нет фото "после"
+    - "checklist_not_completed"   — чеклист не полностью закрыт
+
+    Функция не меняет данных в БД, только читает связанные объекты.
+    """
+
+    reasons: list[str] = []
+
+    # 1) Фото "до"
+    has_before = job.jobphoto_set.filter(photo_type="before").exists()
+    if not has_before:
+        reasons.append("missing_before_photo")
+
+    # 2) Фото "после"
+    has_after = job.jobphoto_set.filter(photo_type="after").exists()
+    if not has_after:
+        reasons.append("missing_after_photo")
+
+    # 3) Чеклист: есть ли обязательные пункты, которые не выполнены
+    has_incomplete_required_items = job.jobchecklistitem_set.filter(
+        required=True,
+        completed=False,
+    ).exists()
+
+    if has_incomplete_required_items:
+        reasons.append("checklist_not_completed")
+
+    return reasons

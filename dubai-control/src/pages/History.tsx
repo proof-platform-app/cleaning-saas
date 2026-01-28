@@ -1,6 +1,7 @@
 // dubai-control/src/pages/History.tsx
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { CalendarIcon } from "lucide-react";
@@ -24,16 +25,82 @@ type DateRange = {
   to: Date;
 };
 
+function parseDateParam(value: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function History() {
-  // по умолчанию показываем последние 7 дней
+  const location = useLocation();
+
+  // читаем параметры из URL один раз для инициализации
+  const searchParams = new URLSearchParams(location.search);
+  const dateFromParam = searchParams.get("date_from");
+  const dateToParam = searchParams.get("date_to");
+  const slaStatusParam = searchParams.get("sla_status");
+  const cleanerIdParam = searchParams.get("cleaner_id");
+  const locationIdParam = searchParams.get("location_id");
+
   const today = new Date();
-  const initialRange: DateRange = {
+  const defaultRange: DateRange = {
     from: subDays(today, 6),
     to: today,
   };
 
+  const parsedFrom = parseDateParam(dateFromParam);
+  const parsedTo = parseDateParam(dateToParam);
+
+  const initialRange: DateRange =
+    parsedFrom && parsedTo
+      ? { from: parsedFrom, to: parsedTo }
+      : defaultRange;
+
+  const initialShowOnlyProblem = slaStatusParam === "violated";
+  const initialCleanerFilterId = cleanerIdParam
+    ? Number(cleanerIdParam)
+    : null;
+  const initialLocationFilterId = locationIdParam
+    ? Number(locationIdParam)
+    : null;
+
   const [range, setRange] = useState<DateRange>(initialRange);
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
+  const [showOnlyProblem, setShowOnlyProblem] =
+    useState<boolean>(initialShowOnlyProblem);
+  const [cleanerFilterId, setCleanerFilterId] = useState<number | null>(
+    initialCleanerFilterId,
+  );
+  const [locationFilterId, setLocationFilterId] = useState<number | null>(
+    initialLocationFilterId,
+  );
+
+  // если пришли с другой страницы (Reports) с новыми query-параметрами —
+  // аккуратно синхронизируем состояние History с URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const fromParam = params.get("date_from");
+    const toParam = params.get("date_to");
+    const slaParam = params.get("sla_status");
+    const cleanerParam = params.get("cleaner_id");
+    const locParam = params.get("location_id");
+
+    const fromParsed = parseDateParam(fromParam);
+    const toParsed = parseDateParam(toParam);
+
+    if (fromParsed && toParsed) {
+      setRange({ from: fromParsed, to: toParsed });
+    }
+
+    if (slaParam === "violated") {
+      setShowOnlyProblem(true);
+    } else if (slaParam === null) {
+      setShowOnlyProblem(false);
+    }
+
+    setCleanerFilterId(cleanerParam ? Number(cleanerParam) : null);
+    setLocationFilterId(locParam ? Number(locParam) : null);
+  }, [location.search]);
 
   const dateFromStr = useMemo(
     () => format(range.from, "yyyy-MM-dd"),
@@ -61,6 +128,38 @@ export default function History() {
 
   const jobsList = jobs ?? [];
 
+  const jobsForTable = useMemo(() => {
+    let list = jobsList;
+
+    // Фильтр по клинеру, если задан через URL (Reports → History)
+    if (cleanerFilterId != null && !Number.isNaN(cleanerFilterId)) {
+      list = list.filter((job) => {
+        const jobCleanerId = job.cleaner?.id ?? null;
+        return jobCleanerId === cleanerFilterId;
+      });
+    }
+
+    // Фильтр по локации, если задан
+    if (locationFilterId != null && !Number.isNaN(locationFilterId)) {
+      list = list.filter((job) => {
+        const jobLocationId = job.location?.id ?? null;
+        return jobLocationId === locationFilterId;
+      });
+    }
+
+    // UI-фильтр: показывать только проблемные (sla_status = violated)
+    if (showOnlyProblem) {
+      list = list.filter((job) => job.sla_status === "violated");
+    }
+
+    // Сортировка: нарушенные SLA всегда наверху
+    return [...list].sort((a, b) => {
+      const aScore = a.sla_status === "violated" ? 1 : 0;
+      const bScore = b.sla_status === "violated" ? 1 : 0;
+      return bScore - aScore;
+    });
+  }, [jobsList, showOnlyProblem, cleanerFilterId, locationFilterId]);
+
   const loadError = isError
     ? error?.message || "Failed to load job history. Please try again."
     : null;
@@ -69,20 +168,29 @@ export default function History() {
     setRange({ from, to });
   };
 
-  // новая функция: аккуратно обрабатываем выбор диапазона
   const handleCalendarSelect = (
     value: { from?: Date; to?: Date } | undefined,
   ) => {
     if (!value || !value.from) return;
 
-    // если выбраны обе даты — используем полный диапазон
     if (value.to) {
       handleRangeChange(value.from, value.to);
       return;
     }
 
-    // если выбрана только первая дата — считаем диапазон из одного дня
     handleRangeChange(value.from, value.from);
+  };
+
+  const handleResetFilters = () => {
+    const todayInner = new Date();
+    const defaultInnerRange: DateRange = {
+      from: subDays(todayInner, 6),
+      to: todayInner,
+    };
+    setRange(defaultInnerRange);
+    setShowOnlyProblem(false);
+    setCleanerFilterId(null);
+    setLocationFilterId(null);
   };
 
   return (
@@ -118,7 +226,7 @@ export default function History() {
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setRange(initialRange)}
+                  onClick={handleResetFilters}
                 >
                   Reset
                 </Button>
@@ -158,7 +266,7 @@ export default function History() {
                         to: range.to,
                       }}
                       onSelect={handleCalendarSelect}
-                      numberOfMonths={1} // 👈 один месяц, не два
+                      numberOfMonths={1}
                       initialFocus
                     />
                   </PopoverContent>
@@ -166,6 +274,22 @@ export default function History() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Select a start and end date in the calendar to load job
                   history.
+                </p>
+              </div>
+
+              {/* PROBLEM JOBS TOGGLE */}
+              <div className="pt-2 border-t border-border/60">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border text-primary focus-visible:ring-1 focus-visible:ring-ring"
+                    checked={showOnlyProblem}
+                    onChange={(e) => setShowOnlyProblem(e.target.checked)}
+                  />
+                  <span>Only problem jobs</span>
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Show only jobs with incomplete proof (⚠).
                 </p>
               </div>
             </div>
@@ -187,7 +311,11 @@ export default function History() {
               </p>
 
               <p className="text-sm text-muted-foreground">
-                {isLoading ? "Loading…" : `${jobsList.length} jobs`}
+                {isLoading
+                  ? "Loading…"
+                  : `${jobsForTable.length} job${
+                      jobsForTable.length === 1 ? "" : "s"
+                    }`}
               </p>
             </div>
 
@@ -200,20 +328,19 @@ export default function History() {
               </div>
             )}
 
-            {!isLoading && !loadError && jobsList.length === 0 ? (
+            {!isLoading && !loadError && jobsForTable.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/70 bg-card px-8 py-10 text-center">
                 <h2 className="text-sm font-medium text-foreground">
-                  No jobs in this date range
+                  No jobs in this view
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-                  Try selecting a wider period in the calendar or scheduling new
-                  jobs in the Job Planning view. Completed jobs will appear here
-                  automatically.
+                  Try turning off the “Only problem jobs” filter or selecting a
+                  wider date range in the calendar.
                 </p>
               </div>
             ) : (
               <JobsTable
-                jobs={jobsList}
+                jobs={jobsForTable}
                 loading={isLoading}
                 onJobClick={setSelectedJob}
               />

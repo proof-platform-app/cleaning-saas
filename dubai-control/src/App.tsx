@@ -13,15 +13,16 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
-import History from "@/pages/History";
-// CreateJob больше не используем как отдельную страницу
+import History from "./pages/History";
 import Settings from "./pages/Settings";
 import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
-import JobPlanning from "@/pages/JobPlanning";
-import Locations from "@/pages/Locations";
-import PricingPage from "@/pages/PricingPage";
-import Signup from "@/pages/Signup";
+import JobPlanning from "./pages/JobPlanning";
+import Locations from "./pages/Locations";
+import PricingPage from "./pages/PricingPage";
+import Signup from "./pages/Signup";
+import Performance from "./pages/Performance";
+import Reports from "@/pages/Reports"; // ⬅️ добавили Reports
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -80,6 +81,8 @@ const App = () => (
 
               <Route path="/planning" element={<JobPlanning />} />
               <Route path="/history" element={<History />} />
+              <Route path="/performance" element={<Performance />} />
+              <Route path="/reports" element={<Reports />} /> {/* ⬅️ новый маршрут */}
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />
