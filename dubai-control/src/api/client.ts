@@ -1,3 +1,5 @@
+// dubai-control/src/api/client.ts
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -682,20 +684,17 @@ export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
   return blob;
 }
 
-// ---- Email PDF report (stub) ----
-
+// Email job PDF report to manager (optionally to custom email)
 export async function emailJobReportPdf(
   jobId: number,
   email?: string
-): Promise<void> {
-  await loginManager();
+): Promise<any> {
+  const url = `/api/manager/jobs/${jobId}/report/email/`;
 
-  const body = email ? { email } : {};
+  const payload = email ? { email } : {};
 
-  await apiFetch(`/api/manager/jobs/${jobId}/report/email/`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  const res = await apiClient.post(url, payload);
+  return res.data;
 }
 
 // ---------- Company API ----------
@@ -856,14 +855,20 @@ export const apiClient = {
 
 // ---- Reports: email weekly / monthly (MVP stub) ----
 
-export async function emailWeeklyReport(email?: string): Promise<void> {
-  const body = email ? { email } : undefined;
-  await apiClient.post("/api/manager/reports/weekly/email/", body);
+// Email weekly report (optionally to custom email)
+export async function emailWeeklyReport(email?: string): Promise<any> {
+  const url = "/api/manager/reports/weekly/email/";
+  const payload = email ? { email } : {};
+  const res = await apiClient.post(url, payload);
+  return res.data;
 }
 
-export async function emailMonthlyReport(email?: string): Promise<void> {
-  const body = email ? { email } : undefined;
-  await apiClient.post("/api/manager/reports/monthly/email/", body);
+// Email monthly report (optionally to custom email)
+export async function emailMonthlyReport(email?: string): Promise<any> {
+  const url = "/api/manager/reports/monthly/email/";
+  const payload = email ? { email } : {};
+  const res = await apiClient.post(url, payload);
+  return res.data;
 }
 
 // ---- Job Reports ----

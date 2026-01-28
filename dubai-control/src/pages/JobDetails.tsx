@@ -25,6 +25,16 @@ import {
   emailJobReportPdf,
 } from "@/api/client";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface UITimelineStep {
   id: string;
@@ -125,6 +135,13 @@ export default function JobDetails() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [hasGeneratedPdf, setHasGeneratedPdf] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailMode, setEmailMode] = useState<"self" | "custom">("self");
+  const [customEmail, setCustomEmail] = useState("");
+  const [customEmailError, setCustomEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -201,17 +218,50 @@ export default function JobDetails() {
       typeof job.id === "number" ? job.id : Number(job.id);
     if (!Number.isFinite(jobIdNumber)) return;
 
+    // выбираем email в зависимости от режима
+    let emailToSend: string | undefined;
+
+    if (emailMode === "custom") {
+      const value = customEmail.trim();
+      if (!value) {
+        setCustomEmailError("Email is required.");
+        return;
+      }
+      // очень простой чек, чисто чтобы отловить явный мусор
+      const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+      if (!emailRegex.test(value)) {
+        setCustomEmailError("Invalid email format.");
+        return;
+      }
+      emailToSend = value;
+    } else {
+      // режим "self" — шлём без email, backend возьмёт user.email
+      emailToSend = undefined;
+    }
+
     try {
       setEmailLoading(true);
-      // В MVP email можно не передавать — backend возьмёт user.email
-      await emailJobReportPdf(jobIdNumber);
+      setEmailMessage(null);
+      setEmailError(null);
+      setCustomEmailError(null);
 
-      window.alert("PDF report email has been scheduled (stub).");
+      const result: any = await emailJobReportPdf(jobIdNumber, emailToSend);
+
+      const targetEmail =
+        result?.target_email || result?.email || emailToSend || undefined;
+      const detailText =
+        result?.detail ||
+        (targetEmail
+          ? `PDF report emailed to ${targetEmail}.`
+          : "PDF report emailed.");
+
+      setEmailMessage(detailText);
+      setIsEmailDialogOpen(false);
     } catch (e) {
       console.error("[JobDetails] Email PDF failed", e);
       const msg =
-        e instanceof Error ? e.message : "Failed to schedule email";
-      window.alert(msg);
+        e instanceof Error ? e.message : "Failed to email PDF report.";
+      setEmailError(msg);
     } finally {
       setEmailLoading(false);
     }
@@ -348,36 +398,130 @@ export default function JobDetails() {
               {job.location_address || job.address || "—"}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              className="border-border"
-              onClick={() => handlePdfAction("download")}
-              disabled={!canDownloadPdf || pdfLoading}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {pdfLoading ? "Preparing…" : "Download PDF"}
-            </Button>
-            <Button
-              variant="outline"
-              className="border-border"
-              onClick={handleEmailPdf}
-              disabled={!canEmailPdf || emailLoading}
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              {emailLoading ? "Sending…" : "Email PDF"}
-            </Button>
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
-              onClick={() => handlePdfAction("generate")}
-              disabled={!canGeneratePdf || pdfLoading}
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              {pdfLoading ? "Generating…" : "Generate PDF Report"}
-            </Button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                className="border-border"
+                onClick={() => handlePdfAction("download")}
+                disabled={!canDownloadPdf || pdfLoading}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {pdfLoading ? "Preparing…" : "Download PDF"}
+              </Button>
+              <Button
+                variant="outline"
+                className="border-border"
+                onClick={() => {
+                  setEmailMessage(null);
+                  setEmailError(null);
+                  setCustomEmailError(null);
+                  setEmailMode("self");
+                  setCustomEmail("");
+                  setIsEmailDialogOpen(true);
+                }}
+                disabled={!canEmailPdf || emailLoading}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Email PDF
+              </Button>
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-soft"
+                onClick={() => handlePdfAction("generate")}
+                disabled={!canGeneratePdf || pdfLoading}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                {pdfLoading ? "Generating…" : "Generate PDF Report"}
+              </Button>
+            </div>
+            {(emailMessage || emailError) && (
+              <p
+                className={cn(
+                  "mt-2 text-sm",
+                  emailError ? "text-red-600" : "text-emerald-600"
+                )}
+              >
+                {emailError ?? emailMessage}
+              </p>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Email PDF dialog */}
+      <Dialog
+        open={isEmailDialogOpen}
+        onOpenChange={(open) => {
+          setIsEmailDialogOpen(open);
+          if (!open) {
+            setCustomEmailError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email job report</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <RadioGroup
+              value={emailMode}
+              onValueChange={(v) => setEmailMode(v as "self" | "custom")}
+              className="space-y-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem id="email-self" value="self" />
+                <Label htmlFor="email-self" className="text-sm font-normal">
+                  Send to my account email
+                </Label>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem id="email-custom" value="custom" />
+                  <Label
+                    htmlFor="email-custom"
+                    className="text-sm font-normal"
+                  >
+                    Send to another email
+                  </Label>
+                </div>
+                {emailMode === "custom" && (
+                  <div className="pl-6 space-y-1">
+                    <Input
+                      type="email"
+                      placeholder="owner@example.com"
+                      value={customEmail}
+                      onChange={(e) => {
+                        setCustomEmail(e.target.value);
+                        setCustomEmailError(null);
+                      }}
+                    />
+                    {customEmailError && (
+                      <p className="text-xs text-red-600">
+                        {customEmailError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </RadioGroup>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEmailDialogOpen(false)}
+              disabled={emailLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleEmailPdf} disabled={emailLoading}>
+              {emailLoading ? "Sending…" : "Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

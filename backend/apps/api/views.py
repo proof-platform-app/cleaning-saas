@@ -32,6 +32,7 @@ from apps.jobs.utils import distance_m, extract_exif_data
 from apps.locations.models import Location, ChecklistTemplate
 
 from .pdf import generate_job_report_pdf, generate_company_sla_report_pdf
+from apps.marketing.models import ReportEmailLog
 from .serializers import (
     ChecklistBulkUpdateSerializer,
     ChecklistToggleSerializer,
@@ -734,8 +735,48 @@ class ManagerJobPdfEmailView(APIView):
         )
 
         try:
+            # отправляем письмо
             message.send(fail_silently=False)
-        except Exception:
+
+            # ✅ логируем успешную отправку
+            try:
+                ReportEmailLog.objects.create(
+                    company_id=job.company_id,
+                    user=user,
+                    kind=ReportEmailLog.KIND_JOB_REPORT,
+                    job_id=job.id,
+                    period_from=None,
+                    period_to=None,
+                    to_email=target_email,
+                    subject=subject,
+                    status=ReportEmailLog.STATUS_SENT,
+                    error_message="",
+                )
+            except Exception as log_exc:
+                # лог не должен завалить основной флоу
+                logger.exception("Failed to log sent job report email", exc_info=log_exc)
+
+        except Exception as exc:
+            # ❌ логируем неудачную попытку
+            try:
+                ReportEmailLog.objects.create(
+                    company_id=job.company_id,
+                    user=user,
+                    kind=ReportEmailLog.KIND_JOB_REPORT,
+                    job_id=job.id,
+                    period_from=None,
+                    period_to=None,
+                    to_email=target_email,
+                    subject=subject,
+                    status=ReportEmailLog.STATUS_FAILED,
+                    error_message=str(exc),
+                )
+            except Exception as log_exc:
+                logger.exception(
+                    "Failed to log failed job report email",
+                    exc_info=log_exc,
+                )
+
             return Response(
                 {"detail": "Failed to send email."},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -2325,7 +2366,89 @@ def _send_company_report_email(company: Company, days: int, target_email: str, f
         },
     }
 
+class MonthlyReportEmailView(APIView):
+    """
+    Отправка monthly SLA-отчёта менеджеру по email.
 
+    POST /api/manager/reports/monthly/email/
+    Body (опционально): { "email": "owner@example.com" }
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can email reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        email = (request.data.get("email") or user.email or "").strip()
+        if not email:
+            return Response(
+                {"detail": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = _send_company_report_email(
+                company=company,
+                days=30,
+                target_email=email,
+                frequency_label="Monthly",
+            )
+        except Exception as exc:
+            logger.exception("Failed to send monthly report email", exc_info=exc)
+            return Response(
+                {"detail": "Failed to send monthly report email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # ✅ логируем успешную отправку
+        try:
+            period = (payload.get("period") or {}) if isinstance(payload, dict) else {}
+            date_from_str = period.get("from")
+            date_to_str = period.get("to")
+
+            date_from = parse_date(date_from_str) if date_from_str else None
+            date_to = parse_date(date_to_str) if date_to_str else None
+
+            subject = (
+                f"[CleanProof] Monthly SLA report {date_from_str} – {date_to_str}"
+            )
+
+            ReportEmailLog.objects.create(
+                company_id=company.id,
+                user=user,
+                kind=ReportEmailLog.KIND_MONTHLY_REPORT,
+                job_id=None,
+                period_from=date_from,
+                period_to=date_to,
+                to_email=payload.get("target_email", email),
+                subject=subject,
+                status=ReportEmailLog.STATUS_SENT,
+                error_message="",
+            )
+        except Exception as log_exc:
+            logger.exception("Failed to log monthly report email", exc_info=log_exc)
+
+        return Response(
+            {
+                "detail": "Monthly report emailed.",
+                **payload,
+            },
+            status=status.HTTP_200_OK,
+        )
 class WeeklyReportEmailView(APIView):
     """
     Отправка weekly SLA-отчёта менеджеру по email.
@@ -2375,66 +2498,37 @@ class WeeklyReportEmailView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        # ✅ логируем успешную отправку
+        try:
+            period = (payload.get("period") or {}) if isinstance(payload, dict) else {}
+            date_from_str = period.get("from")
+            date_to_str = period.get("to")
+
+            date_from = parse_date(date_from_str) if date_from_str else None
+            date_to = parse_date(date_to_str) if date_to_str else None
+
+            subject = (
+                f"[CleanProof] Weekly SLA report {date_from_str} – {date_to_str}"
+            )
+
+            ReportEmailLog.objects.create(
+                company_id=company.id,
+                user=user,
+                kind=ReportEmailLog.KIND_WEEKLY_REPORT,
+                job_id=None,
+                period_from=date_from,
+                period_to=date_to,
+                to_email=payload.get("target_email", email),
+                subject=subject,
+                status=ReportEmailLog.STATUS_SENT,
+                error_message="",
+            )
+        except Exception as log_exc:
+            logger.exception("Failed to log weekly report email", exc_info=log_exc)
+
         return Response(
             {
                 "detail": "Weekly report emailed.",
-                **payload,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class MonthlyReportEmailView(APIView):
-    """
-    Отправка monthly SLA-отчёта менеджеру по email.
-
-    POST /api/manager/reports/monthly/email/
-    Body (опционально): { "email": "owner@example.com" }
-    """
-
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        user = request.user
-
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
-            return Response(
-                {"detail": "Only managers can email reports."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        company = getattr(user, "company", None)
-        if not company:
-            return Response(
-                {"detail": "No company associated with user."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        email = (request.data.get("email") or user.email or "").strip()
-        if not email:
-            return Response(
-                {"detail": "Email is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            payload = _send_company_report_email(
-                company=company,
-                days=30,
-                target_email=email,
-                frequency_label="Monthly",
-            )
-        except Exception as exc:
-            logger.exception("Failed to send monthly report email", exc_info=exc)
-            return Response(
-                {"detail": "Failed to send monthly report email."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        return Response(
-            {
-                "detail": "Monthly report emailed.",
                 **payload,
             },
             status=status.HTTP_200_OK,

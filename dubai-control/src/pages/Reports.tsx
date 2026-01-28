@@ -11,6 +11,16 @@ import {
 } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Download, Mail } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type ReportMode = "weekly" | "monthly";
 
@@ -107,8 +117,13 @@ export default function Reports() {
   const [mode, setMode] = useState<ReportMode>("weekly");
 
   const [emailLoading, setEmailLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailMode, setEmailMode] = useState<"self" | "custom">("self");
+  const [customEmail, setCustomEmail] = useState("");
+  const [customEmailError, setCustomEmailError] = useState<string | null>(null);
 
   const {
     data: weekly,
@@ -185,21 +200,53 @@ export default function Reports() {
     }
   };
 
-  async function handleEmailReport() {
+  async function handleEmailReportSubmit() {
     if (emailLoading) return;
+
+    // выбираем email в зависимости от режима
+    let emailToSend: string | undefined;
+
+    if (emailMode === "custom") {
+      const value = customEmail.trim();
+      if (!value) {
+        setCustomEmailError("Email is required.");
+        return;
+      }
+      const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+      if (!emailRegex.test(value)) {
+        setCustomEmailError("Invalid email format.");
+        return;
+      }
+      emailToSend = value;
+    } else {
+      emailToSend = undefined; // backend возьмёт user.email
+    }
 
     try {
       setEmailLoading(true);
-      setEmailSent(false);
+      setEmailMessage(null);
       setEmailError(null);
+      setCustomEmailError(null);
 
+      let result: any;
       if (mode === "weekly") {
-        await emailWeeklyReport();
+        result = await emailWeeklyReport(emailToSend);
       } else {
-        await emailMonthlyReport();
+        result = await emailMonthlyReport(emailToSend);
       }
 
-      setEmailSent(true);
+      const targetEmail =
+        result?.target_email || result?.email || emailToSend || undefined;
+
+      const label = mode === "weekly" ? "Weekly" : "Monthly";
+      const detailText =
+        result?.detail ||
+        (targetEmail
+          ? `${label} report emailed to ${targetEmail}.`
+          : `${label} report emailed.`);
+
+      setEmailMessage(detailText);
+      setIsEmailDialogOpen(false);
     } catch (e) {
       console.error("[Reports] Email report failed", e);
       setEmailError(
@@ -229,7 +276,7 @@ export default function Reports() {
                 variant={mode === "weekly" ? "default" : "outline"}
                 onClick={() => {
                   setMode("weekly");
-                  setEmailSent(false);
+                  setEmailMessage(null);
                   setEmailError(null);
                 }}
               >
@@ -239,7 +286,7 @@ export default function Reports() {
                 variant={mode === "monthly" ? "default" : "outline"}
                 onClick={() => {
                   setMode("monthly");
-                  setEmailSent(false);
+                  setEmailMessage(null);
                   setEmailError(null);
                 }}
               >
@@ -260,18 +307,23 @@ export default function Reports() {
               <Button
                 variant="outline"
                 className="border-border"
-                onClick={handleEmailReport}
+                onClick={() => {
+                  setEmailMessage(null);
+                  setEmailError(null);
+                  setCustomEmailError(null);
+                  setEmailMode("self");
+                  setCustomEmail("");
+                  setIsEmailDialogOpen(true);
+                }}
                 disabled={emailLoading}
               >
                 <Mail className="w-4 h-4 mr-2" />
-                {emailLoading ? "Sending…" : "Email report"}
+                Email report
               </Button>
             </div>
 
-            {emailSent && (
-              <p className="text-xs text-emerald-600 mt-1">
-                Report email scheduled to your address.
-              </p>
+            {emailMessage && (
+              <p className="text-xs text-emerald-600 mt-1">{emailMessage}</p>
             )}
 
             {emailError && (
@@ -280,6 +332,86 @@ export default function Reports() {
           </div>
         </div>
       </div>
+
+      {/* Email dialog */}
+      <Dialog
+        open={isEmailDialogOpen}
+        onOpenChange={(open) => {
+          setIsEmailDialogOpen(open);
+          if (!open) {
+            setCustomEmailError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {mode === "weekly" ? "Email weekly report" : "Email monthly report"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <RadioGroup
+              value={emailMode}
+              onValueChange={(v) => setEmailMode(v as "self" | "custom")}
+              className="space-y-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem id="reports-email-self" value="self" />
+                <Label
+                  htmlFor="reports-email-self"
+                  className="text-sm font-normal"
+                >
+                  Send to my account email
+                </Label>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem id="reports-email-custom" value="custom" />
+                  <Label
+                    htmlFor="reports-email-custom"
+                    className="text-sm font-normal"
+                  >
+                    Send to another email
+                  </Label>
+                </div>
+                {emailMode === "custom" && (
+                  <div className="pl-6 space-y-1">
+                    <Input
+                      type="email"
+                      placeholder="owner@example.com"
+                      value={customEmail}
+                      onChange={(e) => {
+                        setCustomEmail(e.target.value);
+                        setCustomEmailError(null);
+                      }}
+                    />
+                    {customEmailError && (
+                      <p className="text-xs text-red-600">
+                        {customEmailError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </RadioGroup>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEmailDialogOpen(false)}
+              disabled={emailLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleEmailReportSubmit} disabled={emailLoading}>
+              {emailLoading ? "Sending…" : "Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Content */}
       <div className="px-6 py-6 max-w-7xl mx-auto space-y-6">
@@ -445,7 +577,7 @@ export default function Reports() {
                   {report.top_reasons.map((r) => (
                     <li
                       key={r.code}
-                      className="flex items-center justify-between"
+                      className="flex items-center justify_between"
                     >
                       <span>{formatReasonCode(r.code)}</span>
                       <span className="text-muted-foreground">
