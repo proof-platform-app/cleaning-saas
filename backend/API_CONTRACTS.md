@@ -1708,6 +1708,34 @@ Authorization: Token <MANAGER_TOKEN>
 
 * Логика SLA и reason-codes та же, что в Job History и Performance (единый source of truth).
 
+### POST /api/manager/jobs/{id}/report/email/
+
+Sends the verified Job PDF report to email.
+
+Behavior (v1):
+
+- Endpoint is available only to authenticated managers.
+- Job is resolved strictly within the manager’s company.
+- PDF is generated using the same backend logic as the Download PDF endpoint.
+- If no email is provided in request body, the report is sent to `request.user.email`.
+- Successful response indicates that the email has been sent (or queued, depending on email backend).
+
+Request body (optional):
+
+```json
+{
+  "email": "recipient@example.com"
+}
+Response (200):
+{
+  "detail": "PDF report emailed.",
+  "job_id": 123,
+  "target_email": "manager@example.com"
+}
+Notes:
+* Email delivery logic is backend-controlled.
+	•	Frontend does not infer or compute recipient email.
+---
 **JSON-ответ (концептуально)**
 
 ```json
@@ -1759,6 +1787,117 @@ Content-Disposition: attachment; filename="cleanproof-weekly-report.pdf"
 ```
 
 ---
+Email PDF — Job report
+
+Endpoint
+
+POST /api/manager/jobs/{job_id}/report/email/
+
+
+Описание
+
+Отправляет PDF-отчёт по конкретной job на email.
+
+Поведение
+
+PDF генерируется тем же backend-кодом, что и /report/pdf/ (single source of truth).
+
+По умолчанию отчёт отправляется на email текущего менеджера (request.user.email).
+
+Допускается явная передача email в теле запроса.
+
+Request body (optional)
+
+{
+  "email": "owner@example.com"
+}
+
+
+Response (success)
+
+{
+  "detail": "PDF report emailed.",
+  "job_id": 1,
+  "target_email": "owner@example.com"
+}
+
+Email PDF — Weekly / Monthly reports
+
+Endpoints
+
+POST /api/manager/reports/weekly/email/
+POST /api/manager/reports/monthly/email/
+
+
+Описание
+
+Отправляет PDF-отчёт по SLA и performance за фиксированный период (7 или 30 дней).
+
+Поведение
+
+Период рассчитывается строго на backend.
+
+PDF генерируется тем же кодом, что и /weekly/pdf/ и /monthly/pdf/.
+
+Email получателя:
+
+по умолчанию — request.user.email,
+
+либо явно переданный email в теле запроса.
+
+Request body (optional)
+
+{
+  "email": "owner@example.com"
+}
+
+
+Response (success)
+
+{
+  "detail": "Weekly report emailed.",
+  "target_email": "owner@example.com",
+  "period": {
+    "from": "2026-01-22",
+    "to": "2026-01-28"
+  }
+}
+
+### Reports Email (v2)
+
+All report email endpoints support optional recipient selection and are fully logged on the backend.
+
+#### Job report email
+
+POST /api/manager/jobs/<id>/report/email/
+
+Request body (optional):
+{
+  "email": "recipient@example.com"
+}
+
+If `email` is not provided, `request.user.email` is used by default.
+
+The endpoint:
+- generates the same PDF as `/report/pdf/` (single source of truth),
+- sends the email using the configured Django email backend,
+- creates a `ReportEmailLog` entry for every send attempt.
+
+#### Weekly / Monthly reports email
+
+POST /api/manager/reports/weekly/email/
+POST /api/manager/reports/monthly/email/
+
+Request body (optional):
+{
+  "email": "recipient@example.com"
+}
+
+Behavior:
+- period is calculated strictly on backend (7 / 30 days),
+- PDF is identical to `/weekly/pdf/` and `/monthly/pdf/`,
+- email is sent to the provided address or manager email by default,
+- each send is recorded in `ReportEmailLog` with period, recipient, and status.
 
 ## 10. API Contract — зафиксированные поля для Mobile Layer 1
 

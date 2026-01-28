@@ -903,3 +903,19 @@ CleanProof поддерживает отправку PDF-отчётов по ema
 Email-отправка ориентирована на операционные сценарии (менеджер → владелец / руководство) и не является маркетинговой рассылкой.
 
 ---
+### Reports v2 — Email Delivery & Audit (Completed)
+
+Reports v2 extends the performance and SLA layer with real-world distribution and accountability.
+
+What is completed:
+- Managers can send job PDFs and weekly/monthly reports to any email recipient.
+- Email recipient selection is explicit (self / custom).
+- Backend generates PDFs from the same source as UI exports.
+- Every report email is logged in the system with full context (who, what, when, to whom).
+- Email sending is infrastructure-agnostic and works with any SMTP backend.
+
+This closes the operational loop:
+Execution → SLA → Reports → PDF → Email → Audit Trail
+
+Remaining dependency:
+- Actual email deliverability depends on SMTP configuration, not application logic.

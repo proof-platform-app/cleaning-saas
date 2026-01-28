@@ -1310,6 +1310,44 @@ Planned improvements (v2+):
 All of the above is explicitly out of scope for MVP
 and must not affect the current predictable behavior.
 
+Reports Email v1 (Current state)
+
+В системе реализована реальная отправка PDF-отчётов по email:
+
+Job PDF reports
+
+Weekly / Monthly performance reports
+
+Email-отправка:
+
+инициируется менеджером из UI,
+
+выполняется backend’ом,
+
+использует единый генератор PDF (single source of truth).
+
+По умолчанию отчёт отправляется на email текущего пользователя (request.user.email), с возможностью передачи альтернативного email в запросе.
+
+### Reports Email & Audit Logging
+
+All outgoing report emails (job PDF, weekly reports, monthly reports) are handled exclusively on the backend and logged for audit purposes.
+
+Key points:
+- Email recipient can be selected by the manager (self or custom email).
+- Backend always accepts an optional `email` field; frontend never assumes delivery.
+- Every email send attempt creates a `ReportEmailLog` record:
+  - company
+  - initiating user
+  - report type (job / weekly / monthly)
+  - target email
+  - period (for weekly/monthly)
+  - status (sent / failed)
+  - error message (if any)
+
+Important:
+- Email delivery depends entirely on Django `EMAIL_BACKEND`.
+- In dev, console backend may be used; real delivery requires SMTP configuration.
+- UI success indicates backend execution, not guaranteed external delivery.
 
 ## DEV BRIEF — Job Details stability rules
 
