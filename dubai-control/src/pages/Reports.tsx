@@ -6,8 +6,11 @@ import {
   getWeeklyReport,
   getMonthlyReport,
   type ManagerReport,
+  emailWeeklyReport,
+  emailMonthlyReport,
 } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { Download, Mail } from "lucide-react";
 
 type ReportMode = "weekly" | "monthly";
 
@@ -103,6 +106,10 @@ function buildNarrativeSummary(report: ManagerReport): string {
 export default function Reports() {
   const [mode, setMode] = useState<ReportMode>("weekly");
 
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
   const {
     data: weekly,
     isLoading: weeklyLoading,
@@ -129,7 +136,7 @@ export default function Reports() {
   const narrative =
     !loading && !error && report ? buildNarrativeSummary(report) : "";
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadReportPdf = async () => {
     if (!report) return;
 
     // Определяем, какой PDF нужно скачать
@@ -178,6 +185,31 @@ export default function Reports() {
     }
   };
 
+  async function handleEmailReport() {
+    if (emailLoading) return;
+
+    try {
+      setEmailLoading(true);
+      setEmailSent(false);
+      setEmailError(null);
+
+      if (mode === "weekly") {
+        await emailWeeklyReport();
+      } else {
+        await emailMonthlyReport();
+      }
+
+      setEmailSent(true);
+    } catch (e) {
+      console.error("[Reports] Email report failed", e);
+      setEmailError(
+        e instanceof Error ? e.message : "Failed to email report",
+      );
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -191,20 +223,60 @@ export default function Reports() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant={mode === "weekly" ? "default" : "outline"}
-              onClick={() => setMode("weekly")}
-            >
-              Weekly
-            </Button>
-            <Button
-              variant={mode === "monthly" ? "default" : "outline"}
-              onClick={() => setMode("monthly")}
-            >
-              Monthly
-            </Button>
-            <Button onClick={handleDownloadPdf}>Download PDF</Button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant={mode === "weekly" ? "default" : "outline"}
+                onClick={() => {
+                  setMode("weekly");
+                  setEmailSent(false);
+                  setEmailError(null);
+                }}
+              >
+                Weekly
+              </Button>
+              <Button
+                variant={mode === "monthly" ? "default" : "outline"}
+                onClick={() => {
+                  setMode("monthly");
+                  setEmailSent(false);
+                  setEmailError(null);
+                }}
+              >
+                Monthly
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                className="border-border"
+                onClick={handleDownloadReportPdf}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download PDF
+              </Button>
+
+              <Button
+                variant="outline"
+                className="border-border"
+                onClick={handleEmailReport}
+                disabled={emailLoading}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                {emailLoading ? "Sending…" : "Email report"}
+              </Button>
+            </div>
+
+            {emailSent && (
+              <p className="text-xs text-emerald-600 mt-1">
+                Report email scheduled to your address.
+              </p>
+            )}
+
+            {emailError && (
+              <p className="text-xs text-red-500 mt-1">{emailError}</p>
+            )}
           </div>
         </div>
       </div>

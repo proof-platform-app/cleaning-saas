@@ -120,6 +120,15 @@ export default function Dashboard() {
     issues: todayJobs.filter((j) => j.status === "issue").length,
   };
 
+  const todayInGulf = new Date();
+  const todayLabel = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Dubai", // GST / UTC+4
+  }).format(todayInGulf);
+
   // Banner texts
   const bannerTitle =
     usage && usage.is_trial_expired
@@ -146,7 +155,7 @@ export default function Dashboard() {
             Today&apos;s Overview
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Monday, January 15, 2024 · GST (UTC+4)
+            {todayLabel} · GST (UTC+4)
           </p>
         </div>
 

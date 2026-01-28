@@ -854,6 +854,32 @@ export const apiClient = {
   },
 };
 
+// ---- Reports: email weekly / monthly (MVP stub) ----
+
+export async function emailWeeklyReport(email?: string): Promise<void> {
+  const body = email ? { email } : undefined;
+  await apiClient.post("/api/manager/reports/weekly/email/", body);
+}
+
+export async function emailMonthlyReport(email?: string): Promise<void> {
+  const body = email ? { email } : undefined;
+  await apiClient.post("/api/manager/reports/monthly/email/", body);
+}
+
+// ---- Job Reports ----
+
+export async function emailJobReport(
+  jobId: number,
+  email?: string
+): Promise<void> {
+  const body = email ? { email } : undefined;
+
+  await apiClient.post(
+    `/api/manager/jobs/${jobId}/report/email/`,
+    body
+  );
+}
+
 // ----- explicit exports for other modules -----
 export { API_BASE_URL };
 

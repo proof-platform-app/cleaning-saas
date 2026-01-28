@@ -1,6 +1,7 @@
 # backend/apps/api/views.py
 import os
 import uuid
+import logging
 from collections import Counter, defaultdict
 from datetime import timedelta, date, datetime
 from typing import List, Tuple
@@ -12,6 +13,9 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.conf import settings
+from django.core.mail import EmailMessage
+
 
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -39,6 +43,7 @@ from .serializers import (
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
 )
+logger = logging.getLogger(__name__)
 
 class LoginView(APIView):
     """
@@ -649,15 +654,14 @@ class JobPdfReportView(APIView):
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
         return resp
 
-
 class ManagerJobPdfEmailView(APIView):
     """
-    Stub-эндпоинт для отправки PDF-отчёта на email менеджера.
+    Реальная отправка PDF-отчёта на email менеджера.
 
     POST /api/manager/jobs/<id>/report/email/
     Body (опционально): { "email": "manager@example.com" }
 
-    В MVP НИЧЕГО не шлёт, только возвращает 202 Accepted.
+    Если email в body не передан — используем email текущего менеджера.
     """
 
     authentication_classes = [TokenAuthentication]
@@ -672,30 +676,79 @@ class ManagerJobPdfEmailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # job только внутри компании менеджера
         job = get_object_or_404(
             Job.objects.filter(company=user.company),
             pk=pk,
         )
 
         # email можно явно передать в body, иначе берём email текущего юзера
-        email = (request.data.get("email") or user.email or "").strip()
-        if not email:
+        target_email = (request.data.get("email") or user.email or "").strip()
+        if not target_email:
             return Response(
                 {"detail": "Email is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ⚠️ ВАЖНО: реальную отправку письма в MVP НЕ делаем.
-        # Сейчас просто возвращаем "ок, запланировали".
-        return Response(
-            {
-                "detail": "Email scheduled (MVP stub, not actually sent).",
-                "job_id": job.id,
-                "target_email": email,
-            },
-            status=status.HTTP_202_ACCEPTED,
+        # генерируем PDF тем же helper'ом, что и download-эндпоинт
+        try:
+            pdf_bytes = generate_job_report_pdf(job)
+        except Exception:
+            return Response(
+                {"detail": "Failed to generate PDF report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        if not pdf_bytes:
+            return Response(
+                {"detail": "PDF generation returned empty content."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # собираем письмо
+        subject = f"Job report #{job.id}"
+        body_lines = [
+            "Attached is the verified job report (PDF).",
+            "",
+            f"Job ID: {job.id}",
+            f"Location: {getattr(getattr(job, 'location', None), 'name', '')}",
+        ]
+        body = "\n".join(body_lines)
+
+        from_email = getattr(
+            settings,
+            "DEFAULT_FROM_EMAIL",
+            getattr(settings, "FOUNDER_DEMO_EMAIL", None),
+        ) or target_email
+
+        message = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=[target_email],
+        )
+        message.attach(
+            f"job_report_{job.id}.pdf",
+            pdf_bytes,
+            "application/pdf",
         )
 
+        try:
+            message.send(fail_silently=False)
+        except Exception:
+            return Response(
+                {"detail": "Failed to send email."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(
+            {
+                "detail": "PDF report emailed.",
+                "job_id": job.id,
+                "target_email": target_email,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class JobPhotosView(APIView):
     """
@@ -1792,6 +1845,84 @@ def _get_company_report(company, days: int) -> dict:
         "locations": locations,
         "top_reasons": top_reasons,
     }
+def _build_report_pdf(report_data: dict) -> bytes:
+    """
+    ВАЖНО:
+    Если у тебя уже есть функция генерации PDF для менеджерских отчётов —
+    используй её вместо этого stub-хедера.
+
+    Например, если Weekly/Monthly PDF делают что-то вроде:
+        pdf_bytes = build_company_report_pdf(report_data)
+
+    просто переименуй вызов ниже под своё имя.
+
+    Здесь предполагаем, что именно _build_report_pdf(report_data)
+    возвращает bytes готового PDF.
+    """
+    from .report_pdf import build_report_pdf  # пример, подставь свой модуль/функцию
+
+    return build_report_pdf(report_data)
+
+
+def _send_company_report_email(*, company, user, days: int) -> dict:
+    """
+    Генерирует агрегированный SLA-отчёт, строит PDF и отправляет его менеджеру.
+
+    days = 7  → weekly
+    days = 30 → monthly
+    """
+    report_data = _get_company_report(company, days=days)
+    period = report_data.get("period") or {}
+    date_from = period.get("from")
+    date_to = period.get("to")
+
+    if days == 7:
+        prefix = "Weekly"
+        filename_prefix = "weekly"
+    else:
+        prefix = "Monthly"
+        filename_prefix = "monthly"
+
+    subject = f"CleanProof — {prefix} SLA Report"
+    if date_from and date_to:
+        subject = f"{subject} ({date_from}–{date_to})"
+
+    lines = [
+        f"Company: {getattr(company, 'name', str(company))}",
+        (f"Period: {date_from} – {date_to}" if date_from and date_to else ""),
+        "",
+        "Attached is your SLA performance report generated by CleanProof.",
+    ]
+    body = "\n".join([line for line in lines if line])
+
+    pdf_bytes = _build_report_pdf(report_data)
+    if not pdf_bytes:
+        raise ValueError("Empty PDF for report")
+
+    safe_from = (date_from or "").replace(" ", "_")
+    safe_to = (date_to or "").replace(" ", "_")
+    filename = f"cleanproof-{filename_prefix}-sla-report-{safe_from}-{safe_to}.pdf"
+
+    target_email = (user.email or "").strip()
+    if not target_email:
+        raise ValueError("User has no email configured")
+
+    message = EmailMessage(
+        subject=subject,
+        body=body,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        to=[target_email],
+    )
+    message.attach(filename, pdf_bytes, "application/pdf")
+    message.send(fail_silently=False)
+
+    return {
+        "target_email": target_email,
+        "period": period,
+        "filename": filename,
+        "subject": subject,
+    }
+
 
 def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
     """
@@ -2151,3 +2282,160 @@ class ManagerMonthlyReportPdfView(APIView):
         resp = HttpResponse(pdf_bytes, content_type="application/pdf")
         resp["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
         return resp
+
+def _send_company_report_email(company: Company, days: int, target_email: str, frequency_label: str) -> dict:
+    """
+    Общий helper для weekly / monthly email-отчётов.
+
+    Генерирует SLA-отчёт, PDF, отправляет письмо и возвращает полезный payload
+    для API-ответа.
+    """
+    # Берём те же данные, что и для PDF-эндпоинтов
+    report_data = _get_company_report(company, days=days)
+    pdf_bytes = generate_company_sla_report_pdf(company, report_data)
+
+    period = report_data.get("period", {}) or {}
+    date_from = period.get("from", "")
+    date_to = period.get("to", "")
+
+    subject = f"[CleanProof] {frequency_label} SLA report {date_from} – {date_to}"
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@cleanproof.local")
+
+    message = (
+        f"Your {frequency_label.lower()} SLA performance report for "
+        f"{company.name} is attached as a PDF.\n\n"
+        f"Period: {date_from} – {date_to}."
+    )
+
+    email = EmailMessage(
+        subject=subject,
+        body=message,
+        from_email=from_email,
+        to=[target_email],
+    )
+    filename = f"{frequency_label.lower()}_report_{date_from}_to_{date_to}.pdf"
+    email.attach(filename, pdf_bytes, "application/pdf")
+    email.send(fail_silently=False)
+
+    return {
+        "target_email": target_email,
+        "period": {
+            "from": date_from,
+            "to": date_to,
+        },
+    }
+
+
+class WeeklyReportEmailView(APIView):
+    """
+    Отправка weekly SLA-отчёта менеджеру по email.
+
+    POST /api/manager/reports/weekly/email/
+    Body (опционально): { "email": "owner@example.com" }
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can email reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Можно передать email в body, иначе берём email менеджера
+        email = (request.data.get("email") or user.email or "").strip()
+        if not email:
+            return Response(
+                {"detail": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = _send_company_report_email(
+                company=company,
+                days=7,
+                target_email=email,
+                frequency_label="Weekly",
+            )
+        except Exception as exc:
+            logger.exception("Failed to send weekly report email", exc_info=exc)
+            return Response(
+                {"detail": "Failed to send weekly report email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "detail": "Weekly report emailed.",
+                **payload,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class MonthlyReportEmailView(APIView):
+    """
+    Отправка monthly SLA-отчёта менеджеру по email.
+
+    POST /api/manager/reports/monthly/email/
+    Body (опционально): { "email": "owner@example.com" }
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can email reports."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        email = (request.data.get("email") or user.email or "").strip()
+        if not email:
+            return Response(
+                {"detail": "Email is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = _send_company_report_email(
+                company=company,
+                days=30,
+                target_email=email,
+                frequency_label="Monthly",
+            )
+        except Exception as exc:
+            logger.exception("Failed to send monthly report email", exc_info=exc)
+            return Response(
+                {"detail": "Failed to send monthly report email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "detail": "Monthly report emailed.",
+                **payload,
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.locations",
     "apps.jobs",
     "apps.api",
+    "apps.marketing",
 ]
 
 
@@ -157,3 +158,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",
     "http://127.0.0.1:8081",
 ]
+# ------------------------------------------------------------
+# Email (DEV)
+# ------------------------------------------------------------
+
+# Куда приходят все системные письма:
+# - demo requests
+# - contact messages
+# - job PDF reports
+FOUNDER_DEMO_EMAIL = "photobp2019@gmail.com"
+
+# В dev-режиме письма НЕ отправляются реально,
+# а печатаются в консоль (терминал с runserver)
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# Формальный отправитель
+DEFAULT_FROM_EMAIL = FOUNDER_DEMO_EMAIL

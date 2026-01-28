@@ -8,6 +8,9 @@ import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import CleanProofHeader from "./CleanProofHeader";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 const CleanProofContact = () => {
   const [formData, setFormData] = useState({
     name: "",
@@ -17,6 +20,8 @@ const CleanProofContact = () => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -38,11 +43,66 @@ const CleanProofContact = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (validateForm()) {
+    setSubmitError(null);
+
+    if (!validateForm() || isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/public/contact-messages/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            company: formData.company || "",
+            email: formData.email,
+            message: formData.message,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        let message = "Something went wrong. Please try again.";
+        try {
+          const data = await response.json();
+          if (data && typeof data === "object") {
+            if (data.detail && typeof data.detail === "string") {
+              message = data.detail;
+            } else {
+              const parts: string[] = [];
+              if (Array.isArray(data.name)) {
+                parts.push(`Name: ${data.name.join(", ")}`);
+              }
+              if (Array.isArray(data.email)) {
+                parts.push(`Email: ${data.email.join(", ")}`);
+              }
+              if (Array.isArray(data.message)) {
+                parts.push(`Message: ${data.message.join(", ")}`);
+              }
+              if (parts.length) {
+                message = parts.join(" ");
+              }
+            }
+          }
+        } catch {
+          // ignore JSON parse errors, keep default message
+        }
+        setSubmitError(message);
+        return;
+      }
+
       setIsSubmitted(true);
-      // здесь позже добавим реальную отправку на backend
+    } catch (err) {
+      setSubmitError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -192,10 +252,17 @@ const CleanProofContact = () => {
                   {/* Submit Button */}
                   <Button
                     type="submit"
-                    className="w-full md:w-auto h-11 px-8 bg-primary text-primary-foreground hover:bg-primary/90 rounded-full"
+                    disabled={isSubmitting}
+                    className="w-full md:w-auto h-11 px-8 bg-primary text-primary-foreground hover:bg-primary/90 rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Send message
+                    {isSubmitting ? "Sending..." : "Send message"}
                   </Button>
+
+                  {submitError && (
+                    <p className="text-sm text-destructive mt-3">
+                      {submitError}
+                    </p>
+                  )}
                 </form>
 
                 {/* Helper text */}

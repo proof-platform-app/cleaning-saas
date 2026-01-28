@@ -1223,6 +1223,93 @@ UI:
 Это чистый UI — на API-контракт не влияет.
 
 ---
+### Email PDF — future improvements (post-MVP)
+
+Current behavior (v1):
+
+- “Email PDF” sends the job report to the **manager’s own email**
+- Email address is taken from the authenticated user (`request.user.email`)
+- No email selection UI
+- No history of sent emails
+- Purely operational workflow (manager → self)
+
+This behavior is **intentional** and correct for MVP.
+
+---
+
+Reports email functionality (v1) sends the report to the manager’s account email automatically.
+This keeps the flow simple and aligned with authenticated access.
+
+Future improvements (v2+):
+- Allow entering a custom recipient email before sending
+- Provide a dropdown with saved / previously used emails
+- Support sending reports directly to clients
+- Store report email history (timestamp, recipient, report period)
+- Allow sharing via downloadable link with access control
+
+---
+
+Planned improvements (v2+):
+
+1. **Email selection UI**
+   - Clicking “Email PDF” opens a lightweight inline input or modal
+   - Manager can:
+     - confirm their own email (default)
+     - enter a custom email address
+     - optionally select from previously used emails
+
+2. **Client delivery**
+   - Ability to send PDF directly to a client’s email
+   - Client email may be:
+     - stored on Location
+     - stored on Job
+     - entered manually at send time
+
+3. **Multiple recipients**
+   - Support for multiple emails (To / CC)
+   - Clear UI indication of recipients
+
+4. **Email delivery history**
+   - Store each email send event:
+     - job_id
+     - recipient email(s)
+     - sent_at
+     - sent_by (manager)
+   - Display delivery history in Job Details
+
+5. **Delivery confirmation**
+   - Explicit UI feedback:
+     - “Sent to: client@example.com”
+     - timestamp of last delivery
+
+All of the above is **explicitly out of scope for MVP**  
+and must not affect the current simple, predictable behavior.
+
+---
+
+### Email PDF — intentional MVP scope
+
+Current behavior (v1):
+
+- “Email PDF” sends the job report to the manager’s own email.
+- Recipient email is derived from the authenticated user (`request.user.email`).
+- No email selection UI.
+- No client delivery.
+- No email send history.
+
+This behavior is intentional and correct for MVP.
+
+Planned improvements (v2+):
+
+- Inline email input or modal when clicking “Email PDF”.
+- Ability to confirm manager email or enter a custom recipient.
+- Support for client email delivery.
+- Multiple recipients (To / CC).
+- Persistent email send history per job (recipient, timestamp, sender).
+
+All of the above is explicitly out of scope for MVP
+and must not affect the current predictable behavior.
+
 
 ## DEV BRIEF — Job Details stability rules
 

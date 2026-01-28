@@ -13,29 +13,91 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
 const CleanProofDemoRequest = () => {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     companyName: "",
     role: "",
     cleanerCount: "",
     contact: "",
+    country: "",
+    primaryPain: "",
   });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitted(true);
-  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const isFormValid =
-    formData.companyName &&
-    formData.role &&
-    formData.cleanerCount &&
-    formData.contact;
+    formData.companyName && formData.cleanerCount && formData.contact;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!isFormValid || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/public/demo-requests/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            company_name: formData.companyName,
+            role: formData.role || "",
+            cleaner_count: formData.cleanerCount || "",
+            contact: formData.contact,
+            country: formData.country || "",
+            primary_pain: formData.primaryPain || "",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        let message = "Something went wrong. Please try again.";
+        try {
+          const data = await response.json();
+          if (data && typeof data === "object") {
+            if (data.detail && typeof data.detail === "string") {
+              message = data.detail;
+            } else if (data.company_name || data.contact) {
+              const parts: string[] = [];
+              if (Array.isArray(data.company_name)) {
+                parts.push(`Company name: ${data.company_name.join(", ")}`);
+              }
+              if (Array.isArray(data.contact)) {
+                parts.push(`Contact: ${data.contact.join(", ")}`);
+              }
+              if (parts.length) {
+                message = parts.join(" ");
+              }
+            }
+          }
+        } catch {
+          // ignore JSON parse errors, keep default message
+        }
+        setSubmitError(message);
+        return;
+      }
+
+      // успех — показываем экран подтверждения
+      setIsSubmitted(true);
+    } catch (error) {
+      setSubmitError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[hsl(210,20%,98%)]">
@@ -221,6 +283,24 @@ const CleanProofDemoRequest = () => {
                             >
                               Operations Manager
                             </SelectItem>
+                            <SelectItem
+                              value="supervisor"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Supervisor
+                            </SelectItem>
+                            <SelectItem
+                              value="office-manager"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Office Manager
+                            </SelectItem>
+                            <SelectItem
+                              value="other"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Other
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -272,6 +352,82 @@ const CleanProofDemoRequest = () => {
 
                       <div className="space-y-2">
                         <Label
+                          htmlFor="country"
+                          className="text-gray-700 text-sm font-medium"
+                        >
+                          Country
+                        </Label>
+                        <Input
+                          id="country"
+                          type="text"
+                          value={formData.country}
+                          onChange={(e) =>
+                            handleInputChange("country", e.target.value)
+                          }
+                          placeholder="e.g. UAE, Saudi Arabia, UK"
+                          className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary/20 h-11"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="primaryPain"
+                          className="text-gray-700 text-sm font-medium"
+                        >
+                          Biggest challenge right now
+                        </Label>
+                        <Select
+                          value={formData.primaryPain}
+                          onValueChange={(value) =>
+                            handleInputChange("primaryPain", value)
+                          }
+                        >
+                          <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900 h-11 focus:ring-primary/20 focus:border-primary">
+                            <SelectValue placeholder="Select one" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white border-gray-200">
+                            <SelectItem
+                              value="prove-job-completion"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Hard to prove job completion to clients
+                            </SelectItem>
+                            <SelectItem
+                              value="missed-or-late-jobs"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Missed or late jobs
+                            </SelectItem>
+                            <SelectItem
+                              value="poor-cleaner-discipline"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Poor cleaner discipline
+                            </SelectItem>
+                            <SelectItem
+                              value="no-visibility"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              No visibility for managers
+                            </SelectItem>
+                            <SelectItem
+                              value="reports-take-too-long"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Reports for owners take too much time
+                            </SelectItem>
+                            <SelectItem
+                              value="other"
+                              className="text-gray-900 focus:bg-gray-100"
+                            >
+                              Other
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label
                           htmlFor="contact"
                           className="text-gray-700 text-sm font-medium"
                         >
@@ -292,14 +448,19 @@ const CleanProofDemoRequest = () => {
                     <div className="pt-2">
                       <Button
                         type="submit"
-                        disabled={!isFormValid}
+                        disabled={!isFormValid || isSubmitting}
                         className="w-full h-12 bg-primary text-white hover:bg-primary/90 font-medium text-base rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                       >
-                        Request demo
+                        {isSubmitting ? "Sending..." : "Request demo"}
                       </Button>
                       <p className="text-center text-sm text-gray-400 mt-4">
                         This is a demo request. No account will be created.
                       </p>
+                      {submitError && (
+                        <p className="text-center text-sm text-red-500 mt-3">
+                          {submitError}
+                        </p>
+                      )}
                     </div>
                   </form>
                 </div>

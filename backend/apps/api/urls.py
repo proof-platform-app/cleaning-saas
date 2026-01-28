@@ -1,4 +1,6 @@
 from django.urls import path
+from apps.marketing.views import DemoRequestCreateView, ContactMessageCreateView
+
 
 from apps.api.views import (
     # Auth
@@ -45,7 +47,9 @@ from apps.api.views import (
     ManagerWeeklyReportView,
     ManagerMonthlyReportView,
     ManagerWeeklyReportPdfView,    
-    ManagerMonthlyReportPdfView,     
+    ManagerMonthlyReportPdfView,
+    WeeklyReportEmailView,
+    MonthlyReportEmailView,     
 )
 
 # 👉 ВАЖНО: импортируем из apps.locations.app.views, а НЕ из apps.locations.api.views
@@ -109,7 +113,20 @@ urlpatterns = [
         ManagerJobPdfEmailView.as_view(),
         name="manager-job-report-email",
     ),
+    # =====================
+    # Marketing
+    # =====================
 
+    path(
+        "public/demo-requests/",
+        DemoRequestCreateView.as_view(),
+        name="public-demo-request-create",
+    ),
+    path(
+        "public/contact-messages/",
+        ContactMessageCreateView.as_view(),
+        name="public-contact-message-create",
+    ),
     # =====================
     # Manager
     # =====================
@@ -213,4 +230,13 @@ urlpatterns = [
         ManagerMonthlyReportPdfView.as_view(),
         name="manager-reports-monthly-pdf",
     ),
+    path(
+        "manager/reports/weekly/email/",
+        WeeklyReportEmailView.as_view(),
+    ),
+
+    path(
+        "manager/reports/monthly/email/",
+        MonthlyReportEmailView.as_view(),
+),
 ]

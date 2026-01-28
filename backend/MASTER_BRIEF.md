@@ -877,3 +877,29 @@ Execution → SLA → Performance → Reports → Evidence
 
 Reports strengthen perceived product value without increasing system complexity.
 They are intentionally conservative in scope and rely entirely on verified backend data.
+
+### Job reporting & email delivery (v1)
+
+Managers can generate, download, and email verified job reports.
+
+- PDF reports are generated on the backend from real execution data.
+- The same PDF source is used for UI download and email delivery.
+- “Email PDF” sends the report directly to the manager’s email.
+- No configuration or recipient selection is required.
+- This enables a simple one-click operational workflow:
+  manager → verified report → inbox.
+
+This functionality is fully implemented end-to-end
+and represents a completed manager-facing feature.
+
+### Reports & Email (v1 completed)
+
+CleanProof поддерживает отправку PDF-отчётов по email как часть операционного workflow:
+
+* PDF job report может быть отправлен менеджером в один клик.
+* Weekly и Monthly performance reports могут быть отправлены по email напрямую из Reports UI.
+* Все PDF формируются backend’ом и используют те же данные, что и UI (single source of truth).
+
+Email-отправка ориентирована на операционные сценарии (менеджер → владелец / руководство) и не является маркетинговой рассылкой.
+
+---
