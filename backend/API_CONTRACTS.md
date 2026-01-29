@@ -1734,6 +1734,28 @@ Content-Type: application/pdf
 Content-Disposition: attachment; filename="cleanproof-weekly-report.pdf"
 ```
 
+### Reports & Overview API
+
+Introduced read-only reporting endpoints for managerial and owner-level analytics.
+
+Endpoints:
+- `GET /api/manager/reports/weekly/`
+- `GET /api/manager/reports/monthly/`
+- `GET /api/owner/overview/?days=<number>`
+
+These endpoints return aggregated, precomputed metrics and do not expose raw job data.
+
+Owner overview response includes:
+- period (from / to)
+- jobs_count
+- violations_count
+- issue_rate
+- top_locations (by issues)
+- top_cleaners (by volume and issues)
+- top_reasons (SLA violation codes)
+
+All reports are informational and do not affect job state or business logic.
+
 ### 9.2. Job report email (v1 — краткий контракт)
 
 #### 9.2.1. `POST /api/manager/jobs/{id}/report/email/` (основной контракт)

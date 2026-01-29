@@ -377,6 +377,24 @@ Frontend:
 * готов к расширению (time-based rules, repeated violations, analytics).
 
 ---
+### Reports & Sidebar UX (v1)
+
+Reports page is implemented as a read-only aggregation layer over existing job and SLA data.
+No new business logic introduced — backend remains the single source of truth.
+
+Frontend updates:
+- Added collapsible sidebar (expanded / icon-only mode)
+- Sidebar state persisted via localStorage
+- Main layout supports full-width content when sidebar is collapsed
+- Reports page includes owner overview and manager-level summaries
+
+Known limitations:
+- Layout width is controlled per-page (some pages still use max-width containers)
+- PDF and email actions are stubbed (UI only)
+
+Current state is considered stable and suitable for demo and early customers.
+
+---
 
 ## Performance Layer (SLA Aggregation)
 

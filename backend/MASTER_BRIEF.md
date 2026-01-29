@@ -920,6 +920,25 @@ Execution → SLA → Reports → PDF → Email → Audit Trail
 Remaining dependency:
 - Actual email deliverability depends on SMTP configuration, not application logic.
 
+### Reporting & Management UX — Status
+
+Reporting functionality is implemented as a first-class management feature.
+
+What is done:
+- Owner overview with aggregated KPIs (jobs, SLA issues, issue rate)
+- Weekly and monthly manager reports
+- Clear separation between owner-facing and manager-facing data
+- Collapsible sidebar improving workspace focus and screen usage
+- Trial and company-blocked UX handled explicitly in Create Job flow
+
+Important note:
+Reports are intentionally non-interactive and explanatory.
+They serve as evidence and decision support, not as operational controls.
+
+This milestone closes the initial “management visibility” gap
+and enables CleanProof to be positioned as a compliance & accountability tool,
+not just a job tracker.
+
 ### Commercial enforcement & read-only mode (DONE)
 
 CleanProof implements a backend-driven commercial enforcement model.
