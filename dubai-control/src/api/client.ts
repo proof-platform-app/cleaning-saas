@@ -1,5 +1,7 @@
 // dubai-control/src/api/client.ts
 
+import type { OwnerOverview } from "@/types/reports";
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -978,6 +980,15 @@ export async function getWeeklyReport(): Promise<ManagerReport> {
 export async function getMonthlyReport(): Promise<ManagerReport> {
   const res = await apiClient.get<ManagerReport>(
     "/api/manager/reports/monthly/"
+  );
+  return res.data;
+}
+export async function getOwnerOverview(
+  days?: number
+): Promise<OwnerOverview> {
+  const params = days ? `?days=${days}` : "";
+  const res = await apiClient.get<OwnerOverview>(
+    `/api/owner/overview/${params}`
   );
   return res.data;
 }

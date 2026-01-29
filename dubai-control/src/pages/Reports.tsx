@@ -1,14 +1,16 @@
 // dubai-control/src/pages/Reports.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getWeeklyReport,
   getMonthlyReport,
-  type ManagerReport,
   emailWeeklyReport,
   emailMonthlyReport,
+  getOwnerOverview,
+  type ManagerReport,
 } from "@/api/client";
+import type { OwnerOverview } from "@/types/reports";
 import { Button } from "@/components/ui/button";
 import { Download, Mail } from "lucide-react";
 import {
@@ -39,11 +41,8 @@ function buildHistoryUrl({
 }: HistoryJumpOptions): string {
   const params = new URLSearchParams();
 
-  // Период отчёта → период в History
   params.set("date_from", periodFrom);
   params.set("date_to", periodTo);
-
-  // Reports всегда про проблемы, поэтому сразу фильтруем violated
   params.set("sla_status", "violated");
 
   if (cleanerId) {
@@ -74,12 +73,10 @@ function buildNarrativeSummary(report: ManagerReport): string {
 
   const sentences: string[] = [];
 
-  // 1) Общее количество работ
   sentences.push(
     `In the selected period, ${jobsCount} ${jobsWord} were completed.`,
   );
 
-  // 2) Нарушения SLA
   if (violationsCount > 0) {
     sentences.push(
       `${violationsCount} SLA ${violationsWord} were detected (${issueRatePct}% issue rate).`,
@@ -88,7 +85,6 @@ function buildNarrativeSummary(report: ManagerReport): string {
     sentences.push("No SLA violations were detected.");
   }
 
-  // 3) Основные причины (до двух штук)
   if (violationsCount > 0 && top_reasons.length > 0) {
     const topTwo = top_reasons.slice(0, 2);
     const reasonsText = topTwo
@@ -99,7 +95,6 @@ function buildNarrativeSummary(report: ManagerReport): string {
     }
   }
 
-  // 4) Основная локация по проблемам
   if (violationsCount > 0 && locations.length > 0) {
     const sorted = [...locations].sort(
       (a, b) => b.violations_count - a.violations_count,
@@ -116,6 +111,10 @@ function buildNarrativeSummary(report: ManagerReport): string {
 export default function Reports() {
   const [mode, setMode] = useState<ReportMode>("weekly");
 
+  const [ownerOverview, setOwnerOverview] = useState<OwnerOverview | null>(null);
+  const [ownerLoading, setOwnerLoading] = useState<boolean>(true);
+  const [ownerError, setOwnerError] = useState<string | null>(null);
+
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -124,6 +123,36 @@ export default function Reports() {
   const [emailMode, setEmailMode] = useState<"self" | "custom">("self");
   const [customEmail, setCustomEmail] = useState("");
   const [customEmailError, setCustomEmailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOwnerOverview() {
+      try {
+        setOwnerLoading(true);
+        setOwnerError(null);
+
+        const data = await getOwnerOverview(); // по умолчанию 30 дней
+        if (cancelled) return;
+
+        setOwnerOverview(data);
+      } catch (err: any) {
+        if (cancelled) return;
+        setOwnerError(err?.message || "Failed to load owner overview");
+        setOwnerOverview(null);
+      } finally {
+        if (!cancelled) {
+          setOwnerLoading(false);
+        }
+      }
+    }
+
+    void loadOwnerOverview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     data: weekly,
@@ -154,15 +183,12 @@ export default function Reports() {
   const handleDownloadReportPdf = async () => {
     if (!report) return;
 
-    // Определяем, какой PDF нужно скачать
     const endpoint =
       mode === "weekly"
         ? "/api/manager/reports/weekly/pdf/"
         : "/api/manager/reports/monthly/pdf/";
 
     try {
-      // ⚠️ Используем тот же базовый URL и токен, что и остальной фронт.
-      // Если у тебя ключ в localStorage называется иначе — подправь строку ниже.
       const apiBase =
         import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
       const token =
@@ -203,7 +229,6 @@ export default function Reports() {
   async function handleEmailReportSubmit() {
     if (emailLoading) return;
 
-    // выбираем email в зависимости от режима
     let emailToSend: string | undefined;
 
     if (emailMode === "custom") {
@@ -415,6 +440,163 @@ export default function Reports() {
 
       {/* Content */}
       <div className="px-6 py-6 max-w-7xl mx-auto space-y-6">
+        {/* ==== OWNER LAYER =================================================== */}
+        <div className="mb-10 rounded-2xl border border-border bg-muted/40 px-6 py-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                For owners
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-foreground">
+                Owner overview
+              </h2>
+              {ownerOverview && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Last 30 days · {ownerOverview.period.from} –{" "}
+                  {ownerOverview.period.to}
+                </p>
+              )}
+            </div>
+
+            {ownerLoading && (
+              <span className="text-xs text-muted-foreground">Loading…</span>
+            )}
+          </div>
+
+          {ownerError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Failed to load owner overview: {ownerError}
+            </div>
+          )}
+
+          {ownerOverview && !ownerError && (
+            <>
+              {/* KPI cards */}
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-border bg-background px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Jobs (period)
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">
+                    {ownerOverview.summary.jobs_count}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-background px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Jobs with issues
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">
+                    {ownerOverview.summary.violations_count}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border bg-background px-4 py-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Issue rate
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-foreground">
+                    {(ownerOverview.summary.issue_rate * 100).toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Top locations & cleaners */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Top locations by issues
+                  </h3>
+                  {ownerOverview.top_locations.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No locations with issues in this period.
+                    </p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border text-muted-foreground">
+                        <tr>
+                          <th className="py-1 pr-2 font-medium">Location</th>
+                          <th className="px-2 py-1 text-right font-medium">
+                            Jobs
+                          </th>
+                          <th className="px-2 py-1 text-right font-medium">
+                            With issues
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ownerOverview.top_locations.map((loc) => (
+                          <tr
+                            key={loc.id}
+                            className="border-b border-border/60"
+                          >
+                            <td className="py-1 pr-2">{loc.name}</td>
+                            <td className="px-2 py-1 text-right">
+                              {loc.jobs_count}
+                            </td>
+                            <td className="px-2 py-1 text-right">
+                              {loc.violations_count}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Top cleaners by volume
+                  </h3>
+                  {ownerOverview.top_cleaners.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No cleaner activity in this period.
+                    </p>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border text-muted-foreground">
+                        <tr>
+                          <th className="py-1 pr-2 font-medium">Cleaner</th>
+                          <th className="px-2 py-1 text-right font-medium">
+                            Jobs
+                          </th>
+                          <th className="px-2 py-1 text-right font-medium">
+                            With issues
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ownerOverview.top_cleaners.map((cl) => (
+                          <tr
+                            key={cl.id}
+                            className="border-b border-border/60"
+                          >
+                            <td className="py-1 pr-2">{cl.name}</td>
+                            <td className="px-2 py-1 text-right">
+                              {cl.jobs_count}
+                            </td>
+                            <td className="px-2 py-1 text-right">
+                              {cl.violations_count}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ==== MANAGER LAYER SEPARATOR ======================================= */}
+        <div className="mb-4 mt-2 border-t border-border pt-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            For managers
+          </p>
+          <h2 className="mt-1 text-base font-semibold text-foreground">
+            Weekly & monthly SLA reports
+          </h2>
+        </div>
+
         {loading && (
           <p className="text-sm text-muted-foreground">
             Loading {title.toLowerCase()}…
@@ -577,7 +759,7 @@ export default function Reports() {
                   {report.top_reasons.map((r) => (
                     <li
                       key={r.code}
-                      className="flex items-center justify_between"
+                      className="flex items-center justify-between"
                     >
                       <span>{formatReasonCode(r.code)}</span>
                       <span className="text-muted-foreground">

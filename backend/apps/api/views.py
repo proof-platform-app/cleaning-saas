@@ -2016,6 +2016,62 @@ def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
     sla_status = "violated" if reasons else "ok"
     return sla_status, reasons
 
+class OwnerOverviewView(APIView):
+    """
+    High-level business overview для владельца компании.
+
+    GET /api/owner/overview/?days=30
+
+    Использует тот же SLA-отчёт, что и weekly/monthly, но возвращает
+    только агрегаты и топы, нужные для управленческих решений.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # Пока владельца представляем как manager-аккаунт компании
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can access owner overview."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "No company associated with user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Параметр периода в днях (дефолт 30 — месяц)
+        days_param = (request.query_params.get("days") or "").strip()
+        try:
+            days = int(days_param) if days_param else 30
+        except ValueError:
+            days = 30
+
+        # Не даём ставить совсем странные значения
+        if days < 7:
+            days = 7
+        if days > 90:
+            days = 90
+
+        report = _get_company_report(company, days=days)
+
+        overview = {
+            "period": report.get("period", {}),
+            "summary": report.get("summary", {}),
+            # Топ-5 проблемных локаций и клинеров
+            "top_locations": report.get("locations", [])[:5],
+            "top_cleaners": report.get("cleaners", [])[:5],
+            "top_reasons": report.get("top_reasons", []),
+        }
+
+        return Response(overview, status=status.HTTP_200_OK)
+
 class ManagerPerformanceView(APIView):
     """
     SLA performance summary для менеджера.

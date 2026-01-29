@@ -11,7 +11,9 @@ import {
   MapPin,
   Clock3,
   BarChart3,
-  FileText, // 👈 иконка для Reports
+  FileText,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const navigation = [
@@ -20,32 +22,72 @@ const navigation = [
   { name: "Job Planning", href: "/planning", icon: CalendarDays },
   { name: "Job History", href: "/history", icon: Clock3 },
   { name: "Performance", href: "/performance", icon: BarChart3 },
-  { name: "Reports", href: "/reports", icon: FileText }, // 👈 NEW
+  { name: "Reports", href: "/reports", icon: FileText },
   { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-export function AppSidebar() {
+type AppSidebarProps = {
+  collapsed: boolean;
+  onToggle: () => void;
+};
+
+export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-sidebar flex flex-col">
-      {/* Logo */}
-      <div className="flex h-16 items-center px-6 border-b border-border">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-semibold text-sm">
-              SC
-            </span>
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-sidebar transition-all duration-200 ease-out",
+        collapsed ? "w-16" : "w-64",
+      )}
+    >
+      {/* Header + logo */}
+      <div className="flex h-16 items-center justify-between border-b border-border px-3">
+        <div
+          className={cn(
+            "flex items-center gap-3",
+            collapsed && "w-full justify-center",
+            !collapsed && "flex-1",
+          )}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
+            SC
           </div>
-          <span className="font-semibold text-foreground tracking-tight">
-            CleanProof
-          </span>
+          {!collapsed && (
+            <span className="font-semibold tracking-tight text-foreground">
+              CleanProof
+            </span>
+          )}
         </div>
+
+        {/* Стрелка только в широком режиме — справа, нейтральная */}
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
+      {/* Стрелка в свернутом режиме — отдельной строкой, тоже нейтральная */}
+      {collapsed && (
+        <div className="flex items-center justify-center border-b border-border py-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 space-y-1 px-2 py-4">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
 
@@ -54,27 +96,33 @@ export function AppSidebar() {
               key={item.name}
               to={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+                "flex items-center rounded-lg text-sm font-medium transition-all duration-200 ease-out",
+                collapsed
+                  ? "justify-center px-0 py-3"
+                  : "justify-start gap-3 px-3 py-2.5",
                 isActive
                   ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
               )}
             >
-              <item.icon className="w-5 h-5" />
-              {item.name}
+              <item.icon className="h-5 w-5" />
+              {!collapsed && <span>{item.name}</span>}
             </NavLink>
           );
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-border">
+      {/* Footer / Sign out */}
+      <div className="border-t border-border p-3">
         <NavLink
           to="/"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-all duration-150"
+          className={cn(
+            "flex items-center rounded-lg text-sm font-medium text-muted-foreground transition-all duration-200 ease-out hover:bg-sidebar-accent hover:text-foreground",
+            collapsed ? "justify-center px-0 py-2.5" : "justify-start gap-3 px-3 py-2.5",
+          )}
         >
-          <LogOut className="w-5 h-5" />
-          Sign Out
+          <LogOut className="h-5 w-5" />
+          {!collapsed && <span>Sign Out</span>}
         </NavLink>
       </div>
     </aside>
