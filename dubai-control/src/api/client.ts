@@ -186,10 +186,23 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
   if (!resp.ok) {
     const text = await resp.text();
-    console.error("API error", resp.status, resp.statusText, text);
-    throw new Error(
-      `API ${resp.status} ${resp.statusText}: ${text || "Unknown error"}`
-    );
+
+    let data: any;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { detail: text || "Unknown error" };
+    }
+
+    console.error("API error", resp.status, resp.statusText, data);
+
+    const error: any = new Error("API request failed");
+    error.response = {
+      status: resp.status,
+      statusText: resp.statusText,
+      data,
+    };
+    throw error;
   }
 
   if (resp.status === 204) {
@@ -879,10 +892,7 @@ export async function emailJobReport(
 ): Promise<void> {
   const body = email ? { email } : undefined;
 
-  await apiClient.post(
-    `/api/manager/jobs/${jobId}/report/email/`,
-    body
-  );
+  await apiClient.post(`/api/manager/jobs/${jobId}/report/email/`, body);
 }
 
 // ----- explicit exports for other modules -----

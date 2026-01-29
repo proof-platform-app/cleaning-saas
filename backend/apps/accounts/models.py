@@ -31,6 +31,22 @@ class Company(models.Model):
     notification_enabled = models.BooleanField(default=False)
     ramadan_mode_enabled = models.BooleanField(default=False)
 
+    # Управление активностью компании
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Если False — компания в read-only режиме (нет новых действий).",
+    )
+    suspended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Когда компанию перевели в suspended (для ручного контроля).",
+    )
+    suspended_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Короткая причина блокировки (видна только в админке).",
+    )
+
     # -------- TRIAL / PLAN --------
 
     PLAN_TRIAL = "trial"
@@ -143,11 +159,19 @@ class Company(models.Model):
     def is_blocked(self) -> bool:
         """
         Компания заблокирована, если:
+        - явно выключена (is_active = False)
         - план = blocked
         - или trial истёк
         """
+        # ручная блокировка (manual commercial mode)
+        if not self.is_active:
+            return True
+
+        # системная блокировка планом
         if self.plan == self.PLAN_BLOCKED:
             return True
+
+        # истёкший trial
         return self.is_trial_expired()
 
     def start_standard_trial(self, days: int = 7) -> None:
@@ -169,6 +193,17 @@ class Company(models.Model):
         self.trial_started_at = now
         self.trial_expires_at = now + timedelta(days=days)
         self.save(update_fields=["plan", "trial_started_at", "trial_expires_at"])
+
+    # --- Suspension helpers ---
+
+    def suspend(self, reason: str = ""):
+        """
+        Перевести компанию в suspended/read-only состояние.
+        """
+        self.is_active = False
+        self.suspended_at = timezone.now()
+        self.suspended_reason = reason[:255]
+        self.save(update_fields=["is_active", "suspended_at", "suspended_reason"])
 
 
 class UserManager(BaseUserManager):

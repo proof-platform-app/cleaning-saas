@@ -68,12 +68,15 @@ export function CreateJobDrawer({
   // ===== ui state =====
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitErrorCode, setSubmitErrorCode] = useState<string | null>(null);
   const [trialExpired, setTrialExpired] = useState(false);
+  const [companyBlocked, setCompanyBlocked] = useState(false);
 
   const canInteract =
     !metaLoading &&
     !submitting &&
     !trialExpired &&
+    !companyBlocked &&
     !locationsLoading &&
     locations.length > 0;
 
@@ -118,7 +121,9 @@ export function CreateJobDrawer({
     setEndTime("12:00");
     setManagerNotes("");
     setSubmitError(null);
+    setSubmitErrorCode(null);
     setTrialExpired(false);
+    setCompanyBlocked(false);
 
     // обновим locations (на случай если их добавили на другой вкладке давно)
     void reloadLocations();
@@ -159,72 +164,102 @@ export function CreateJobDrawer({
   if (!open) return null;
 
   // ===== submit =====
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!meta || metaLoading) return;
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  if (!meta || metaLoading) return;
 
-    if (locations.length === 0) {
-      setSubmitError("Please create at least one location first.");
-      return;
+  // базовые проверки
+  if (locations.length === 0) {
+    setSubmitError("Please create at least one location first.");
+    setSubmitErrorCode(null);
+    return;
+  }
+
+  if (!date || !locationId || !cleanerId) {
+    setSubmitError("Date, location and cleaner are required.");
+    setSubmitErrorCode(null);
+    return;
+  }
+
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+
+  if (startMinutes == null || endMinutes == null) {
+    setSubmitError("Invalid time format.");
+    setSubmitErrorCode(null);
+    return;
+  }
+
+  if (endMinutes <= startMinutes) {
+    setSubmitError("End time must be later than start time.");
+    setSubmitErrorCode(null);
+    return;
+  }
+
+  setSubmitting(true);
+  setSubmitError(null);
+  setSubmitErrorCode(null);
+  setTrialExpired(false);
+  setCompanyBlocked(false);
+
+  try {
+    const job = await createPlanningJob({
+      scheduled_date: date,
+      scheduled_start_time: normalizeTimeToSeconds(startTime),
+      scheduled_end_time: normalizeTimeToSeconds(endTime),
+      location_id: locationId,
+      cleaner_id: cleanerId,
+      checklist_template_id: checklistTemplateId,
+      // manager_notes пока не отправляем в API
+    });
+
+    onJobCreated(job);
+    onClose();
+  } catch (err: any) {
+    console.error("Failed to create job", err);
+
+    const apiData = err?.response?.data;
+    const msg = String(err?.message ?? "");
+
+    // Пытаемся достать код из разных мест:
+    // 1) err.code — из planning.ts (TrialExpiredError / company_blocked)
+    // 2) payload из response.data
+    let apiCode: string | undefined =
+      (err as any)?.code ||
+      apiData?.code ||
+      apiData?.error_code ||
+      apiData?.error ||
+      apiData?.detail?.code;
+
+    const isTrialExpired =
+      apiCode === "trial_expired" ||
+      msg.includes('"code":"trial_expired"') ||
+      msg.includes("trial_expired");
+
+    if (isTrialExpired) {
+      setTrialExpired(true);
+      setSubmitError(
+        "Your free trial has ended. You can still view existing jobs and reports, but creating new jobs requires an upgrade."
+      );
+      setSubmitErrorCode("trial_expired");
+    } else if (apiCode === "company_blocked") {
+      setCompanyBlocked(true);
+      setSubmitErrorCode("company_blocked");
+      // тут специально НЕ ставим текст ошибки,
+      // чтобы показывался только жёлтый блок, без красной строки
+      setSubmitError(null);
+    } else {
+      const detail =
+        (typeof apiData === "string" ? apiData : apiData?.detail) ??
+        err?.message ??
+        "Failed to create job.";
+      setSubmitError(detail);
+      setSubmitErrorCode(apiCode ?? null);
     }
-
-    if (!date || !locationId || !cleanerId) {
-      setSubmitError("Date, location and cleaner are required.");
-      return;
-    }
-
-    const startMinutes = parseTimeToMinutes(startTime);
-    const endMinutes = parseTimeToMinutes(endTime);
-
-    if (startMinutes == null || endMinutes == null) {
-      setSubmitError("Invalid time format.");
-      return;
-    }
-
-    if (endMinutes <= startMinutes) {
-      setSubmitError("End time must be later than start time.");
-      return;
-    }
-
-    setSubmitting(true);
-    setSubmitError(null);
-    setTrialExpired(false);
-
-    try {
-      const job = await createPlanningJob({
-        scheduled_date: date,
-        scheduled_start_time: normalizeTimeToSeconds(startTime),
-        scheduled_end_time: normalizeTimeToSeconds(endTime),
-        location_id: locationId,
-        cleaner_id: cleanerId,
-        checklist_template_id: checklistTemplateId,
-        // manager_notes пока не отправляем в API
-      });
-
-      onJobCreated(job);
-      onClose();
-    } catch (err: any) {
-      console.error("Failed to create job", err);
-
-      const msg = String(err?.message ?? "");
-
-      const isTrialExpired =
-        msg.includes('"code":"trial_expired"') || msg.includes("trial_expired");
-
-      if (isTrialExpired) {
-        setTrialExpired(true);
-        setSubmitError(
-          "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade."
-        );
-      } else {
-        setSubmitError(
-          err?.response?.data?.detail || err?.message || "Failed to create job."
-        );
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const showLoading = (metaLoading && !meta) || locationsLoading;
   const showError = metaError || locationsError;
@@ -288,7 +323,7 @@ export function CreateJobDrawer({
                       <button
                         type="button"
                         className="flex w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        disabled={!canInteract && locations.length > 0 ? false : false}
+                        // тут раньше был странный disabled, оставляем интерактивность
                       >
                         <span className="flex items-center gap-2">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -421,9 +456,26 @@ export function CreateJobDrawer({
                   />
                 </div>
 
-                {submitError && (
-                  <p className="text-sm text-destructive">{submitError}</p>
+                {/* company_blocked notice */}
+                {submitErrorCode === "company_blocked" && (
+                  <div className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
+                    <div className="font-medium mb-1">⚠️ Account suspended</div>
+                    <p>
+                      Your company account is currently suspended. You can view
+                      existing jobs and reports, but creating new jobs is
+                      temporarily disabled.
+                    </p>
+                    <p className="mt-1">
+                      If you believe this is a mistake, please contact support.
+                    </p>
+                  </div>
                 )}
+
+                {/* generic error (без raw дубля для company_blocked) */}
+                {submitError &&
+                  submitErrorCode !== "company_blocked" && (
+                    <p className="text-sm text-destructive">{submitError}</p>
+                  )}
 
                 <div className="flex gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={handleClose}>
@@ -434,11 +486,13 @@ export function CreateJobDrawer({
                     className="flex-1"
                     disabled={!canInteract}
                   >
-                    {trialExpired
-                      ? "Upgrade required"
-                      : submitting
-                        ? "Creating…"
-                        : "Create job"}
+                    {companyBlocked
+                      ? "Account suspended"
+                      : trialExpired
+                        ? "Upgrade required"
+                        : submitting
+                          ? "Creating…"
+                          : "Create job"}
                   </Button>
                 </div>
               </form>
