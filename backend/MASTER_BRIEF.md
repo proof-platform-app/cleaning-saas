@@ -919,3 +919,20 @@ Execution → SLA → Reports → PDF → Email → Audit Trail
 
 Remaining dependency:
 - Actual email deliverability depends on SMTP configuration, not application logic.
+
+### Commercial enforcement & read-only mode (DONE)
+
+CleanProof implements a backend-driven commercial enforcement model.
+
+* Company activity is controlled via explicit backend flags.
+* Suspended companies operate in a **read-only mode**:
+  * all data (jobs, reports) remains accessible
+  * creation of new entities is blocked at the API level
+* API returns explicit machine-readable error codes (`company_blocked`, `trial_expired`).
+
+The Manager Portal handles these states gracefully:
+* users receive clear, non-error UX messaging
+* blocked actions are explained, not silently failing
+
+This provides a clean separation between operational logic and commercial control,
+and allows billing systems to be integrated later without refactoring core flows.

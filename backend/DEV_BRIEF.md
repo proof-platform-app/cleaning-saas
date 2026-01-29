@@ -1,3 +1,4 @@
+````md
 # DEV_BRIEF.md — Cleaning SaaS
 
 (Frontend / Mobile integration guide)
@@ -131,7 +132,7 @@ Scope заморожен: дальше — только правки копир�
 
 Будущий enhancement (вне текущего scope):
 
-* address autocomplete / geокодинг через внешнего провайдера (не Google по умолчанию);
+* address autocomplete / геокодинг через внешнего провайдера (не Google по умолчанию);
 * опциональное действие “Find on map”;
 * при этом ручное подтверждение точки на карте остаётся финальным шагом.
 
@@ -1223,15 +1224,18 @@ UI:
 Это чистый UI — на API-контракт не влияет.
 
 ---
+
+## Email PDF / Reports Email
+
 ### Email PDF — future improvements (post-MVP)
 
 Current behavior (v1):
 
-- “Email PDF” sends the job report to the **manager’s own email**
-- Email address is taken from the authenticated user (`request.user.email`)
-- No email selection UI
-- No history of sent emails
-- Purely operational workflow (manager → self)
+* “Email PDF” sends the job report to the **manager’s own email**
+* Email address is taken from the authenticated user (`request.user.email`)
+* No email selection UI
+* No history of sent emails
+* Purely operational workflow (manager → self)
 
 This behavior is **intentional** and correct for MVP.
 
@@ -1241,48 +1245,58 @@ Reports email functionality (v1) sends the report to the manager’s account ema
 This keeps the flow simple and aligned with authenticated access.
 
 Future improvements (v2+):
-- Allow entering a custom recipient email before sending
-- Provide a dropdown with saved / previously used emails
-- Support sending reports directly to clients
-- Store report email history (timestamp, recipient, report period)
-- Allow sharing via downloadable link with access control
+
+* Allow entering a custom recipient email before sending
+* Provide a dropdown with saved / previously used emails
+* Support sending reports directly to clients
+* Store report email history (timestamp, recipient, report period)
+* Allow sharing via downloadable link with access control
 
 ---
 
 Planned improvements (v2+):
 
 1. **Email selection UI**
-   - Clicking “Email PDF” opens a lightweight inline input or modal
-   - Manager can:
-     - confirm their own email (default)
-     - enter a custom email address
-     - optionally select from previously used emails
+
+   * Clicking “Email PDF” opens a lightweight inline input or modal
+   * Manager can:
+
+     * confirm their own email (default)
+     * enter a custom email address
+     * optionally select from previously used emails
 
 2. **Client delivery**
-   - Ability to send PDF directly to a client’s email
-   - Client email may be:
-     - stored on Location
-     - stored on Job
-     - entered manually at send time
+
+   * Ability to send PDF directly to a client’s email
+   * Client email may be:
+
+     * stored on Location
+     * stored on Job
+     * entered manually at send time
 
 3. **Multiple recipients**
-   - Support for multiple emails (To / CC)
-   - Clear UI indication of recipients
+
+   * Support for multiple emails (To / CC)
+   * Clear UI indication of recipients
 
 4. **Email delivery history**
-   - Store each email send event:
-     - job_id
-     - recipient email(s)
-     - sent_at
-     - sent_by (manager)
-   - Display delivery history in Job Details
+
+   * Store each email send event:
+
+     * job_id
+     * recipient email(s)
+     * sent_at
+     * sent_by (manager)
+   * Display delivery history in Job Details
 
 5. **Delivery confirmation**
-   - Explicit UI feedback:
-     - “Sent to: client@example.com”
-     - timestamp of last delivery
 
-All of the above is **explicitly out of scope for MVP**  
+   * Explicit UI feedback:
+
+     * “Sent to: [client@example.com](mailto:client@example.com)”
+     * timestamp of last delivery
+
+All of the above is **explicitly out of scope for MVP**
 and must not affect the current simple, predictable behavior.
 
 ---
@@ -1291,63 +1305,92 @@ and must not affect the current simple, predictable behavior.
 
 Current behavior (v1):
 
-- “Email PDF” sends the job report to the manager’s own email.
-- Recipient email is derived from the authenticated user (`request.user.email`).
-- No email selection UI.
-- No client delivery.
-- No email send history.
+* “Email PDF” sends the job report to the manager’s own email.
+* Recipient email is derived from the authenticated user (`request.user.email`).
+* No email selection UI.
+* No client delivery.
+* No email send history.
 
 This behavior is intentional and correct for MVP.
 
 Planned improvements (v2+):
 
-- Inline email input or modal when clicking “Email PDF”.
-- Ability to confirm manager email or enter a custom recipient.
-- Support for client email delivery.
-- Multiple recipients (To / CC).
-- Persistent email send history per job (recipient, timestamp, sender).
+* Inline email input or modal when clicking “Email PDF”.
+* Ability to confirm manager email or enter a custom recipient.
+* Support for client email delivery.
+* Multiple recipients (To / CC).
+* Persistent email send history per job (recipient, timestamp, sender).
 
 All of the above is explicitly out of scope for MVP
 and must not affect the current predictable behavior.
 
-Reports Email v1 (Current state)
+---
+
+### Reports Email v1 (Current state)
 
 В системе реализована реальная отправка PDF-отчётов по email:
 
-Job PDF reports
-
-Weekly / Monthly performance reports
+* Job PDF reports
+* Weekly / Monthly performance reports
 
 Email-отправка:
 
-инициируется менеджером из UI,
+* инициируется менеджером из UI,
+* выполняется backend’ом,
+* использует единый генератор PDF (single source of truth).
 
-выполняется backend’ом,
-
-использует единый генератор PDF (single source of truth).
-
-По умолчанию отчёт отправляется на email текущего пользователя (request.user.email), с возможностью передачи альтернативного email в запросе.
+По умолчанию отчёт отправляется на email текущего пользователя (`request.user.email`),
+с возможностью передачи альтернативного email в запросе.
 
 ### Reports Email & Audit Logging
 
 All outgoing report emails (job PDF, weekly reports, monthly reports) are handled exclusively on the backend and logged for audit purposes.
 
 Key points:
-- Email recipient can be selected by the manager (self or custom email).
-- Backend always accepts an optional `email` field; frontend never assumes delivery.
-- Every email send attempt creates a `ReportEmailLog` record:
-  - company
-  - initiating user
-  - report type (job / weekly / monthly)
-  - target email
-  - period (for weekly/monthly)
-  - status (sent / failed)
-  - error message (if any)
+
+* Email recipient can be selected by the manager (self or custom email).
+* Backend always accepts an optional `email` field; frontend never assumes delivery.
+* Every email send attempt creates a `ReportEmailLog` record:
+
+  * company
+  * initiating user
+  * report type (job / weekly / monthly)
+  * target email
+  * period (for weekly/monthly)
+  * status (sent / failed)
+  * error message (if any)
 
 Important:
-- Email delivery depends entirely on Django `EMAIL_BACKEND`.
-- In dev, console backend may be used; real delivery requires SMTP configuration.
-- UI success indicates backend execution, not guaranteed external delivery.
+
+* Email delivery depends entirely on Django `EMAIL_BACKEND`.
+* In dev, console backend may be used; real delivery requires SMTP configuration.
+* UI success indicates backend execution, not guaranteed external delivery.
+
+---
+
+### Commercial enforcement (read-only mode)
+
+Commercial restrictions are enforced exclusively on the backend.
+
+* Company suspension is controlled via `Company.is_active` and related fields.
+* When a company is suspended:
+
+  * backend permissions block all mutating actions
+  * API returns `403 Forbidden` with `code = company_blocked`
+* Trial expiration is handled similarly via `code = trial_expired`.
+
+Frontend guidelines:
+
+* Never infer commercial state from UI or local flags.
+* Always rely on backend error codes (`company_blocked`, `trial_expired`).
+* UX must treat these states as **read-only mode**, not system errors:
+
+  * data remains visible
+  * creation actions are disabled with explanatory messaging
+
+This approach ensures consistent enforcement and avoids frontend-driven business logic.
+
+---
 
 ## DEV BRIEF — Job Details stability rules
 
@@ -1394,6 +1437,5 @@ Important:
 * удалять dev-хелперы без восстановления альтернативы.
 
 ```
-
-Если хочешь, дальше можем отдельно вынуть куски (например, только Mobile Job Details или только Trial/SLA) в короткие выдержки для команды.
+::contentReference[oaicite:0]{index=0}
 ```

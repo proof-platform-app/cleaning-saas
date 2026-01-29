@@ -76,6 +76,7 @@ export default function Dashboard() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [companyBlocked, setCompanyBlocked] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -97,6 +98,15 @@ export default function Dashboard() {
         setUsage(usageSummary as UsageSummary);
       } catch (err: any) {
         if (!isMounted) return;
+
+        // 🔒 company blocked → read-only mode
+        if ((err as any)?.code === "company_blocked") {
+          setCompanyBlocked(true);
+          setTodayJobs([]);
+          setUsage(null);
+          return;
+        }
+
         setError(err.message || "Failed to load dashboard data");
         setTodayJobs([]);
       } finally {
@@ -159,13 +169,38 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <Link to="/planning">
-          <Button className="bg-primary text-primary-foreground shadow-soft hover:bg-primary/90">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Job
+        <Link to={companyBlocked ? "#" : "/planning"}>
+          <Button
+            disabled={companyBlocked}
+            className="bg-primary text-primary-foreground shadow-soft hover:bg-primary/90 disabled:opacity-60"
+          >
+            {companyBlocked ? (
+              "Account suspended"
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Job
+              </>
+            )}
           </Button>
         </Link>
       </div>
+
+      {/* Company blocked banner */}
+      {companyBlocked && (
+        <div className="mb-6 rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-3">
+          <p className="text-sm font-medium text-yellow-900">
+            ⚠️ Account suspended
+          </p>
+          <p className="mt-1 text-xs text-yellow-800">
+            Your company account is currently suspended. You can view jobs and
+            reports, but creating new items is temporarily disabled.
+          </p>
+          <p className="mt-1 text-xs text-yellow-800">
+            Please contact support to restore full access.
+          </p>
+        </div>
+      )}
 
       {/* Usage / Trial banner */}
       {usage && (
