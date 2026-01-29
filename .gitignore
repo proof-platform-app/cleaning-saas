@@ -4,6 +4,10 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Environment variables
+.env
+.env.*
+
 # Virtual environments
 venv/
 backend/venv/
@@ -11,6 +15,7 @@ backend/venv/
 # Django
 db.sqlite3
 *.sqlite3
+backend/media/
 
 # macOS
 .DS_Store
@@ -27,6 +32,6 @@ logs/
 # IDE
 .vscode/
 .idea/
+
+# Generated files
 *.pdf
-backend/media/
-backend/apps/accounts/admin_auth.py

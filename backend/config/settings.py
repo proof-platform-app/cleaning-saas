@@ -159,7 +159,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8081",
 ]
 # ------------------------------------------------------------
-# Email (DEV)
+# Email (SMTP via Gmail)
 # ------------------------------------------------------------
 
 # Куда приходят все системные письма:
@@ -168,9 +168,20 @@ CORS_ALLOWED_ORIGINS = [
 # - job PDF reports
 FOUNDER_DEMO_EMAIL = "photobp2019@gmail.com"
 
-# В dev-режиме письма НЕ отправляются реально,
-# а печатаются в консоль (терминал с runserver)
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Реальная отправка писем через Gmail App Password
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-# Формальный отправитель
-DEFAULT_FROM_EMAIL = FOUNDER_DEMO_EMAIL
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+# Почта, с которой будут уходить письма
+EMAIL_HOST_USER = "reports.cleanproof@gmail.com"
+
+# App Password из Google (БЕЗ пробелов)
+# у тебя в интерфейсе: "kmuq qxhw ghqp fdyn"
+# в настройку надо вписать так:
+EMAIL_HOST_PASSWORD = "kmuqqxhwghqpfdyn"
+
+# От кого будут приходить письма
+DEFAULT_FROM_EMAIL = "CleanProof Reports <reports.cleanproof@gmail.com>"
