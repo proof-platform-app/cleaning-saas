@@ -920,6 +920,18 @@ Execution → SLA → Reports → PDF → Email → Audit Trail
 Remaining dependency:
 - Actual email deliverability depends on SMTP configuration, not application logic.
 
+### Reports → Evidence layer is completed.
+
+The system supports a full drill-down path from high-level SLA metrics to concrete operational evidence:
+Report → SLA reason → affected jobs → job details.
+
+This layer is intentionally read-only and non-intrusive.  
+It adds managerial transparency without introducing new execution paths or weakening existing mobile enforcement.
+
+SLA reasons related to proof completeness (photos, checklist) are preserved as part of the domain model, even though current mobile UX prevents such violations in standard flows.  
+This ensures forward compatibility with future overrides, policy changes, or legacy data scenarios.
+
+
 ### Reporting & Management UX — Status
 
 Reporting functionality is implemented as a first-class management feature.

@@ -1930,6 +1930,33 @@ POST /api/manager/reports/monthly/email/
 
 ---
 
+### Reports → Evidence (SLA drill-down)
+
+`GET /api/manager/reports/violations/jobs/`
+
+Read-only endpoint for drilling down from SLA aggregates to concrete jobs with a specific SLA violation reason.
+
+**Query params:**
+- `reason` — SLA reason code (e.g. `missing_after_photo`)
+- `period_start` — YYYY-MM-DD
+- `period_end` — YYYY-MM-DD
+
+**Response includes:**
+- selected `reason` and `reason_label`
+- requested period
+- pagination metadata
+- list of jobs with:
+  - job id
+  - scheduled date
+  - cleaner
+  - location
+  - SLA status and reasons
+
+The endpoint reuses the same SLA computation logic as Performance and Reports aggregation (single source of truth).  
+It is strictly read-only and does not affect job execution or status transitions.
+
+---
+
 ## 10. API Contract — зафиксированные поля для Mobile Layer 1
 
 Секция описывает минимально необходимый контракт для Mobile Layer 1 (логика без финального дизайна).

@@ -22,7 +22,8 @@ import Locations from "./pages/Locations";
 import PricingPage from "./pages/PricingPage";
 import Signup from "./pages/Signup";
 import Performance from "./pages/Performance";
-import Reports from "@/pages/Reports"; // ⬅️ добавили Reports
+import Reports from "@/pages/Reports";
+import ViolationJobsPage from "@/pages/ViolationJobsPage"; // ⬅️ добавили
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -82,7 +83,11 @@ const App = () => (
               <Route path="/planning" element={<JobPlanning />} />
               <Route path="/history" element={<History />} />
               <Route path="/performance" element={<Performance />} />
-              <Route path="/reports" element={<Reports />} /> {/* ⬅️ новый маршрут */}
+              <Route path="/reports" element={<Reports />} />
+              <Route
+                path="/reports/violations"
+                element={<ViolationJobsPage />}
+              />
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />

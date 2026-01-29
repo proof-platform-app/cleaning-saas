@@ -449,7 +449,15 @@ PDF:
 * не используются как операционный workflow.
 
 ---
+Reports → Evidence drill-down is implemented as a separate read-only layer.
 
+A dedicated endpoint allows managers to navigate from aggregated SLA metrics (weekly / monthly reports) to the exact jobs that caused a specific SLA violation.  
+The frontend exposes this via a conditional screen (`/reports/violations`) that is accessed only through contextual navigation (reason + period), not via the main menu.
+
+Important: the mobile cleaner app currently enforces mandatory photos and checklist completion before job checkout.  
+As a result, some SLA reasons (e.g. `missing_*`) are rare or absent in normal flows and are treated as domain-level safeguards for future policy changes rather than active error states.
+
+---
 ## Назначение документа
 
 Этот документ — единая инструкция для:

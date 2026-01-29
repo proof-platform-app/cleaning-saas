@@ -1,6 +1,6 @@
 // dubai-control/src/pages/Reports.tsx
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getWeeklyReport,
@@ -123,6 +123,8 @@ export default function Reports() {
   const [emailMode, setEmailMode] = useState<"self" | "custom">("self");
   const [customEmail, setCustomEmail] = useState("");
   const [customEmailError, setCustomEmailError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -755,19 +757,29 @@ export default function Reports() {
                   No SLA violations in this period.
                 </p>
               ) : (
-                <ul className="space-y-1 text-sm">
+                <div className="space-y-1 text-sm">
                   {report.top_reasons.map((r) => (
-                    <li
+                    <button
                       key={r.code}
-                      className="flex items-center justify-between"
+                      type="button"
+                      onClick={() => {
+                        navigate(
+                          `/reports/violations?reason=${encodeURIComponent(
+                            r.code,
+                          )}&period_start=${report.period.from}&period_end=${
+                            report.period.to
+                          }`,
+                        );
+                      }}
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
                     >
                       <span>{formatReasonCode(r.code)}</span>
                       <span className="text-muted-foreground">
                         × {r.count}
                       </span>
-                    </li>
+                    </button>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           </>

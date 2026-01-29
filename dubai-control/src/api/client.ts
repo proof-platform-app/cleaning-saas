@@ -958,6 +958,36 @@ export type ManagerReport = {
   top_reasons: ReportReasonStat[];
 };
 
+export type ViolationJob = {
+  id: number;
+  scheduled_date: string;
+  scheduled_start_time: string | null;
+  status: string;
+  location_id: number;
+  location_name: string;
+  cleaner_id: number;
+  cleaner_name: string;
+  sla_status: string;
+  sla_reasons: string[];
+};
+
+export type ViolationJobsResponse = {
+  reason: string;
+  reason_label: string;
+  period: {
+    start: string;
+    end: string;
+  };
+  pagination: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+  };
+  jobs: ViolationJob[];
+};
+
+
 export async function getManagerPlanningJobs(
   date: string
 ): Promise<ManagerPlanningJob[]> {
@@ -971,6 +1001,28 @@ export async function getManagerPlanningJobs(
 }
 
 // ---------- Reports API ----------
+export async function getViolationJobs(params: {
+  reason: string;
+  periodStart: string;
+  periodEnd: string;
+  page?: number;
+}): Promise<ViolationJobsResponse> {
+  const searchParams = new URLSearchParams({
+    reason: params.reason,
+    period_start: params.periodStart,
+    period_end: params.periodEnd,
+  });
+
+  if (params.page) {
+    searchParams.set("page", String(params.page));
+  }
+
+  const { data } = await apiClient.get<ViolationJobsResponse>(
+    `/api/manager/reports/violations/jobs/?${searchParams.toString()}`
+  );
+
+  return data;
+}
 
 export async function getWeeklyReport(): Promise<ManagerReport> {
   const res = await apiClient.get<ManagerReport>("/api/manager/reports/weekly/");

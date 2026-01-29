@@ -1,4 +1,3 @@
-# backend/apps/api/views.py
 import os
 import uuid
 import logging
@@ -16,7 +15,6 @@ from django.utils.dateparse import parse_date
 from django.conf import settings
 from django.core.mail import EmailMessage
 
-
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
@@ -33,6 +31,7 @@ from apps.locations.models import Location, ChecklistTemplate
 
 from .pdf import generate_job_report_pdf, generate_company_sla_report_pdf
 from apps.marketing.models import ReportEmailLog
+
 from .serializers import (
     ChecklistBulkUpdateSerializer,
     ChecklistToggleSerializer,
@@ -43,9 +42,18 @@ from .serializers import (
     JobPhotoUploadSerializer,
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
+    ManagerViolationJobSerializer,  # 👈 добавили сериалайзер для нарушений
 )
+
 logger = logging.getLogger(__name__)
 
+VALID_SLA_REASONS = {
+    "missing_before_photo",
+    "missing_after_photo",
+    "checklist_not_completed",
+    "missing_check_in",
+    "missing_check_out",
+}
 class LoginView(APIView):
     """
     MVP Login.
@@ -2259,6 +2267,234 @@ class ManagerPerformanceView(APIView):
         }
 
         return Response(payload, status=status.HTTP_200_OK)
+    
+class ManagerViolationJobsView(APIView):
+    """
+    GET /api/manager/reports/violations/jobs/
+    ?reason=...&period_start=YYYY-MM-DD&period_end=YYYY-MM-DD
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        company = getattr(user, "company", None)
+
+        if not company:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = (request.query_params.get("reason") or "").strip()
+        period_start_str = (request.query_params.get("period_start") or "").strip()
+        period_end_str = (request.query_params.get("period_end") or "").strip()
+
+        VALID_SLA_REASONS = {
+            "missing_before_photo",
+            "missing_after_photo",
+            "checklist_not_completed",
+            "missing_check_in",
+            "missing_check_out",
+        }
+
+        if not reason or reason not in VALID_SLA_REASONS:
+            return Response(
+                {"detail": "Invalid or missing 'reason' parameter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not period_start_str or not period_end_str:
+            return Response(
+                {"detail": "Both 'period_start' and 'period_end' are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            period_start = datetime.strptime(period_start_str, "%Y-%m-%d").date()
+            period_end = datetime.strptime(period_end_str, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if period_start > period_end:
+            return Response(
+                {"detail": "'period_start' must be <= 'period_end'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = (
+            Job.objects.filter(
+                company=company,
+                status="completed",
+                scheduled_date__gte=period_start,
+                scheduled_date__lte=period_end,
+            )
+            .select_related("location", "cleaner")
+            .order_by("-scheduled_date", "-id")
+        )
+
+        jobs_payload = []
+
+        for job in qs:
+            sla_status, reasons = compute_sla_status_and_reasons_for_job(job)
+            reasons = reasons or []
+
+            if reason not in reasons:
+                continue
+
+            jobs_payload.append(
+                {
+                    "id": job.id,
+                    "scheduled_date": job.scheduled_date.isoformat()
+                    if job.scheduled_date
+                    else None,
+                    "scheduled_start_time": job.scheduled_start_time.isoformat()
+                    if job.scheduled_start_time
+                    else None,
+                    "status": job.status,
+                    "location_id": job.location.id if job.location else None,
+                    "location_name": job.location.name if job.location else "",
+                    "cleaner_id": job.cleaner.id if job.cleaner else None,
+                    "cleaner_name": getattr(job.cleaner, "full_name", "")
+                    if job.cleaner
+                    else "",
+                    "sla_status": sla_status,
+                    "sla_reasons": reasons,
+                }
+            )
+
+        reason_labels = {
+            "missing_before_photo": "Missing before photo",
+            "missing_after_photo": "Missing after photo",
+            "checklist_not_completed": "Checklist not completed",
+            "missing_check_in": "Missing check-in",
+            "missing_check_out": "Missing check-out",
+        }
+
+        payload = {
+            "reason": reason,
+            "reason_label": reason_labels[reason],
+            "period": {
+                "start": period_start_str,
+                "end": period_end_str,
+            },
+            "pagination": {
+                "page": 1,
+                "page_size": len(jobs_payload),
+                "total_items": len(jobs_payload),
+                "total_pages": 1,
+            },
+            "jobs": jobs_payload,
+        }
+
+        return Response(payload, status=status.HTTP_200_OK)
+
+    
+    class ManagerViolationJobsView(APIView):
+        """
+        GET /api/manager/reports/violations/jobs/?reason=...&period_start=YYYY-MM-DD&period_end=YYYY-MM-DD
+        """
+
+        authentication_classes = [TokenAuthentication]
+        permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        reason = request.query_params.get("reason")
+        period_start_str = request.query_params.get("period_start")
+        period_end_str = request.query_params.get("period_end")
+
+        if not reason or reason not in VALID_SLA_REASONS:
+            return Response(
+                {"detail": "Invalid or missing 'reason' parameter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not period_start_str or not period_end_str:
+            return Response(
+                {"detail": "Both 'period_start' and 'period_end' are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        period_start = parse_date(period_start_str)
+        period_end = parse_date(period_end_str)
+
+        if not period_start or not period_end:
+            return Response(
+                {"detail": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if period_start > period_end:
+            return Response(
+                {"detail": "'period_start' must be <= 'period_end'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        company = request.user.company
+
+        # базовый queryset по компании и периоду
+        qs = (
+            Job.objects.filter(
+                company=company,
+                status="completed",
+                scheduled_date__gte=period_start,
+                scheduled_date__lte=period_end,
+            )
+            .select_related("location", "cleaner")
+            .order_by("-scheduled_date", "-id")
+        )
+
+        # ⬇️ ВАЖНО: здесь нужно использовать ТВОЙ существующий SLA-helper,
+        # тот же, что в /performance и /reports/weekly|monthly, чтобы получить
+        # поля sla_status / sla_reasons.
+        #
+        # Примерно так (псевдокод):
+        #
+        # qs = annotate_with_sla(qs)
+        #
+        # где annotate_with_sla добавляет к каждому job:
+        #   job.sla_status
+        #   job.sla_reasons (list[str])
+
+        # Для простоты — фильтруем в Python по sla_reasons,
+        # но лучше — если helper умеет фильтровать сам.
+        filtered_jobs = []
+        for job in qs:
+            # job.sla_reasons уже должен быть посчитан SLA-слоем
+            if reason in getattr(job, "sla_reasons", []):
+                filtered_jobs.append(job)
+
+        serializer = ManagerViolationJobSerializer(filtered_jobs, many=True)
+
+        # reason_label можно собрать на backend, чтобы фронт не дублировал маппинг
+        reason_labels = {
+            "missing_before_photo": "Missing before photo",
+            "missing_after_photo": "Missing after photo",
+            "checklist_not_completed": "Checklist not completed",
+            "missing_check_in": "Missing check-in",
+            "missing_check_out": "Missing check-out",
+        }
+
+        data = {
+            "reason": reason,
+            "reason_label": reason_labels[reason],
+            "period": {
+                "start": period_start_str,
+                "end": period_end_str,
+            },
+            "pagination": {
+                "page": 1,
+                "page_size": len(filtered_jobs),
+                "total_items": len(filtered_jobs),
+                "total_pages": 1,
+            },
+            "jobs": serializer.data,
+        }
+        return Response(data, status=status.HTTP_200_OK)
     
 class ManagerWeeklyReportView(APIView):
     authentication_classes = [TokenAuthentication]

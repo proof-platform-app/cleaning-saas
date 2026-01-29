@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent
+from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent, JobPhoto
 from apps.locations.models import Location, ChecklistTemplate, ChecklistTemplateItem
 
 User = get_user_model()
@@ -49,6 +49,50 @@ def compute_sla_status_for_job(obj) -> str:
             return "violated"
 
     return "ok"
+
+
+# --- SLA helpers -------------------------------------------------------------
+
+
+def compute_sla_reasons_for_job(job):
+    """
+    Возвращает список причин нарушения SLA для конкретной job.
+
+    Кодовые значения:
+    - "missing_before_photo"      — нет фото "до"
+    - "missing_after_photo"       — нет фото "после"
+    - "checklist_not_completed"   — чеклист не полностью закрыт
+
+    Функция не меняет данных в БД, только читает связанные объекты.
+    """
+
+    reasons = []
+
+    # Смотрим только завершённые работы — для остальных причин пока нет
+    if getattr(job, "status", None) != "completed":
+        return reasons
+
+    # 1) Фото "до"
+    has_before = JobPhoto.objects.filter(job=job, photo_type="before").exists()
+    if not has_before:
+        reasons.append("missing_before_photo")
+
+    # 2) Фото "после"
+    has_after = JobPhoto.objects.filter(job=job, photo_type="after").exists()
+    if not has_after:
+        reasons.append("missing_after_photo")
+
+    # 3) Чеклист: обязательные пункты, которые не выполнены
+    has_incomplete_required_items = JobChecklistItem.objects.filter(
+        job=job,
+        is_required=True,
+        is_completed=False,
+    ).exists()
+
+    if has_incomplete_required_items:
+        reasons.append("checklist_not_completed")
+
+    return reasons
 
 
 class JobCheckInSerializer(serializers.Serializer):
@@ -310,39 +354,34 @@ class PlanningJobSerializer(serializers.ModelSerializer):
             "after_photo": False,
             "checklist": False,
         }
-# --- SLA helpers -------------------------------------------------------------
 
-def compute_sla_reasons_for_job(job) -> list[str]:
+
+class ManagerViolationJobSerializer(serializers.ModelSerializer):
     """
-    Возвращает список причин нарушения SLA для конкретной job.
-
-    Кодовые значения:
-    - "missing_before_photo"      — нет фото "до"
-    - "missing_after_photo"       — нет фото "после"
-    - "checklist_not_completed"   — чеклист не полностью закрыт
-
-    Функция не меняет данных в БД, только читает связанные объекты.
+    Лёгкий ответ для таблицы нарушений SLA.
+    Предполагается, что:
+    - job.sla_status уже выставлен во вьюхе (через helper)
+    - job.sla_reasons уже является списком кодов причин
     """
+    location_id = serializers.IntegerField(source="location.id", read_only=True)
+    location_name = serializers.CharField(source="location.name", read_only=True)
+    cleaner_id = serializers.IntegerField(source="cleaner.id", read_only=True)
+    cleaner_name = serializers.CharField(source="cleaner.full_name", read_only=True)
 
-    reasons: list[str] = []
+    sla_status = serializers.CharField()
+    sla_reasons = serializers.ListField(child=serializers.CharField())
 
-    # 1) Фото "до"
-    has_before = job.jobphoto_set.filter(photo_type="before").exists()
-    if not has_before:
-        reasons.append("missing_before_photo")
-
-    # 2) Фото "после"
-    has_after = job.jobphoto_set.filter(photo_type="after").exists()
-    if not has_after:
-        reasons.append("missing_after_photo")
-
-    # 3) Чеклист: есть ли обязательные пункты, которые не выполнены
-    has_incomplete_required_items = job.jobchecklistitem_set.filter(
-        required=True,
-        completed=False,
-    ).exists()
-
-    if has_incomplete_required_items:
-        reasons.append("checklist_not_completed")
-
-    return reasons
+    class Meta:
+        model = Job
+        fields = [
+            "id",
+            "scheduled_date",
+            "scheduled_start_time",
+            "status",
+            "location_id",
+            "location_name",
+            "cleaner_id",
+            "cleaner_name",
+            "sla_status",
+            "sla_reasons",
+        ]

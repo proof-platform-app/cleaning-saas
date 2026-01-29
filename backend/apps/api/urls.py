@@ -49,6 +49,7 @@ from apps.api.views import (
     ManagerMonthlyReportPdfView,
     WeeklyReportEmailView,
     MonthlyReportEmailView,
+    ManagerViolationJobsView,  # 👈 добавили
 
     # Owner
     OwnerOverviewView,
@@ -240,6 +241,11 @@ urlpatterns = [
     path(
         "manager/reports/monthly/email/",
         MonthlyReportEmailView.as_view(),
+    ),
+    path(
+        "manager/reports/violations/jobs/",
+        ManagerViolationJobsView.as_view(),
+        name="manager-violation-jobs",
     ),
 
     # =====================
