@@ -1393,6 +1393,14 @@ Important:
 * UI success indicates backend execution, not guaranteed external delivery.
 
 ---
+## Reports follow a role-based responsibility model.
+
+Managers are responsible for generating and distributing SLA reports (PDF / email).  
+Owners are consumers of these reports and are not expected to generate documents directly from the UI.
+
+The "Owner overview" section in the Reports page is an in-app dashboard representation of owner-level SLA aggregates and mirrors the data already present in the PDF report. It is not a separate reporting artifact.
+
+---
 
 ### Commercial enforcement (read-only mode)
 

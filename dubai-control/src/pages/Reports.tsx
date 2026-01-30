@@ -473,8 +473,22 @@ export default function Reports() {
 
           {ownerOverview && !ownerError && (
             <>
-              {/* KPI cards */}
+              {/* KPI cards — accent on issue rate */}
               <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {/* Issue rate — главный сигнал для владельца */}
+                <div className="md:col-span-1 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs font-medium text-amber-900">
+                    Issue rate
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-amber-900">
+                    {(ownerOverview.summary.issue_rate * 100).toFixed(1)}%
+                  </p>
+                  <p className="mt-1 text-[11px] text-amber-900/80">
+                    Share of jobs with incomplete proof in the last 30 days.
+                  </p>
+                </div>
+
+                {/* Jobs total */}
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Jobs (period)
@@ -483,20 +497,14 @@ export default function Reports() {
                     {ownerOverview.summary.jobs_count}
                   </p>
                 </div>
+
+                {/* Jobs with issues */}
                 <div className="rounded-xl border border-border bg-background px-4 py-3">
                   <p className="text-xs font-medium text-muted-foreground">
                     Jobs with issues
                   </p>
                   <p className="mt-1 text-2xl font-semibold text-foreground">
                     {ownerOverview.summary.violations_count}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border bg-background px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Issue rate
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-foreground">
-                    {(ownerOverview.summary.issue_rate * 100).toFixed(1)}%
                   </p>
                 </div>
               </div>
@@ -612,27 +620,79 @@ export default function Reports() {
 
         {report && !loading && !error && (
           <>
-            {/* Summary strip */}
-            <div className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{title}</span> ·{" "}
-              <span>
-                {report.period.from} – {report.period.to}
-              </span>{" "}
-              ·{" "}
-              <span>
-                {report.summary.jobs_count} jobs ·{" "}
-                {report.summary.violations_count} SLA violations ·{" "}
-                {(report.summary.issue_rate * 100).toFixed(1)}% issue rate
-              </span>
+            {/* Hero-summary for the selected period */}
+            <div className="rounded-2xl border border-border bg-card px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {title}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Period:{" "}
+                  <span className="font-medium text-foreground">
+                    {report.period.from} – {report.period.to}
+                  </span>
+                </p>
+              </div>
+              <div className="flex flex-col items-start sm:items-end gap-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Issue rate
+                </p>
+                <p className="text-2xl font-semibold text-foreground">
+                  {(report.summary.issue_rate * 100).toFixed(1)}%
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {report.summary.jobs_count} jobs ·{" "}
+                  {report.summary.violations_count} with issues
+                </p>
+              </div>
             </div>
 
-            {/* Narrative summary */}
+            {/* Narrative summary — короткий вывод для менеджера */}
             {narrative && (
               <div className="text-sm text-muted-foreground max-w-3xl">
                 {narrative}
               </div>
             )}
 
+            {/* Top SLA reasons — ПОЧЕМУ. Ставим выше таблиц */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="text-sm font-medium mb-1">Top SLA reasons</div>
+              <p className="text-xs text-muted-foreground mb-4">
+                What causes SLA violations most frequently in this period.
+              </p>
+
+              {report.top_reasons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No SLA violations in this period.
+                </p>
+              ) : (
+                <div className="space-y-1 text-sm">
+                  {report.top_reasons.map((r) => (
+                    <button
+                      key={r.code}
+                      type="button"
+                      onClick={() => {
+                        navigate(
+                          `/reports/violations?reason=${encodeURIComponent(
+                            r.code,
+                          )}&period_start=${report.period.from}&period_end=${
+                            report.period.to
+                          }`,
+                        );
+                      }}
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
+                    >
+                      <span>{formatReasonCode(r.code)}</span>
+                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
+                        × {r.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Who / Where — Cleaners + Locations */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Cleaners */}
               <div className="rounded-xl border border-border bg-card p-4">
@@ -667,7 +727,7 @@ export default function Reports() {
                           <td className="py-1.5 text-right">
                             {cl.jobs_count}
                           </td>
-                          <td className="py-1.5 text-right">
+                          <td className="py-1.5 text-right font-medium">
                             {cl.violations_count}
                           </td>
                           <td className="py-1.5 text-right">
@@ -722,7 +782,7 @@ export default function Reports() {
                           <td className="py-1.5 text-right">
                             {loc.jobs_count}
                           </td>
-                          <td className="py-1.5 text-right">
+                          <td className="py-1.5 text-right font-medium">
                             {loc.violations_count}
                           </td>
                           <td className="py-1.5 text-right">
@@ -743,44 +803,6 @@ export default function Reports() {
                   </table>
                 )}
               </div>
-            </div>
-
-            {/* Reasons */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="text-sm font-medium mb-1">Top SLA reasons</div>
-              <p className="text-xs text-muted-foreground mb-4">
-                What causes SLA violations most frequently.
-              </p>
-
-              {report.top_reasons.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No SLA violations in this period.
-                </p>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  {report.top_reasons.map((r) => (
-                    <button
-                      key={r.code}
-                      type="button"
-                      onClick={() => {
-                        navigate(
-                          `/reports/violations?reason=${encodeURIComponent(
-                            r.code,
-                          )}&period_start=${report.period.from}&period_end=${
-                            report.period.to
-                          }`,
-                        );
-                      }}
-                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
-                    >
-                      <span>{formatReasonCode(r.code)}</span>
-                      <span className="text-muted-foreground">
-                        × {r.count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </>
         )}

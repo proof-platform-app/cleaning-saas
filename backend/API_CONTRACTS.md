@@ -1956,6 +1956,22 @@ The endpoint reuses the same SLA computation logic as Performance and Reports ag
 It is strictly read-only and does not affect job execution or status transitions.
 
 ---
+### Reports PDF (Manager → Owner)
+
+The weekly and monthly PDF reports are generated via manager-level endpoints and are intended for owner consumption.
+
+The PDF includes owner-level SLA aggregates:
+- total jobs in period
+- jobs with SLA violations
+- issue rate
+- top SLA reasons
+- primary locations and cleaners with issues
+- narrative summary
+
+There is no separate "owner PDF" endpoint.  
+The Owner overview shown in the UI is a presentation layer over the same aggregated data and does not introduce additional metrics beyond what is already included in the PDF.
+
+---
 
 ## 10. API Contract — зафиксированные поля для Mobile Layer 1
 

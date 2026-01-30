@@ -1,5 +1,5 @@
 // dubai-control/src/components/planning/JobSidePanel.tsx
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import type { PlanningJob } from "@/types/planning";
 import {
   Camera,
@@ -22,13 +22,29 @@ const SLA_REASON_LABELS: Record<string, string> = {
 
 type SlaReasonCode = keyof typeof SLA_REASON_LABELS;
 
-export function JobSidePanel({
-  job,
-  onClose,
-}: {
+export type EvidenceContext = {
+  /**
+   * Откуда пользователь попал в этот job:
+   * - "history"     — обычный просмотр из History / Planning
+   * - "report"      — из SLA-отчёта (weekly / monthly)
+   * - "performance" — из performance-слоя
+   */
+  source: "history" | "report" | "performance";
+  /** Машинный код причины SLA (например, "missing_after_photo") */
+  reasonCode: string;
+  /** Человеко-понятная причина (если заранее известна) */
+  reasonLabel?: string;
+  /** Период для отображения (например, "Jan 24–30, 2026") */
+  periodLabel?: string;
+};
+
+type JobSidePanelProps = {
   job: PlanningJob;
   onClose: () => void;
-}) {
+  evidenceContext?: EvidenceContext;
+};
+
+export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProps) {
   const proof = job.proof;
   const before = proof.before_photo;
   const after = proof.after_photo;
@@ -54,10 +70,14 @@ export function JobSidePanel({
   const slaReasons = job.sla_reasons ?? [];
   const hasSlaViolation = slaStatus === "violated";
 
-  // Якоря для прыжка по причинам SLA
   const beforeRowRef = useRef<HTMLDivElement | null>(null);
   const afterRowRef = useRef<HTMLDivElement | null>(null);
   const checklistRowRef = useRef<HTMLDivElement | null>(null);
+
+  // Активная причина SLA (подсветка нужного блока proof)
+  const [activeSlaReason, setActiveSlaReason] = useState<string | null>(
+    evidenceContext?.reasonCode ?? null,
+  );
 
   const scrollToRef = (ref: React.RefObject<HTMLDivElement>) => {
     if (!ref.current) return;
@@ -69,6 +89,7 @@ export function JobSidePanel({
 
   const handleSlaReasonClick = (code: string) => {
     const typed = code as SlaReasonCode;
+    setActiveSlaReason(code);
 
     switch (typed) {
       case "missing_before_photo":
@@ -84,6 +105,14 @@ export function JobSidePanel({
         break;
     }
   };
+
+  const hasEvidenceContext = !!evidenceContext;
+
+  const resolvedEvidenceReasonLabel =
+    evidenceContext &&
+    (evidenceContext.reasonLabel ||
+      SLA_REASON_LABELS[evidenceContext.reasonCode as SlaReasonCode] ||
+      evidenceContext.reasonCode.replace(/_/g, " "));
 
   return (
     <div className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l border-border z-50">
@@ -101,6 +130,39 @@ export function JobSidePanel({
       <div className="p-5 flex flex-col gap-5 h-[calc(100%-72px)]">
         {/* Scrollable content */}
         <div className="space-y-5 overflow-y-auto pr-1">
+          {/* Evidence context (optional) */}
+          {hasEvidenceContext && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="text-xs font-semibold text-slate-800">
+                SLA exception review
+              </div>
+              <div className="mt-1 text-xs text-slate-700 space-y-0.5">
+                <p>
+                  This job is part of an SLA review
+                  {evidenceContext?.source === "report"
+                    ? " for a weekly or monthly report."
+                    : "."}
+                </p>
+                {resolvedEvidenceReasonLabel && (
+                  <p>
+                    Reason:{" "}
+                    <span className="font-medium">
+                      {resolvedEvidenceReasonLabel}
+                    </span>
+                  </p>
+                )}
+                {evidenceContext?.periodLabel && (
+                  <p>
+                    Period:{" "}
+                    <span className="font-medium">
+                      {evidenceContext.periodLabel}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Status pill */}
           <div>
             <span
@@ -127,11 +189,23 @@ export function JobSidePanel({
                       <button
                         type="button"
                         onClick={() => handleSlaReasonClick(code)}
-                        className="inline-flex items-center gap-2 text-left text-xs text-amber-900 hover:underline hover:text-amber-950"
+                        className={cn(
+                          "inline-flex items-center gap-2 text-left text-xs hover:underline",
+                          activeSlaReason === code
+                            ? "text-amber-950"
+                            : "text-amber-900 hover:text-amber-950",
+                        )}
                       >
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-700" />
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            activeSlaReason === code
+                              ? "bg-amber-900"
+                              : "bg-amber-700",
+                          )}
+                        />
                         <span>
-                          {SLA_REASON_LABELS[code] ??
+                          {SLA_REASON_LABELS[code as SlaReasonCode] ??
                             code.replace(/_/g, " ")}
                         </span>
                       </button>
@@ -192,7 +266,11 @@ export function JobSidePanel({
               {/* Before Photo */}
               <div
                 ref={beforeRowRef}
-                className="flex items-center justify-between px-4 py-3"
+                className={cn(
+                  "flex items-center justify-between px-4 py-3",
+                  activeSlaReason === "missing_before_photo" &&
+                    "bg-amber-50 border-l-2 border-amber-400",
+                )}
               >
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <Camera className="w-4 h-4 text-muted-foreground" />
@@ -211,7 +289,11 @@ export function JobSidePanel({
               {/* After Photo */}
               <div
                 ref={afterRowRef}
-                className="flex items-center justify-between px-4 py-3"
+                className={cn(
+                  "flex items-center justify-between px-4 py-3",
+                  activeSlaReason === "missing_after_photo" &&
+                    "bg-amber-50 border-l-2 border-amber-400",
+                )}
               >
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <Camera className="w-4 h-4 text-muted-foreground" />
@@ -230,7 +312,11 @@ export function JobSidePanel({
               {/* Checklist */}
               <div
                 ref={checklistRowRef}
-                className="flex items-center justify-between px-4 py-3"
+                className={cn(
+                  "flex items-center justify-between px-4 py-3",
+                  activeSlaReason === "checklist_not_completed" &&
+                    "bg-amber-50 border-l-2 border-amber-400",
+                )}
               >
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <CheckSquare className="w-4 h-4 text-muted-foreground" />

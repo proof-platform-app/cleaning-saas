@@ -258,8 +258,18 @@
 агрегат → reason → конкретные job’ы → job details, без дублирования логики и без влияния на execution.
 
 ---
+## Reports & PDF generation are complete and stable.
 
+- Weekly and monthly SLA PDF reports are available via manager actions.
+- PDFs include owner-level aggregates and narrative summary.
+- Owner overview is implemented as an in-app dashboard using the same data.
+- No separate owner-specific PDF exists by design.
 
+This behavior is intentional and aligned with the current product scope.
+
+---
+
+---
 
 👉 **Статус слоя 0: DONE ✅**
 

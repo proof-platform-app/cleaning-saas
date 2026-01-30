@@ -951,6 +951,17 @@ This milestone closes the initial “management visibility” gap
 and enables CleanProof to be positioned as a compliance & accountability tool,
 not just a job tracker.
 
+CleanProof reports are designed around responsibility separation.
+
+Managers generate and distribute SLA reports.  
+Owners receive structured, aggregated insights without interacting with report generation mechanics.
+
+The PDF report already contains owner-level information.  
+The "Owner overview" section in the UI is a visual summary of the same aggregates for quick in-app assessment, not a separate report format.
+
+No parallel owner-specific PDF is planned at this stage to avoid duplication and unnecessary complexity.
+
+
 ### Commercial enforcement & read-only mode (DONE)
 
 CleanProof implements a backend-driven commercial enforcement model.
