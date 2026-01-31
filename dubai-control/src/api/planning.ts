@@ -99,7 +99,11 @@ export type CreateJobPayload = {
   scheduled_end_time: string; // "12:00:00"
   location_id: number;
   cleaner_id: number;
-  checklist_template_id: number | null;
+  // checklist_template_id — опциональное поле:
+  // если "No checklist", фронт его просто не отправляет
+  checklist_template_id?: number;
+  // будущий soft-параметр, уже есть в контракте
+  notes?: string;
 };
 
 type BackendCreatedJob = {

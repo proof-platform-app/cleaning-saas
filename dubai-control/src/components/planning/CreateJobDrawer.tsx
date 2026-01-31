@@ -34,6 +34,16 @@ type Props = {
   onJobCreated: (job: PlanningJob) => void;
 };
 
+type CreateJobPayload = {
+  scheduled_date: string;
+  scheduled_start_time: string;
+  scheduled_end_time: string;
+  location_id: number;
+  cleaner_id: number;
+  notes?: string;
+  checklist_template_id?: number;
+};
+
 export function CreateJobDrawer({
   open,
   onClose,
@@ -48,7 +58,7 @@ export function CreateJobDrawer({
     reload: reloadLocations,
   } = useLocations();
 
-  // ===== meta ===== (cleaners + checklist templates; locations тут больше не используем)
+  // ===== meta ===== (cleaners; locations тут больше не используем)
   const [meta, setMeta] = useState<PlanningMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -103,7 +113,7 @@ export function CreateJobDrawer({
       .then((data) => {
         setMeta(data);
         setCleanerId(data.cleaners[0]?.id ?? null);
-        setChecklistTemplateId(data.checklist_templates[0]?.id ?? null);
+        // checklistTemplateId не трогаем — по умолчанию "No checklist"
       })
       .catch((err) => {
         console.error("Failed to load planning meta", err);
@@ -120,6 +130,7 @@ export function CreateJobDrawer({
     setStartTime("09:00");
     setEndTime("12:00");
     setManagerNotes("");
+    setChecklistTemplateId(null);
     setSubmitError(null);
     setSubmitErrorCode(null);
     setTrialExpired(false);
@@ -164,102 +175,106 @@ export function CreateJobDrawer({
   if (!open) return null;
 
   // ===== submit =====
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault();
-  if (!meta || metaLoading) return;
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!meta || metaLoading) return;
 
-  // базовые проверки
-  if (locations.length === 0) {
-    setSubmitError("Please create at least one location first.");
-    setSubmitErrorCode(null);
-    return;
-  }
-
-  if (!date || !locationId || !cleanerId) {
-    setSubmitError("Date, location and cleaner are required.");
-    setSubmitErrorCode(null);
-    return;
-  }
-
-  const startMinutes = parseTimeToMinutes(startTime);
-  const endMinutes = parseTimeToMinutes(endTime);
-
-  if (startMinutes == null || endMinutes == null) {
-    setSubmitError("Invalid time format.");
-    setSubmitErrorCode(null);
-    return;
-  }
-
-  if (endMinutes <= startMinutes) {
-    setSubmitError("End time must be later than start time.");
-    setSubmitErrorCode(null);
-    return;
-  }
-
-  setSubmitting(true);
-  setSubmitError(null);
-  setSubmitErrorCode(null);
-  setTrialExpired(false);
-  setCompanyBlocked(false);
-
-  try {
-    const job = await createPlanningJob({
-      scheduled_date: date,
-      scheduled_start_time: normalizeTimeToSeconds(startTime),
-      scheduled_end_time: normalizeTimeToSeconds(endTime),
-      location_id: locationId,
-      cleaner_id: cleanerId,
-      checklist_template_id: checklistTemplateId,
-      // manager_notes пока не отправляем в API
-    });
-
-    onJobCreated(job);
-    onClose();
-  } catch (err: any) {
-    console.error("Failed to create job", err);
-
-    const apiData = err?.response?.data;
-    const msg = String(err?.message ?? "");
-
-    // Пытаемся достать код из разных мест:
-    // 1) err.code — из planning.ts (TrialExpiredError / company_blocked)
-    // 2) payload из response.data
-    let apiCode: string | undefined =
-      (err as any)?.code ||
-      apiData?.code ||
-      apiData?.error_code ||
-      apiData?.error ||
-      apiData?.detail?.code;
-
-    const isTrialExpired =
-      apiCode === "trial_expired" ||
-      msg.includes('"code":"trial_expired"') ||
-      msg.includes("trial_expired");
-
-    if (isTrialExpired) {
-      setTrialExpired(true);
-      setSubmitError(
-        "Your free trial has ended. You can still view existing jobs and reports, but creating new jobs requires an upgrade."
-      );
-      setSubmitErrorCode("trial_expired");
-    } else if (apiCode === "company_blocked") {
-      setCompanyBlocked(true);
-      setSubmitErrorCode("company_blocked");
-      // тут специально НЕ ставим текст ошибки,
-      // чтобы показывался только жёлтый блок, без красной строки
-      setSubmitError(null);
-    } else {
-      const detail =
-        (typeof apiData === "string" ? apiData : apiData?.detail) ??
-        err?.message ??
-        "Failed to create job.";
-      setSubmitError(detail);
-      setSubmitErrorCode(apiCode ?? null);
+    // базовые проверки
+    if (locations.length === 0) {
+      setSubmitError("Please create at least one location first.");
+      setSubmitErrorCode(null);
+      return;
     }
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    if (!date || !locationId || !cleanerId) {
+      setSubmitError("Date, location and cleaner are required.");
+      setSubmitErrorCode(null);
+      return;
+    }
+
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
+
+    if (startMinutes == null || endMinutes == null) {
+      setSubmitError("Invalid time format.");
+      setSubmitErrorCode(null);
+      return;
+    }
+
+    if (endMinutes <= startMinutes) {
+      setSubmitError("End time must be later than start time.");
+      setSubmitErrorCode(null);
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    setSubmitErrorCode(null);
+    setTrialExpired(false);
+    setCompanyBlocked(false);
+
+    try {
+      const payload: CreateJobPayload = {
+        scheduled_date: date,
+        scheduled_start_time: normalizeTimeToSeconds(startTime),
+        scheduled_end_time: normalizeTimeToSeconds(endTime),
+        location_id: locationId,
+        cleaner_id: cleanerId,
+        // manager_notes пока не отправляем в API
+        ...(checklistTemplateId !== null
+          ? { checklist_template_id: checklistTemplateId }
+          : {}),
+      };
+
+      const job = await createPlanningJob(payload);
+
+      onJobCreated(job);
+      onClose();
+    } catch (err: any) {
+      console.error("Failed to create job", err);
+
+      const apiData = err?.response?.data;
+      const msg = String(err?.message ?? "");
+
+      // Пытаемся достать код из разных мест:
+      // 1) err.code — из planning.ts (TrialExpiredError / company_blocked)
+      // 2) payload из response.data
+      let apiCode: string | undefined =
+        (err as any)?.code ||
+        apiData?.code ||
+        apiData?.error_code ||
+        apiData?.error ||
+        apiData?.detail?.code;
+
+      const isTrialExpired =
+        apiCode === "trial_expired" ||
+        msg.includes('"code":"trial_expired"') ||
+        msg.includes("trial_expired");
+
+      if (isTrialExpired) {
+        setTrialExpired(true);
+        setSubmitError(
+          "Your free trial has ended. You can still view existing jobs and reports, but creating new jobs requires an upgrade.",
+        );
+        setSubmitErrorCode("trial_expired");
+      } else if (apiCode === "company_blocked") {
+        setCompanyBlocked(true);
+        setSubmitErrorCode("company_blocked");
+        // тут специально НЕ ставим текст ошибки,
+        // чтобы показывался только жёлтый блок, без красной строки
+        setSubmitError(null);
+      } else {
+        const detail =
+          (typeof apiData === "string" ? apiData : apiData?.detail) ??
+          err?.message ??
+          "Failed to create job.";
+        setSubmitError(detail);
+        setSubmitErrorCode(apiCode ?? null);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const showLoading = (metaLoading && !meta) || locationsLoading;
   const showError = metaError || locationsError;
@@ -323,7 +338,6 @@ const handleSubmit = async (e: FormEvent) => {
                       <button
                         type="button"
                         className="flex w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        // тут раньше был странный disabled, оставляем интерактивность
                       >
                         <span className="flex items-center gap-2">
                           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
@@ -416,30 +430,40 @@ const handleSubmit = async (e: FormEvent) => {
 
                 {/* Checklist template */}
                 <div className="space-y-1">
-                  <div className="text-sm font-medium">Checklist template</div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Checklist template
+                  </label>
+
                   <Select
                     value={
-                      checklistTemplateId != null
+                      checklistTemplateId !== null
                         ? String(checklistTemplateId)
                         : "none"
                     }
-                    onValueChange={(v) =>
-                      setChecklistTemplateId(v === "none" ? null : Number(v))
-                    }
+                    onValueChange={(value) => {
+                      if (value === "none") {
+                        setChecklistTemplateId(null);
+                      } else {
+                        setChecklistTemplateId(Number(value));
+                      }
+                    }}
                     disabled={!canInteract}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select template (optional)" />
+                      <SelectValue placeholder="No checklist" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No checklist</SelectItem>
-                      {meta.checklist_templates.map((tpl) => (
+                      {meta.checklist_templates?.map((tpl) => (
                         <SelectItem key={tpl.id} value={String(tpl.id)}>
                           {tpl.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Choose a checklist for this job, or keep “No checklist”.
+                  </p>
                 </div>
 
                 {/* Manager notes */}

@@ -1186,6 +1186,102 @@ Content-Type: application/json
 
 * Frontend не хранит и не кэширует собственные списки локаций — используется только API.
 
+### Checklist templates (manager)
+
+Менеджер может выбрать чек-лист при создании job.
+
+**Endpoint**
+
+`GET /api/manager/checklists/templates/`
+
+**Auth:** manager (TokenAuthentication)  
+**Scope:** только внутри `user.company`.
+
+**Query params:** нет (v1).
+
+**Response (200)**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Standard Apartment Cleaning (6 items)"
+  },
+  {
+    "id": 2,
+    "name": "Standard Apartment Cleaning (12 items)"
+  },
+  {
+    "id": 3,
+    "name": "Office Cleaning (8 items)"
+  },
+  {
+    "id": 4,
+    "name": "Villa Cleaning (12 items)"
+  }
+]
+Семантика
+
+id — идентификатор ChecklistTemplate.
+
+name — человекочитаемое название шаблона (тип уборки + краткое описание).
+
+Status: IMPLEMENTED (v1).
+
+
+---
+
+### 1.2. Расширение контракта создания job
+
+Найди секцию вида `POST /api/manager/jobs/` (или как она у тебя названа) и допиши поле:
+
+```md
+#### Request body (JSON)
+
+Обязательные поля:
+
+- `scheduled_date` — `YYYY-MM-DD`
+- `scheduled_start_time` — `HH:MM`
+- `scheduled_end_time` — `HH:MM`
+- `location_id` — integer
+- `cleaner_id` — integer
+
+Необязательные поля:
+
+- `notes` — string (опциональные инструкции)
+- `checklist_template_id` — integer, optional
+
+**Семантика `checklist_template_id`**
+
+- Если поле **передано** → для job используется указанный шаблон чек-листа.
+- Если поле **не передано** → backend ведёт себя как сейчас:
+  - если у локации есть `LocationChecklistTemplate` → применяется он;
+  - иначе job создаётся **без чек-листа**.
+- При выборе `No checklist` на фронте поле **не отправляем** (или отправляем `null` — в зависимости от реализации, но контракт лучше описать как «optional»).
+
+При создании job выбранный шаблон разворачивается в `JobChecklistItem` (snapshot).  
+Дальнейшие изменения шаблона **не влияют** на уже созданные jobs.
+2. Пример POST /api/manager/jobs/ с чек-листом
+Можно вставить в тот же раздел API как пример:
+
+POST /api/manager/jobs/
+Content-Type: application/json
+Authorization: Token <manager_token>
+
+{
+  "scheduled_date": "2026-02-01",
+  "scheduled_start_time": "09:00",
+  "scheduled_end_time": "12:00",
+  "location_id": 3,
+  "cleaner_id": 7,
+  "checklist_template_id": 2,
+  "notes": "Client will be at home, focus on kitchen and bathrooms."
+}
+Комментарий к примеру:
+
+Здесь используется шаблон Standard Apartment Cleaning (12 items) с id=2.
+
+Если бы менеджер выбрал No checklist, поле checklist_template_id просто не отправлялось бы.
 ---
 
 ## 4. Manager — Job Planning & Create Job (NEW, зафиксированный контракт)

@@ -3,17 +3,18 @@ import uuid
 import logging
 from collections import Counter, defaultdict
 from datetime import timedelta, date, datetime
-from typing import List, Tuple
+from typing import List, Tuple, Iterable
 
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.core.mail import EmailMessage
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.conf import settings
-from django.core.mail import EmailMessage
 
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -25,13 +26,23 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import Company, User
 from apps.jobs.image_utils import normalize_job_photo_to_jpeg
-from apps.jobs.models import File, Job, JobCheckEvent, JobChecklistItem, JobPhoto
+from apps.jobs.models import (
+    File,
+    Job,
+    JobCheckEvent,
+    JobChecklistItem,
+    JobPhoto,
+)
 from apps.jobs.utils import distance_m, extract_exif_data
-from apps.locations.models import Location, ChecklistTemplate
+from apps.locations.models import (
+    Location,
+    ChecklistTemplate,
+    ChecklistTemplateItem,
+)
 
-from .pdf import generate_job_report_pdf, generate_company_sla_report_pdf
 from apps.marketing.models import ReportEmailLog
 
+from .pdf import generate_job_report_pdf, generate_company_sla_report_pdf
 from .serializers import (
     ChecklistBulkUpdateSerializer,
     ChecklistToggleSerializer,
@@ -42,10 +53,109 @@ from .serializers import (
     JobPhotoUploadSerializer,
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
-    ManagerViolationJobSerializer,  # 👈 добавили сериалайзер для нарушений
+    ManagerViolationJobSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+# === Default checklist templates for new companies ===
+
+DEFAULT_CHECKLIST_TEMPLATES = [
+    {
+        "name": "Apartment – Standard (6 items)",
+        "items": [
+            "Vacuum all floors",
+            "Mop hard floors",
+            "Dust all surfaces",
+            "Clean bathroom fixtures",
+            "Wipe kitchen surfaces",
+            "Empty all trash bins",
+        ],
+    },
+    {
+        "name": "Apartment – Deep (12 items)",
+        "items": [
+            "Vacuum all floors",
+            "Mop hard floors",
+            "Dust all reachable surfaces",
+            "Dust high surfaces (tops of wardrobes, shelves)",
+            "Clean bathroom fixtures (sink, toilet, shower, bathtub)",
+            "Descale taps and shower heads (if needed)",
+            "Wipe kitchen countertops and backsplash",
+            "Clean outside of kitchen appliances (fridge, oven, microwave)",
+            "Clean inside microwave and oven (where applicable)",
+            "Clean windows and mirrors (reachable from inside)",
+            "Disinfect door handles and light switches",
+            "Empty all trash bins and replace liners",
+        ],
+    },
+    {
+        "name": "Office – Standard (8 items)",
+        "items": [
+            "Vacuum carpets and hard floors in work areas",
+            "Wipe desks and work surfaces",
+            "Clean meeting room tables and chairs",
+            "Empty all office trash bins",
+            "Sanitize high-touch points",
+            "Clean and restock toilets",
+            "Clean kitchen / coffee area surfaces",
+            "Tidy reception / entrance area",
+        ],
+    },
+    {
+        "name": "Villa – Full (12 items)",
+        "items": [
+            "Vacuum all floors in living areas",
+            "Mop hard floors (hallways, kitchen, bathrooms)",
+            "Dust furniture and decor in living areas",
+            "Clean glass tables and mirrors",
+            "Clean and disinfect all bathrooms",
+            "Wipe kitchen countertops and backsplash",
+            "Clean outside of kitchen appliances",
+            "Tidy and dust bedrooms (nightstands, dressers, headboards)",
+            "Change bed linen (if requested)",
+            "Clean and sweep balconies / terraces (if accessible)",
+            "Sanitize door handles, switches and railings (stairs)",
+            "Empty all trash bins (indoor and outdoor where applicable)",
+        ],
+    },
+]
+
+
+def create_default_checklist_templates_for_company(company: Company) -> None:
+    """
+    Гарантирует, что у company есть базовые шаблоны чек-листов.
+    Идемпотентная функция — лишние копии не создаёт.
+    """
+
+    # Уже есть хоть какие-то шаблоны с пунктами? Тогда ничего не делаем.
+    has_any_templates = ChecklistTemplate.objects.filter(
+        company=company,
+        items__isnull=False,  # related_name = "items"
+    ).exists()
+
+    if has_any_templates:
+        return
+
+    for tmpl_spec in DEFAULT_CHECKLIST_TEMPLATES:
+        template, _ = ChecklistTemplate.objects.get_or_create(
+            company=company,
+            name=tmpl_spec["name"],
+            defaults={
+                "description": "",
+                "is_active": True,
+            },
+        )
+
+        for order, item_text in enumerate(tmpl_spec["items"], start=1):
+            ChecklistTemplateItem.objects.get_or_create(
+                template=template,
+                text=item_text,  # ВАЖНО: поле text, не name
+                defaults={
+                    "order": order,
+                    "is_required": True,
+                },
+            )
 
 VALID_SLA_REASONS = {
     "missing_before_photo",
@@ -149,10 +259,11 @@ class ManagerLoginView(APIView):
                 "user_id": user.id,
                 "email": user.email,
                 "full_name": user.full_name,
-                "role": user.role,
+                "role": user.role,  
             },
             status=status.HTTP_200_OK,
         )
+
 
 class ManagerSignupView(APIView):
     """
@@ -225,62 +336,53 @@ class ManagerSignupView(APIView):
         }
         return Response(data, status=status.HTTP_201_CREATED)
 
-
 class ManagerMetaView(APIView):
-    """
-    Справочники для Create Job Drawer (одним запросом).
-
-    GET /api/manager/meta/
-
-    Response:
-    {
-      "cleaners": [{ "id": 2, "full_name": "...", "phone": "+971..." }],
-      "locations": [{ "id": 1, "name": "...", "address": "..." }],
-      "checklist_templates": [{ "id": 1, "name": "Standard Cleaning" }]
-    }
-    """
-
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
+        company = getattr(user, "company", None)
 
-        if user.role != User.ROLE_MANAGER:
-            return Response(
-                {"detail": "Only managers can access meta."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        company = user.company
         if not company:
             return Response(
                 {"detail": "Manager has no company."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cleaners_qs = User.objects.filter(
-            company=company,
-            role=User.ROLE_CLEANER,
-            is_active=True,
-        ).order_by("id")
+        # 1) гарантируем, что у компании есть дефолтные шаблоны
+        create_default_checklist_templates_for_company(company)
 
-        locations_qs = Location.objects.filter(
-            company=company,
-        ).order_by("id")
+        # 2) клинеры
+        cleaners_qs = (
+            User.objects.filter(
+                company=company,
+                role=User.ROLE_CLEANER,
+                is_active=True,
+            )
+            .order_by("full_name", "id")
+        )
 
-        templates_qs = ChecklistTemplate.objects.filter(
-            company=company,
-        ).order_by("id")
+        # 3) локации
+        locations_qs = (
+            Location.objects.filter(company=company)
+            .order_by("name", "id")
+        )
+
+        # 4) шаблоны с пунктами
+        templates_qs = (
+            ChecklistTemplate.objects.filter(
+                company=company,
+                items__isnull=False,
+            )
+            .distinct()
+            .order_by("id")
+        )
 
         return Response(
             {
                 "cleaners": [
-                    {
-                        "id": c.id,
-                        "full_name": c.full_name,
-                        "phone": c.phone,
-                    }
+                    {"id": c.id, "full_name": c.full_name, "phone": c.phone}
                     for c in cleaners_qs
                 ],
                 "locations": [
@@ -292,16 +394,12 @@ class ManagerMetaView(APIView):
                     for l in locations_qs
                 ],
                 "checklist_templates": [
-                    {
-                        "id": t.id,
-                        "name": getattr(t, "name", "") or "",
-                    }
+                    {"id": t.id, "name": t.name}
                     for t in templates_qs
                 ],
             },
             status=status.HTTP_200_OK,
         )
-
 
 class TodayJobsView(APIView):
     """
@@ -1913,66 +2011,6 @@ def _build_report_pdf(report_data: dict) -> bytes:
     return build_report_pdf(report_data)
 
 
-def _send_company_report_email(*, company, user, days: int) -> dict:
-    """
-    Генерирует агрегированный SLA-отчёт, строит PDF и отправляет его менеджеру.
-
-    days = 7  → weekly
-    days = 30 → monthly
-    """
-    report_data = _get_company_report(company, days=days)
-    period = report_data.get("period") or {}
-    date_from = period.get("from")
-    date_to = period.get("to")
-
-    if days == 7:
-        prefix = "Weekly"
-        filename_prefix = "weekly"
-    else:
-        prefix = "Monthly"
-        filename_prefix = "monthly"
-
-    subject = f"CleanProof — {prefix} SLA Report"
-    if date_from and date_to:
-        subject = f"{subject} ({date_from}–{date_to})"
-
-    lines = [
-        f"Company: {getattr(company, 'name', str(company))}",
-        (f"Period: {date_from} – {date_to}" if date_from and date_to else ""),
-        "",
-        "Attached is your SLA performance report generated by CleanProof.",
-    ]
-    body = "\n".join([line for line in lines if line])
-
-    pdf_bytes = _build_report_pdf(report_data)
-    if not pdf_bytes:
-        raise ValueError("Empty PDF for report")
-
-    safe_from = (date_from or "").replace(" ", "_")
-    safe_to = (date_to or "").replace(" ", "_")
-    filename = f"cleanproof-{filename_prefix}-sla-report-{safe_from}-{safe_to}.pdf"
-
-    target_email = (user.email or "").strip()
-    if not target_email:
-        raise ValueError("User has no email configured")
-
-    message = EmailMessage(
-        subject=subject,
-        body=body,
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        to=[target_email],
-    )
-    message.attach(filename, pdf_bytes, "application/pdf")
-    message.send(fail_silently=False)
-
-    return {
-        "target_email": target_email,
-        "period": period,
-        "filename": filename,
-        "subject": subject,
-    }
-
-
 def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
     """
     Вариант SLA-логики, который работает прямо с моделью Job.
@@ -2393,109 +2431,7 @@ class ManagerViolationJobsView(APIView):
 
         return Response(payload, status=status.HTTP_200_OK)
 
-    
-    class ManagerViolationJobsView(APIView):
-        """
-        GET /api/manager/reports/violations/jobs/?reason=...&period_start=YYYY-MM-DD&period_end=YYYY-MM-DD
-        """
 
-        authentication_classes = [TokenAuthentication]
-        permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        reason = request.query_params.get("reason")
-        period_start_str = request.query_params.get("period_start")
-        period_end_str = request.query_params.get("period_end")
-
-        if not reason or reason not in VALID_SLA_REASONS:
-            return Response(
-                {"detail": "Invalid or missing 'reason' parameter."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not period_start_str or not period_end_str:
-            return Response(
-                {"detail": "Both 'period_start' and 'period_end' are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        period_start = parse_date(period_start_str)
-        period_end = parse_date(period_end_str)
-
-        if not period_start or not period_end:
-            return Response(
-                {"detail": "Invalid date format. Use YYYY-MM-DD."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if period_start > period_end:
-            return Response(
-                {"detail": "'period_start' must be <= 'period_end'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        company = request.user.company
-
-        # базовый queryset по компании и периоду
-        qs = (
-            Job.objects.filter(
-                company=company,
-                status="completed",
-                scheduled_date__gte=period_start,
-                scheduled_date__lte=period_end,
-            )
-            .select_related("location", "cleaner")
-            .order_by("-scheduled_date", "-id")
-        )
-
-        # ⬇️ ВАЖНО: здесь нужно использовать ТВОЙ существующий SLA-helper,
-        # тот же, что в /performance и /reports/weekly|monthly, чтобы получить
-        # поля sla_status / sla_reasons.
-        #
-        # Примерно так (псевдокод):
-        #
-        # qs = annotate_with_sla(qs)
-        #
-        # где annotate_with_sla добавляет к каждому job:
-        #   job.sla_status
-        #   job.sla_reasons (list[str])
-
-        # Для простоты — фильтруем в Python по sla_reasons,
-        # но лучше — если helper умеет фильтровать сам.
-        filtered_jobs = []
-        for job in qs:
-            # job.sla_reasons уже должен быть посчитан SLA-слоем
-            if reason in getattr(job, "sla_reasons", []):
-                filtered_jobs.append(job)
-
-        serializer = ManagerViolationJobSerializer(filtered_jobs, many=True)
-
-        # reason_label можно собрать на backend, чтобы фронт не дублировал маппинг
-        reason_labels = {
-            "missing_before_photo": "Missing before photo",
-            "missing_after_photo": "Missing after photo",
-            "checklist_not_completed": "Checklist not completed",
-            "missing_check_in": "Missing check-in",
-            "missing_check_out": "Missing check-out",
-        }
-
-        data = {
-            "reason": reason,
-            "reason_label": reason_labels[reason],
-            "period": {
-                "start": period_start_str,
-                "end": period_end_str,
-            },
-            "pagination": {
-                "page": 1,
-                "page_size": len(filtered_jobs),
-                "total_items": len(filtered_jobs),
-                "total_pages": 1,
-            },
-            "jobs": serializer.data,
-        }
-        return Response(data, status=status.HTTP_200_OK)
-    
 class ManagerWeeklyReportView(APIView):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
