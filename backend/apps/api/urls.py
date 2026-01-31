@@ -4,8 +4,10 @@ from apps.marketing.views import DemoRequestCreateView, ContactMessageCreateView
 from apps.api.views import (
     # Auth
     LoginView,
+    CleanerPinLoginView,
     ManagerLoginView,
     ManagerSignupView,
+    
 
     # Cleaner jobs
     TodayJobsView,
@@ -13,7 +15,7 @@ from apps.api.views import (
     JobCheckInView,
     JobCheckOutView,
 
-    # Checklist
+    # Checklist 
     ChecklistBulkUpdateView,
     ChecklistItemToggleView,
 
@@ -41,6 +43,7 @@ from apps.api.views import (
     ManagerCompanyLogoUploadView,
     ManagerCleanersListCreateView,
     ManagerCleanerDetailView,
+    ManagerCleanerResetPinView,
 
     # Reports
     ManagerWeeklyReportView,
@@ -49,7 +52,7 @@ from apps.api.views import (
     ManagerMonthlyReportPdfView,
     WeeklyReportEmailView,
     MonthlyReportEmailView,
-    ManagerViolationJobsView,  # 👈 добавили
+    ManagerViolationJobsView,
 
     # Owner
     OwnerOverviewView,
@@ -66,6 +69,11 @@ urlpatterns = [
     # Auth
     # =====================
     path("auth/login/", LoginView.as_view(), name="api-login"),
+    path(
+        "auth/cleaner-login/",
+        CleanerPinLoginView.as_view(),
+        name="api-cleaner-login",
+    ),
     path("manager/auth/login/", ManagerLoginView.as_view(), name="api-manager-login"),
     path(
         "auth/signup/",
@@ -157,6 +165,11 @@ urlpatterns = [
         "manager/cleaners/<int:pk>/",
         ManagerCleanerDetailView.as_view(),
         name="manager-cleaner-detail",
+    ),
+    path(
+        "manager/cleaners/<int:pk>/reset-pin/",
+        ManagerCleanerResetPinView.as_view(),
+        name="manager-cleaner-reset-pin",
     ),
 
     # Meta for Create Job Drawer

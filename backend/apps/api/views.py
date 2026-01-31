@@ -1,5 +1,6 @@
 import os
 import uuid
+import random
 import logging
 from collections import Counter, defaultdict
 from datetime import timedelta, date, datetime
@@ -15,6 +16,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.contrib.auth.hashers import make_password, check_password
 
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -196,6 +198,62 @@ class LoginView(APIView):
             )
 
         if not user.check_password(password):
+            return Response(
+                {"detail": "Invalid credentials"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "token": token.key,
+                "user_id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class CleanerPinLoginView(APIView):
+    """
+    Login для клинера по phone + PIN.
+    Используется мобильным приложением.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        phone = (request.data.get("phone") or "").strip()
+        pin = request.data.get("pin") or ""
+
+        if not phone or not pin:
+            return Response(
+                {"detail": "Phone and PIN are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(
+                phone=phone,
+                role=User.ROLE_CLEANER,
+                is_active=True,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "User not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.pin_hash:
+            return Response(
+                {"detail": "PIN login is not configured for this user."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not check_password(str(pin), user.pin_hash):
             return Response(
                 {"detail": "Invalid credentials"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1342,10 +1400,13 @@ class ManagerCleanersListCreateView(APIView):
         email = request.data.get("email")
         phone = request.data.get("phone")
         is_active = request.data.get("is_active", True)
+        pin = request.data.get("pin")
+
+        # --- базовая валидация полей ---
 
         if not full_name:
             return Response(
-                {"detail": "Full name is required."},
+                {"full_name": ["Full name is required."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1355,16 +1416,49 @@ class ManagerCleanersListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Создаём пользователя-клинера
+        pin_str = (str(pin) or "").strip()
+        if not pin_str:
+            return Response(
+                {"pin": ["PIN is required."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not pin_str.isdigit() or len(pin_str) != 4:
+            return Response(
+                {"pin": ["PIN must be exactly 4 digits."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- уникальность телефона / email среди клинеров компании ---
+
+        qs = User.objects.filter(company=company, role=User.ROLE_CLEANER)
+
+        if email and qs.filter(email__iexact=email).exists():
+            return Response(
+                {"email": ["Cleaner with this email already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if phone and qs.filter(phone=phone).exists():
+            return Response(
+                {"phone": ["Cleaner with this phone already exists."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- создаём пользователя-клинера ---
+
         cleaner = User.objects.create_user(
             email=email or None,
             phone=phone or None,
-            password=None,
+            password=None,  # основной пароль не используем для клинера
             role=User.ROLE_CLEANER,
             company=company,
             full_name=full_name,
             is_active=is_active,
         )
+
+        # сохраняем PIN как хеш
+        cleaner.pin_hash = make_password(pin_str)
+        cleaner.save(update_fields=["pin_hash"])
 
         data = {
             "id": cleaner.id,
@@ -1467,6 +1561,66 @@ class ManagerCleanerDetailView(APIView):
             "email": cleaner.email,
             "phone": cleaner.phone,
             "is_active": cleaner.is_active,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+    
+class ManagerCleanerResetPinView(APIView):
+    """
+    Сброс PIN для клинера.
+
+    POST /api/manager/cleaners/<id>/reset-pin/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _get_cleaner(self, request, pk: int):
+        user = request.user
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return None, Response(
+                {"detail": "Only managers can reset cleaner PIN."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {"detail": "Company not found for this manager."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            cleaner = User.objects.get(
+                pk=pk,
+                company=company,
+                role=User.ROLE_CLEANER,
+            )
+        except User.DoesNotExist:
+            return None, Response(
+                {"detail": "Cleaner not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return cleaner, None
+
+    def post(self, request, pk: int):
+        cleaner, error_response = self._get_cleaner(request, pk)
+        if error_response is not None:
+            return error_response
+
+        # Генерим новый 4-значный PIN
+        new_pin = f"{random.randint(0, 9999):04d}"
+
+        # Сохраняем только хеш PIN
+        cleaner.pin_hash = make_password(new_pin)
+        cleaner.save(update_fields=["pin_hash"])
+
+        data = {
+            "id": cleaner.id,
+            "full_name": cleaner.full_name,
+            "phone": cleaner.phone,
+            # ВОЗВРАЩАЕМ PIN только в ответе менеджеру один раз
+            "pin": new_pin,
         }
         return Response(data, status=status.HTTP_200_OK)
 

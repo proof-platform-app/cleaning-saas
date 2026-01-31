@@ -277,7 +277,14 @@ ChecklistTemplate / ChecklistTemplateItem — реализованы и испо
 Фронтенд получает стабильный список чек-листов без fallback-логики — реализовано ✅
 Блок чек-листов считается завершённым в рамках MVP.
 ---
+## Cleaner authentication
 
+Phone + PIN login — 
+Manager creates cleaner accounts — ✅
+PIN reset by manager only — ✅
+Secure PIN visibility (shown once on create/reset) — ✅
+No self-service recovery for cleaners (by design) — ✅
+---
 👉 **Статус слоя 0: DONE ✅**
 
 ---

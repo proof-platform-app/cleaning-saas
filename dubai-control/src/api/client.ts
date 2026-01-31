@@ -766,21 +766,26 @@ export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
 
 // ---------- Cleaners API ----------
 
+export type CreateCleanerPayload = {
+  full_name: string;
+  phone: string;          // ОБЯЗАТЕЛЬНО
+  email?: string | null;
+  is_active?: boolean;
+  pin: string;            // 4 цифры, строка
+};
+
 export async function getCleaners(): Promise<Cleaner[]> {
   await loginManager();
   return apiFetch<Cleaner[]>("/api/manager/cleaners/");
 }
 
-export async function createCleaner(input: {
-  full_name: string;
-  email?: string;
-  phone?: string;
-  is_active?: boolean;
-}): Promise<Cleaner> {
+export async function createCleaner(
+  payload: CreateCleanerPayload
+): Promise<Cleaner> {
   await loginManager();
   return apiFetch<Cleaner>("/api/manager/cleaners/", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -797,6 +802,20 @@ export async function updateCleaner(
   return apiFetch<Cleaner>(`/api/manager/cleaners/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+export async function resetCleanerPin(
+  cleanerId: number,
+): Promise<{ id: number; full_name: string; phone: string | null; pin: string }> {
+  await loginManager();
+
+  return apiFetch<{
+    id: number;
+    full_name: string;
+    phone: string | null;
+    pin: string;
+  }>(`/api/manager/cleaners/${cleanerId}/reset-pin/`, {
+    method: "POST",
   });
 }
 

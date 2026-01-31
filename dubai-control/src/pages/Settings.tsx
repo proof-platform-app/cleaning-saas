@@ -23,6 +23,7 @@ import {
   getCleaners,
   createCleaner,
   updateCleaner,
+  resetCleanerPin,
   type Cleaner as ApiCleaner,
 } from "@/api/client";
 
@@ -47,6 +48,24 @@ const initialSettings: SettingsState = {
 
 type CleanerRow = ApiCleaner;
 
+type NewCleanerState = {
+  name: string;
+  email: string;
+  phone: string;
+  isActive: boolean;
+  pin: string;
+  pinConfirm: string;
+};
+
+const initialNewCleaner: NewCleanerState = {
+  name: "",
+  email: "",
+  phone: "",
+  isActive: true,
+  pin: "",
+  pinConfirm: "",
+};
+
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsState>(initialSettings);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,15 +82,18 @@ export default function Settings() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   const [isAddCleanerOpen, setIsAddCleanerOpen] = useState(false);
-  const [newCleaner, setNewCleaner] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    isActive: true,
-  });
+  const [newCleaner, setNewCleaner] = useState<NewCleanerState>(
+    initialNewCleaner,
+  );
+  const [newCleanerError, setNewCleanerError] = useState<string | null>(null);
 
   const [isSavingCompany, setIsSavingCompany] = useState(false);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+
+  // Модалка с данными для входа клинера
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [lastCreatedPhone, setLastCreatedPhone] = useState<string | null>(null);
+  const [lastCreatedPin, setLastCreatedPin] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -122,7 +144,6 @@ export default function Settings() {
     setIsLoading(true);
 
     try {
-      // 1) Сохраняем профиль компании и обновляем state из ответа backend
       const updatedCompany = await updateCompanyProfile({
         name: settings.name || "",
         contact_email: settings.email || null,
@@ -136,7 +157,6 @@ export default function Settings() {
         phone: updatedCompany.contact_phone || "",
       }));
 
-      // 2) Если выбран логотип — отправляем на backend и обновляем logo_url
       if (logoFile) {
         const updatedWithLogo = await uploadCompanyLogo(logoFile);
         setCompanyLogoUrl(updatedWithLogo.logo_url || null);
@@ -152,11 +172,11 @@ export default function Settings() {
   };
 
   const handleChange = <K extends keyof SettingsState>(
-  field: K,
-  value: SettingsState[K]
-) => {
-  setSettings((prev) => ({ ...prev, [field]: value }));
-};
+    field: K,
+    value: SettingsState[K],
+  ) => {
+    setSettings((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleLogoChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,22 +196,81 @@ export default function Settings() {
     });
   };
 
+  const validateNewCleaner = (state: NewCleanerState): string | null => {
+    if (!state.name.trim()) {
+      return "Full name is required.";
+    }
+    if (!state.phone.trim()) {
+      return "Phone number is required. It will be used as cleaner login.";
+    }
+    const phone = state.phone.trim();
+    if (!/^\+?[0-9\s-]+$/.test(phone)) {
+      return "Please enter a valid phone number.";
+    }
+
+    if (!state.pin.trim()) {
+      return "PIN is required.";
+    }
+    if (!/^[0-9]{4}$/.test(state.pin.trim())) {
+      return "PIN must be exactly 4 digits.";
+    }
+    if (state.pin.trim() !== state.pinConfirm.trim()) {
+      return "PIN confirmation does not match.";
+    }
+
+    return null;
+  };
+
   const handleAddCleaner = async () => {
-    if (!newCleaner.name.trim()) return;
+    const error = validateNewCleaner(newCleaner);
+    if (error) {
+      setNewCleanerError(error);
+      return;
+    }
+
+    setNewCleanerError(null);
 
     try {
-      const created = await createCleaner({
+      const payload: any = {
         full_name: newCleaner.name.trim(),
         email: newCleaner.email.trim() || undefined,
-        phone: newCleaner.phone.trim() || undefined,
+        phone: newCleaner.phone.trim(),
         is_active: newCleaner.isActive,
-      });
+        pin: newCleaner.pin.trim(),
+      };
+
+      const created = await createCleaner(payload);
 
       setCleaners((prev) => [...prev, created]);
-      setNewCleaner({ name: "", email: "", phone: "", isActive: true });
+
+      // сохраняем данные для модалки логина
+      setLastCreatedPhone(payload.phone);
+      setLastCreatedPin(payload.pin);
+      setShowLoginModal(true);
+
+      setNewCleaner(initialNewCleaner);
       setIsAddCleanerOpen(false);
     } catch (err) {
       console.error("[Settings] Failed to create cleaner", err);
+      setNewCleanerError("Failed to create cleaner. Please try again.");
+    }
+  };
+
+  const handleResetPin = async (cleaner: CleanerRow) => {
+    const confirmed = window.confirm(
+      `Reset login PIN for ${cleaner.full_name}? The old PIN will stop working.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      const data = await resetCleanerPin(cleaner.id);
+
+      setLastCreatedPhone(data.phone);
+      setLastCreatedPin(data.pin);
+      setShowLoginModal(true);
+    } catch (err) {
+      console.error("[Settings] Failed to reset cleaner PIN", err);
+      // здесь можно потом добавить тост
     }
   };
 
@@ -377,7 +456,11 @@ export default function Settings() {
               </span>
               <Button
                 size="sm"
-                onClick={() => setIsAddCleanerOpen(true)}
+                onClick={() => {
+                  setNewCleaner(initialNewCleaner);
+                  setNewCleanerError(null);
+                  setIsAddCleanerOpen(true);
+                }}
                 disabled={isLoadingInitial}
               >
                 Add cleaner
@@ -397,6 +480,11 @@ export default function Settings() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Cleaner · {cleaner.phone || "No phone"}
+                    {cleaner.email ? ` · ${cleaner.email}` : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Login for mobile app:{" "}
+                    <span className="font-medium">phone number + 4-digit PIN</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -409,6 +497,16 @@ export default function Settings() {
                   >
                     {cleaner.is_active ? "Active" : "Inactive"}
                   </span>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs px-2 py-1"
+                    onClick={() => handleResetPin(cleaner)}
+                  >
+                    Reset PIN
+                  </Button>
+
                   <Switch
                     checked={cleaner.is_active}
                     onCheckedChange={async (checked) => {
@@ -417,12 +515,12 @@ export default function Settings() {
                           is_active: checked,
                         });
                         setCleaners((prev) =>
-                          prev.map((c) => (c.id === updated.id ? updated : c))
+                          prev.map((c) => (c.id === updated.id ? updated : c)),
                         );
                       } catch (e) {
                         console.error(
                           "[Settings] Failed to update cleaner status",
-                          e
+                          e,
                         );
                       }
                     }}
@@ -500,11 +598,18 @@ export default function Settings() {
 
       {/* Add Cleaner Modal */}
       <Dialog open={isAddCleanerOpen} onOpenChange={setIsAddCleanerOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add cleaner</DialogTitle>
           </DialogHeader>
           <div className="space-y-5 py-4">
+            {newCleanerError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {newCleanerError}
+              </div>
+            )}
+
+            {/* Full name */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">
                 Full name <span className="text-destructive">*</span>
@@ -519,40 +624,100 @@ export default function Settings() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">
-                Email
-              </Label>
-              <Input
-                type="email"
-                value={newCleaner.email}
-                onChange={(e) =>
-                  setNewCleaner((prev) => ({ ...prev, email: e.target.value }))
-                }
-                placeholder="e.g. aisha@example.com"
-                className="h-11 bg-background border-border"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional. Used for future invites and notifications.
-              </p>
+            {/* Phone + Email */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">
+                  Phone <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="tel"
+                  value={newCleaner.phone}
+                  onChange={(e) =>
+                    setNewCleaner((prev) => ({
+                      ...prev,
+                      phone: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. +971 50 123 4567"
+                  className="h-11 bg-background border-border"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required. This phone number will be used as the cleaner&apos;s
+                  login on the mobile app.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">
+                  Email
+                </Label>
+                <Input
+                  type="email"
+                  value={newCleaner.email}
+                  onChange={(e) =>
+                    setNewCleaner((prev) => ({
+                      ...prev,
+                      email: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. aisha@example.com"
+                  className="h-11 bg-background border-border"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional. Used for future invites and notifications.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">
-                Phone
-              </Label>
-              <Input
-                type="tel"
-                value={newCleaner.phone}
-                onChange={(e) =>
-                  setNewCleaner((prev) => ({ ...prev, phone: e.target.value }))
-                }
-                placeholder="e.g. +971 50 123 4567"
-                className="h-11 bg-background border-border"
-              />
-              <p className="text-xs text-muted-foreground">
-                Optional contact number for your internal reference.
-              </p>
+            {/* PIN + Confirm PIN */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">
+                  4-digit PIN <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="password"
+                  value={newCleaner.pin}
+                  maxLength={4}
+                  onChange={(e) =>
+                    setNewCleaner((prev) => ({
+                      ...prev,
+                      pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+                    }))
+                  }
+                  placeholder="e.g. 1234"
+                  className="h-11 bg-background border-border"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cleaner will log in with{" "}
+                  <span className="font-medium">
+                    phone number + this PIN
+                  </span>
+                  .
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">
+                  Confirm PIN <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="password"
+                  value={newCleaner.pinConfirm}
+                  maxLength={4}
+                  onChange={(e) =>
+                    setNewCleaner((prev) => ({
+                      ...prev,
+                      pinConfirm: e.target.value
+                        .replace(/[^0-9]/g, "")
+                        .slice(0, 4),
+                    }))
+                  }
+                  placeholder="Repeat PIN"
+                  className="h-11 bg-background border-border"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-between pt-2">
@@ -572,17 +737,68 @@ export default function Settings() {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => setIsAddCleanerOpen(false)}
+              onClick={() => {
+                setIsAddCleanerOpen(false);
+                setNewCleaner(initialNewCleaner);
+                setNewCleanerError(null);
+              }}
             >
               Cancel
             </Button>
             <Button
               onClick={handleAddCleaner}
-              disabled={!newCleaner.name.trim()}
+              disabled={!newCleaner.name.trim() || !newCleaner.phone.trim()}
             >
               Save cleaner
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Login details modal (создание + reset PIN) */}
+      <Dialog open={showLoginModal} onOpenChange={setShowLoginModal}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Cleaner login details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              Share these login details with the cleaner:
+            </p>
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              <div>
+                <span className="font-medium text-foreground">Phone:</span>{" "}
+                <span className="text-muted-foreground">
+                  {lastCreatedPhone}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-foreground">PIN:</span>{" "}
+                <span className="text-muted-foreground">{lastCreatedPin}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="text-xs"
+                onClick={() => {
+                  if (!lastCreatedPhone || !lastCreatedPin) return;
+                  const text = `CleanProof login:\nPhone: ${lastCreatedPhone}\nPIN: ${lastCreatedPin}`;
+                  navigator.clipboard.writeText(text).catch(() => {});
+                }}
+              >
+                Copy details
+              </Button>
+              <Button
+                type="button"
+                className="text-xs"
+                onClick={() => setShowLoginModal(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
