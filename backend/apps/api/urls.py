@@ -26,6 +26,7 @@ from apps.api.views import (
     # PDF
     JobPdfReportView,
     ManagerJobPdfEmailView,
+    ManagerJobReportEmailLogListView,
 
     # Manager jobs
     ManagerJobsTodayView,
@@ -123,6 +124,13 @@ urlpatterns = [
         "manager/jobs/<int:pk>/report/email/",
         ManagerJobPdfEmailView.as_view(),
         name="manager-job-report-email",
+    ),
+
+        # Manager: email history for Job PDF
+    path(
+        "manager/jobs/<int:pk>/report/emails/",
+        ManagerJobReportEmailLogListView.as_view(),
+        name="manager-job-report-email-log-list",
     ),
 
     # =====================

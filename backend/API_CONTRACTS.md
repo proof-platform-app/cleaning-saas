@@ -1882,6 +1882,47 @@ POST /api/manager/jobs/{id}/report/email/
 
 Sends the verified Job PDF report to email.
 
+## Job PDF report (SLA & Proof)
+
+Job PDF report (GET /api/manager/jobs/<id>/report/pdf/) формируется на основе фактического состояния job и включает блок SLA & Proof.
+SLA-статус (ok / violated) и причины SLA (sla_reasons) вычисляются на backend с использованием общей доменной логики и не дублируются на уровне PDF.
+В случае SLA OK PDF явно указывает, что все обязательные доказательства (check-in/out, photos, checklist) присутствуют.
+В случае SLA violated в PDF отображается список конкретных причин нарушения.
+Job PDF использует тот же SLA source of truth, что и Job Details в Manager Portal.
+
+## Email Job PDF report
+
+Endpoint POST /api/manager/jobs/<id>/report/email/ используется для отправки Job PDF отчёта по email.
+PDF генерируется на backend на основе фактического состояния job и прикрепляется к письму как вложение.
+Email может быть отправлен:
+
+на email текущего пользователя (manager),
+на произвольный email, переданный в payload.
+Тело письма формируется сервером и содержит:
+идентификатор job,
+локацию и адрес,
+дату выполнения,
+имя клинера,
+
+SLA статус (OK / violated, с причинами при наличии),
+описание включённых доказательств (check-in/out, photos, checklist).
+Каждая отправка PDF логируется как бизнес-событие.
+
+## PDF Job Report & Email log
+
+Реализованы API-эндпоинты для генерации и доставки PDF-отчётов по job, а также для логирования факта отправки отчёта по email:
+
+GET /api/manager/jobs/<id>/report/pdf/
+Генерирует и возвращает PDF job report (check-in/out, фото, checklist, audit events).
+
+POST /api/manager/jobs/<id>/report/email/
+Отправляет PDF job report на указанный email и логирует факт отправки.
+
+GET /api/manager/jobs/<id>/report/emails/
+Возвращает историю email-отправок PDF-отчёта по конкретному job (sent_at, target_email, sent_by, status, error_message).
+
+История email-отправок используется как часть SLA / proof-контекста и предназначена для доказательства управленческих действий (отчёт был отправлен / не был отправлен).
+
 **Behavior (v1):**
 
 * Endpoint is available only to authenticated managers.

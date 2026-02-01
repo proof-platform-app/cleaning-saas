@@ -926,12 +926,53 @@ class ManagerJobPdfEmailView(APIView):
 
         # собираем письмо
         subject = f"Job report #{job.id}"
+        # формируем более содержательное письмо для владельца / клиента
+        location_obj = getattr(job, "location", None)
+        location_name = getattr(location_obj, "name", "") or getattr(job, "location_name", "") or ""
+        address = getattr(location_obj, "address", "") or getattr(job, "location_address", "") or ""
+        scheduled_date = job.scheduled_date.strftime("%Y-%m-%d") if getattr(job, "scheduled_date", None) else ""
+        cleaner_obj = getattr(job, "cleaner", None)
+        cleaner_name = getattr(cleaner_obj, "full_name", "") or ""
+
+        sla_status = getattr(job, "sla_status", None)
+        sla_reasons = getattr(job, "sla_reasons", None) or []
+        if not isinstance(sla_reasons, (list, tuple)):
+            sla_reasons = [sla_reasons] if sla_reasons else []
+
+        if sla_status == "violated" and sla_reasons:
+            reasons_text = ", ".join(str(r).replace("_", " ") for r in sla_reasons)
+            sla_line = f"SLA status: violated (reasons: {reasons_text})"
+        elif sla_status:
+            sla_line = f"SLA status: {sla_status}"
+        else:
+            sla_line = ""
+
         body_lines = [
-            "Attached is the verified job report (PDF).",
+            "Hello,",
+            "",
+            "Attached is the verified cleaning report for the completed job.",
             "",
             f"Job ID: {job.id}",
-            f"Location: {getattr(getattr(job, 'location', None), 'name', '')}",
         ]
+        if location_name:
+            body_lines.append(f"Location: {location_name}")
+        if address:
+            body_lines.append(f"Address: {address}")
+        if scheduled_date:
+            body_lines.append(f"Date: {scheduled_date}")
+        if cleaner_name:
+            body_lines.append(f"Cleaner: {cleaner_name}")
+        if sla_line:
+            body_lines.append(sla_line)
+
+        body_lines.append("")
+        body_lines.append(
+            "This report includes check-in/check-out verification, before/after photos, checklist and SLA status."
+        )
+        body_lines.append("")
+        body_lines.append("Regards,")
+        body_lines.append("CleanProof")
+
         body = "\n".join(body_lines)
 
         from_email = getattr(
@@ -1008,6 +1049,69 @@ class ManagerJobPdfEmailView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+class ManagerJobReportEmailLogListView(APIView):
+    """
+    История отправок PDF-отчёта по конкретной job.
+
+    GET /api/manager/jobs/<id>/report/emails/
+
+    Возвращает последние N записей из ReportEmailLog
+    для kind=job_report, внутри компании менеджера.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        user = request.user
+
+        # пока даём только менеджеру; при желании можно расширить на owner'а
+        if user.role != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can view report email history."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # job только внутри компании менеджера
+        job = get_object_or_404(
+            Job.objects.filter(company=user.company),
+            pk=pk,
+        )
+
+        # берём только job_report, по этой job, в рамках компании
+        logs = (
+            ReportEmailLog.objects.filter(
+                company_id=user.company_id,
+                kind=ReportEmailLog.KIND_JOB_REPORT,
+                job_id=job.id,
+            )
+            .select_related("user")
+            .order_by("-created_at")[:20]  # можно увеличить лимит при желании
+        )
+
+        payload = {
+            "job_id": job.id,
+            "emails": [
+                {
+                    "id": log.id,
+                    "sent_at": log.created_at.isoformat(),
+                    "target_email": log.to_email,
+                    "status": log.status,
+                    "sent_by": (
+                        getattr(log.user, "full_name", None)
+                        or getattr(log.user, "email", None)
+                        if log.user
+                        else None
+                    ),
+                    "subject": log.subject,
+                    "error_message": log.error_message,
+                }
+                for log in logs
+            ],
+        }
+
+        return Response(payload, status=status.HTTP_200_OK)
+
 
 class JobPhotosView(APIView):
     """

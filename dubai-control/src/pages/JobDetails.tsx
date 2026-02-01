@@ -22,6 +22,8 @@ import {
   JobTimelineStep,
   downloadJobReportPdf,
   emailJobReportPdf,
+  fetchManagerJobReportEmails,
+  ManagerJobReportEmailLogEntry,
 } from "@/api/client";
 import { cn } from "@/lib/utils";
 import {
@@ -154,6 +156,12 @@ export default function JobDetails() {
   const [customEmail, setCustomEmail] = useState("");
   const [customEmailError, setCustomEmailError] = useState<string | null>(null);
 
+  const [emailHistory, setEmailHistory] =
+    useState<ManagerJobReportEmailLogEntry[]>([]);
+  const [emailHistoryLoading, setEmailHistoryLoading] = useState(false);
+  const [emailHistoryError, setEmailHistoryError] =
+    useState<string | null>(null);
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -177,6 +185,48 @@ export default function JobDetails() {
     }
 
     load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Загружаем историю отправки PDF по этому job
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    async function loadHistory() {
+      try {
+        setEmailHistoryLoading(true);
+        setEmailHistoryError(null);
+
+        const numericId = Number(id);
+        if (!Number.isFinite(numericId)) {
+          return;
+        }
+
+        const res = await fetchManagerJobReportEmails(numericId);
+        if (!cancelled) {
+          setEmailHistory(res.emails || []);
+        }
+      } catch (e) {
+        console.error("[JobDetails] Failed to load job email history", e);
+        if (!cancelled) {
+          setEmailHistoryError(
+            e instanceof Error
+              ? e.message
+              : "Failed to load job email history"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setEmailHistoryLoading(false);
+        }
+      }
+    }
+
+    loadHistory();
 
     return () => {
       cancelled = true;
@@ -265,6 +315,17 @@ export default function JobDetails() {
 
       setEmailMessage(detailText);
       setIsEmailDialogOpen(false);
+
+      // после успешной отправки обновляем историю писем
+      try {
+        const history = await fetchManagerJobReportEmails(jobIdNumber);
+        setEmailHistory(history.emails || []);
+      } catch (historyError) {
+        console.error(
+          "[JobDetails] Failed to refresh email history",
+          historyError
+        );
+      }
     } catch (e) {
       console.error("[JobDetails] Email PDF failed", e);
       const msg =
@@ -764,7 +825,7 @@ export default function JobDetails() {
                     {hourlyRate && (
                       <div>
                         Hourly rate:{" "}
-                        <span className="font-medium">
+                          <span className="font-medium">
                           AED {Number(hourlyRate).toFixed(2)}
                         </span>
                       </div>
@@ -772,7 +833,7 @@ export default function JobDetails() {
                     {flatRate && (
                       <div>
                         Flat rate:{" "}
-                        <span className="font-medium">
+                          <span className="font-medium">
                           AED {Number(flatRate).toFixed(2)}
                         </span>
                       </div>
@@ -834,6 +895,69 @@ export default function JobDetails() {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Email History */}
+          <div className="bg-card rounded-xl border border-border shadow-card p-6">
+            <h2 className="font-semibold text-foreground mb-4">
+              PDF Email History
+            </h2>
+
+            {emailHistoryLoading ? (
+              <p className="text-xs text-muted-foreground">Loading history…</p>
+            ) : emailHistoryError ? (
+              <p className="text-xs text-red-600">
+                Failed to load email history: {emailHistoryError}
+              </p>
+            ) : emailHistory.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Job report for this job has not been emailed yet.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {emailHistory.map((entry) => (
+                  <li key={entry.id} className="text-xs space-y-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-foreground">
+                        {new Date(entry.sent_at).toLocaleString()}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] font-medium",
+                          entry.status === "sent"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            : "bg-red-50 text-red-700 border-red-100"
+                        )}
+                      >
+                        {entry.status === "sent" ? "SENT" : "FAILED"}
+                      </span>
+                    </div>
+
+                    {entry.target_email && (
+                      <p className="text-[11px] text-muted-foreground">
+                        To:{" "}
+                        <span className="text-foreground">
+                          {entry.target_email}
+                        </span>
+                      </p>
+                    )}
+
+                    {entry.sent_by && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Sent by:{" "}
+                        <span className="text-foreground">{entry.sent_by}</span>
+                      </p>
+                    )}
+
+                    {entry.error_message && (
+                      <p className="text-[11px] text-red-600">
+                        Error: {entry.error_message}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* GPS / Location Verification */}

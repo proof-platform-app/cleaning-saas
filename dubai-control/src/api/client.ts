@@ -107,6 +107,22 @@ export interface ManagerJobDetail extends ManagerJobSummary {
   sla_reasons?: string[];
 }
 
+// История отправки PDF-отчёта по джобу
+export interface ManagerJobReportEmailLogEntry {
+  id: number;
+  sent_at: string;
+  target_email: string | null;
+  status: "sent" | "failed" | string;
+  sent_by: string | null;
+  subject: string | null;
+  error_message: string | null;
+}
+
+export interface ManagerJobReportEmailsResponse {
+  job_id: number;
+  emails: ManagerJobReportEmailLogEntry[];
+}
+
 // ---------- Company, Cleaners & Locations types ----------
 
 export interface CompanyProfile {
@@ -693,6 +709,16 @@ export async function createManagerJob(
   };
 }
 
+// История отправки job PDF-отчёта
+export async function fetchManagerJobReportEmails(
+  jobId: number
+): Promise<ManagerJobReportEmailsResponse> {
+  await loginManager();
+  return apiFetch<ManagerJobReportEmailsResponse>(
+    `/api/manager/jobs/${jobId}/report/emails/`
+  );
+}
+
 // ---- PDF report (binary) ----
 
 export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
@@ -773,10 +799,10 @@ export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
 
 export type CreateCleanerPayload = {
   full_name: string;
-  phone: string;          // ОБЯЗАТЕЛЬНО
+  phone: string; // ОБЯЗАТЕЛЬНО
   email?: string | null;
   is_active?: boolean;
-  pin: string;            // 4 цифры, строка
+  pin: string; // 4 цифры, строка
 };
 
 export async function getCleaners(): Promise<Cleaner[]> {
@@ -809,8 +835,9 @@ export async function updateCleaner(
     body: JSON.stringify(input),
   });
 }
+
 export async function resetCleanerPin(
-  cleanerId: number,
+  cleanerId: number
 ): Promise<{ id: number; full_name: string; phone: string | null; pin: string }> {
   await loginManager();
 
@@ -1011,7 +1038,6 @@ export type ViolationJobsResponse = {
   jobs: ViolationJob[];
 };
 
-
 export async function getManagerPlanningJobs(
   date: string
 ): Promise<ManagerPlanningJob[]> {
@@ -1025,6 +1051,7 @@ export async function getManagerPlanningJobs(
 }
 
 // ---------- Reports API ----------
+
 export async function getViolationJobs(params: {
   reason: string;
   periodStart: string;
@@ -1059,9 +1086,8 @@ export async function getMonthlyReport(): Promise<ManagerReport> {
   );
   return res.data;
 }
-export async function getOwnerOverview(
-  days?: number
-): Promise<OwnerOverview> {
+
+export async function getOwnerOverview(days?: number): Promise<OwnerOverview> {
   const params = days ? `?days=${days}` : "";
   const res = await apiClient.get<OwnerOverview>(
     `/api/owner/overview/${params}`
