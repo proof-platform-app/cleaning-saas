@@ -995,6 +995,13 @@ It adds managerial transparency without introducing new execution paths or weake
 SLA reasons related to proof completeness (photos, checklist) are preserved as part of the domain model, even though current mobile UX prevents such violations in standard flows.  
 This ensures forward compatibility with future overrides, policy changes, or legacy data scenarios.
 
+## Job PDF как доказательная карточка
+
+Job PDF приведён в соответствие с Job Details page и отражает полную доказательную картину выполнения job: факты, фото, чеклист, аудит и SLA.
+SLA в PDF не является симуляцией или UI-логикой — он вычисляется на backend и отражает реальное состояние job.
+В нормальном сценарии (жёсткий mobile enforcement) Job PDF демонстрирует SLA OK без нарушений.
+SLA violated предназначен для audit-, override- и edge-сценариев и полностью поддерживается PDF-отчётами.
+Таким образом, Job PDF выступает как внешний, неподдельный артефакт доверия для owner’ов и клиентов.
 
 ### Reporting & Management UX — Status
 

@@ -56,6 +56,8 @@ from .serializers import (
     ManagerJobCreateSerializer,
     PlanningJobSerializer,
     ManagerViolationJobSerializer,
+    compute_sla_status_for_job,
+    compute_sla_reasons_for_job,
 )
 
 logger = logging.getLogger(__name__)
@@ -1868,6 +1870,10 @@ class ManagerJobDetailView(APIView):
             "checklist_items": checklist_data,
             "check_events": events_data,
         }
+
+        # SLA-слой: статус и причины нарушений для этой job
+        data["sla_status"] = compute_sla_status_for_job(job)
+        data["sla_reasons"] = compute_sla_reasons_for_job(job)
 
         return Response(data, status=status.HTTP_200_OK)
 

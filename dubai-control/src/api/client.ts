@@ -102,6 +102,9 @@ export interface ManagerJobDetail extends ManagerJobSummary {
   timeline?: JobTimelineStep[];
 
   checklist?: { item: string; completed: boolean }[];
+
+  sla_status?: "ok" | "violated";
+  sla_reasons?: string[];
 }
 
 // ---------- Company, Cleaners & Locations types ----------
@@ -644,6 +647,8 @@ export async function fetchManagerJobDetail(
     notes: raw.notes ?? raw.manager_notes ?? null,
     checklist,
     timeline,
+    sla_status: raw.sla_status,
+    sla_reasons: Array.isArray(raw.sla_reasons) ? raw.sla_reasons : [],
   };
 }
 

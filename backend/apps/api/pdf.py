@@ -23,6 +23,10 @@ from reportlab.platypus import (
 )
 
 from apps.jobs.models import Job, JobPhoto
+from apps.api.serializers import (
+    compute_sla_status_for_job,
+    compute_sla_reasons_for_job,
+)
 
 
 def _fmt_dt(value) -> str:
@@ -291,6 +295,41 @@ def generate_job_report_pdf(job: Job) -> bytes:
   story.append(
       Paragraph((job.cleaner_notes or "—").replace("\n", "<br/>"), styles["BodyText"])
   )
+  story.append(Spacer(1, 8 * mm))
+
+    # ----------------------------------------------------
+  # SLA & Proof
+  # ----------------------------------------------------
+  sla_status = compute_sla_status_for_job(job)
+  sla_reasons = compute_sla_reasons_for_job(job) or []
+
+  story.append(Paragraph("<b>SLA &amp; Proof</b>", styles["Heading3"]))
+  story.append(Spacer(1, 2 * mm))
+
+  if sla_status == "ok":
+      story.append(
+          Paragraph(
+              "Status: <b>SLA OK</b><br/>"
+              "All required proof (check-in/out, photos, checklist) looks good for this job.",
+              styles["BodyText"],
+          )
+      )
+  else:
+      story.append(
+          Paragraph(
+              "Status: <b>SLA violated</b>",
+              styles["BodyText"],
+          )
+      )
+      if sla_reasons:
+          for r in sla_reasons:
+              story.append(
+                  Paragraph(
+                      f"• {r.replace('_', ' ').capitalize()}",
+                      styles["BodyText"],
+                  )
+              )
+
   story.append(Spacer(1, 8 * mm))
 
   # Photos (KeepTogether, чтобы не разваливалось)

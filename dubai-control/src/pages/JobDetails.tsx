@@ -1,5 +1,4 @@
-// dubai-control/src/pages/JobDetails.tsx
-
+import type React from "react";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -90,8 +89,14 @@ function mapTimelineToUI(
       case "scheduled":
         icon = Calendar;
         // scheduled_date + start_time у нас обычно не ISO — просто как текст
-        if (job.scheduled_date && job.start_time && job.start_time !== "--:--") {
-          time = `${formatDate(job.scheduled_date)} at ${job.start_time}`;
+        if (
+          job.scheduled_date &&
+          (job as any).start_time &&
+          (job as any).start_time !== "--:--"
+        ) {
+          time = `${formatDate(job.scheduled_date)} at ${
+            (job as any).start_time
+          }`;
         } else if (job.scheduled_date) {
           time = formatDate(job.scheduled_date);
         }
@@ -125,6 +130,12 @@ function mapTimelineToUI(
     };
   });
 }
+
+const SLA_REASON_LABELS: Record<string, string> = {
+  missing_before_photo: "Missing before photo",
+  missing_after_photo: "Missing after photo",
+  checklist_not_completed: "Checklist not completed",
+};
 
 export default function JobDetails() {
   const { id } = useParams<{ id: string }>();
@@ -183,7 +194,6 @@ export default function JobDetails() {
       setHasGeneratedPdf(true);
 
       if (mode === "download") {
-        // реальное скачивание
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -196,7 +206,6 @@ export default function JobDetails() {
           window.URL.revokeObjectURL(url);
         }, 10000);
       } else {
-        // "Generate" — просто дергаем backend без открытия диалога
         console.log(
           `[JobDetails] PDF generated for job ${jobIdNumber}, size=${blob.size} bytes`
         );
@@ -227,7 +236,6 @@ export default function JobDetails() {
         setCustomEmailError("Email is required.");
         return;
       }
-      // очень простой чек, чисто чтобы отловить явный мусор
       const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
       if (!emailRegex.test(value)) {
         setCustomEmailError("Invalid email format.");
@@ -319,7 +327,7 @@ export default function JobDetails() {
     );
   }
 
-  // нормализуем данные под UI Lovable
+  // нормализуем данные под UI
 
   const timelineSteps: UITimelineStep[] = mapTimelineToUI(
     job.timeline || [],
@@ -344,7 +352,9 @@ export default function JobDetails() {
     typeof checkInEvent?.longitude === "number" ? checkInEvent.longitude : null;
 
   const checkOutLat =
-    typeof checkOutEvent?.latitude === "number" ? checkOutEvent.latitude : null;
+    typeof checkOutEvent?.latitude === "number"
+      ? checkOutEvent.latitude
+      : null;
   const checkOutLng =
     typeof checkOutEvent?.longitude === "number"
       ? checkOutEvent.longitude
@@ -368,12 +378,38 @@ export default function JobDetails() {
   const checkOutTime =
     checkOutEvent && (formatTime(checkOutEvent.created_at) || undefined);
 
+  const slaStatus = job.sla_status ?? "ok";
+  const slaReasons = Array.isArray(job.sla_reasons) ? job.sla_reasons : [];
+  const hasSlaIssue = slaStatus === "violated";
+
   const hourlyRate = (job as any).hourlyRate ?? (job as any).hourly_rate;
   const flatRate = (job as any).flatRate ?? (job as any).flat_rate;
 
   const canGeneratePdf = job.status !== "scheduled";
   const canDownloadPdf = canGeneratePdf && hasGeneratedPdf;
   const canEmailPdf = canGeneratePdf;
+
+  const cleanerName =
+    (job as any).cleaner_name ||
+    (job as any).cleaner_full_name ||
+    (job as any).cleaner?.full_name ||
+    "—";
+
+  const scheduledDate = job.scheduled_date
+    ? formatDate(job.scheduled_date)
+    : "—";
+
+  const scheduledTime =
+    (job as any).scheduled_start_time || (job as any).start_time || null;
+  const scheduledEndTime =
+    (job as any).scheduled_end_time || (job as any).end_time || null;
+
+  const actualStart = formatDateTime(
+    (job as any).actual_start_time || (checkInEvent as any)?.created_at
+  );
+  const actualEnd = formatDateTime(
+    (job as any).actual_end_time || (checkOutEvent as any)?.created_at
+  );
 
   return (
     <div className="p-8 animate-fade-in">
@@ -390,12 +426,12 @@ export default function JobDetails() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-                {job.location_name || job.location || "Job"}
+                {job.location_name || (job as any).location || "Job"}
               </h1>
               <StatusPill status={job.status as any} />
             </div>
             <p className="text-muted-foreground">
-              {job.location_address || job.address || "—"}
+              {job.location_address || (job as any).address || "—"}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
@@ -669,58 +705,135 @@ export default function JobDetails() {
           <div className="bg-card rounded-xl border border-border shadow-card p-6">
             <h2 className="font-semibold text-foreground mb-4">Job Details</h2>
             <dl className="space-y-4">
-              <div>
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Job ID
                 </dt>
-                <dd className="mt-1 text-sm text-foreground font-mono">
+                <dd className="text-sm font-mono text-foreground">
                   {formatJobCode(job.id)}
                 </dd>
               </div>
-              <div>
+
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Cleaner
                 </dt>
-                <dd className="mt-1 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <span className="text-sm text-foreground">
-                    {job.cleaner_name || job.cleaner || "—"}
-                  </span>
+                <dd className="flex items-center gap-2 text-sm text-foreground">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span>{cleanerName}</span>
                 </dd>
               </div>
-              <div>
+
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Date
+                </dt>
+                <dd className="text-sm text-foreground">{scheduledDate}</dd>
+              </div>
+
+              <div className="flex flex-col gap-1">
                 <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Scheduled Time
                 </dt>
-                <dd className="mt-1 text-sm text-foreground">
-                  {job.start_time && job.end_time
-                    ? `${job.start_time} - ${job.end_time}`
-                    : "--:-- - --:--"}
+                <dd className="text-sm text-foreground">
+                  {scheduledTime
+                    ? scheduledEndTime
+                      ? `${scheduledTime}–${scheduledEndTime}`
+                      : scheduledTime
+                    : "—"}
                 </dd>
               </div>
-              {hourlyRate && (
-                <div>
+
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Actual Time
+                </dt>
+                <dd className="text-sm text-foreground">
+                  {actualStart || actualEnd
+                    ? [actualStart, actualEnd].filter(Boolean).join(" → ")
+                    : "—"}
+                </dd>
+              </div>
+
+              {(hourlyRate || flatRate) && (
+                <div className="flex flex-col gap-1">
                   <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Hourly Rate
+                    Pricing (display only)
                   </dt>
-                  <dd className="mt-1 text-sm text-foreground">
-                    AED {hourlyRate}/hr
-                  </dd>
-                </div>
-              )}
-              {flatRate && (
-                <div>
-                  <dt className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Flat Rate
-                  </dt>
-                  <dd className="mt-1 text-sm text-foreground">
-                    AED {flatRate}
+                  <dd className="text-sm text-foreground space-y-0.5">
+                    {hourlyRate && (
+                      <div>
+                        Hourly rate:{" "}
+                        <span className="font-medium">
+                          AED {Number(hourlyRate).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    {flatRate && (
+                      <div>
+                        Flat rate:{" "}
+                        <span className="font-medium">
+                          AED {Number(flatRate).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                   </dd>
                 </div>
               )}
             </dl>
+          </div>
+
+          {/* SLA & Proof */}
+          <div className="bg-card rounded-xl border border-border shadow-card p-6">
+            <h2 className="font-semibold text-foreground mb-4">
+              SLA &amp; Proof
+            </h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Status
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border",
+                    hasSlaIssue
+                      ? "bg-red-50 text-red-700 border-red-100"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                  )}
+                >
+                  {hasSlaIssue ? "SLA violated" : "SLA OK"}
+                </span>
+              </div>
+
+              {hasSlaIssue && slaReasons.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                    Issues
+                  </p>
+                  <ul className="space-y-1">
+                    {slaReasons.map((reason) => (
+                      <li
+                        key={reason}
+                        className="flex items-start gap-2 text-xs text-muted-foreground"
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                        <span>
+                          {SLA_REASON_LABELS[reason] ??
+                            reason.replace(/_/g, " ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!hasSlaIssue && (
+                <p className="text-xs text-muted-foreground">
+                  All required proof (check-in/out, photos, checklist) looks
+                  good for this job.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* GPS / Location Verification */}

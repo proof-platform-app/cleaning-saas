@@ -317,6 +317,12 @@ No self-service recovery for cleaners (by design) — ✅
 ---
 👉 **Статус слоя 0: DONE ✅**
 
+
+## Job PDF (v1) ✅
+Реализован Job PDF с полной доказательной структурой: summary, notes, photos (before/after), checklist, audit events и SLA & Proof.
+SLA-блок в PDF использует единый backend source of truth и корректно отражает статус ok / violated.
+Mobile enforcement исключает SLA-нарушения в стандартном флоу, что считается осознанным архитектурным решением.
+Weekly / Monthly SLA reports не затронуты.
 ---
 
 ## 📱 СЛОЙ 1 — ИСПОЛНЕНИЕ (Mobile Cleaner App)
