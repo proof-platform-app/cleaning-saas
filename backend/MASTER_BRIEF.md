@@ -889,6 +889,43 @@ Performance Layer:
 Job execution → SLA → Performance → History → Evidence
 Это усиливает ценность CleanProof как системы контроля качества, а не просто хранилища отчётов.
 
+### Checklist templates в Job Planning
+
+В планировании задач менеджер работает не с “сырым” чеклистом, а с заранее подготовленными шаблонами:
+
+* Apartment – Standard (6 items)
+* Apartment – Deep (12 items)
+* Office – Standard (8 items)
+* Villa – Full (12 items)
+
+Эти шаблоны живут на уровне компании и поднимаются в одном месте — через `GET /api/manager/meta/`.  
+Ответ эндпоинта содержит:
+
+* список клинеров (`cleaners`);
+* список локаций (`locations`);
+* список чеклист-шаблонов (`checklist_templates`) с превью первых пунктов и количеством items.
+
+В UI создания job:
+
+* менеджер выбирает чеклист из выпадающего списка с превью первых задач (`items_preview` + `+ N more`);
+* ниже показывается блок “CHECKLIST DETAILS” с названием шаблона и разворачиваемым списком пунктов.
+
+## Это делает связь SLA-метрики `checklist_not_completed` прозрачной: всегда понятно, какой именно чеклист был выбран под конкретную задачу.
+
+Checklist templates as part of SLA proof system
+
+Checklist templates являются базовым элементом системы доказательств выполнения работ (proof of work). Они задают ожидаемый объём и состав работ для job и напрямую влияют на SLA-оценку.
+
+Связка выглядит так:
+Create Job → Select Checklist Template → Job Checklist Items → Checklist Completion → SLA Status.
+
+Менеджер может видеть связь между planning, выполнением и SLA:
+в списках jobs (Planning / History) через бейдж с названием шаблона;
+в JobSidePanel — через детальный блок чеклиста;
+в отчётах и violation views — через причину checklist_not_completed.
+
+Это обеспечивает прозрачность и объяснимость SLA-нарушений без ручных проверок.
+
 ### SLA Reports (Value Layer)
 
 SLA Reports package operational evidence into a manager-ready format.

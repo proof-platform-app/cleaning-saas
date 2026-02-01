@@ -1,4 +1,5 @@
-import { apiClient } from "@/api/client";
+  // dubai-control/src/api/planning.ts
+  import { apiClient } from "@/api/client";
 import type {
   PlanningFilters,
   PlanningJob,
@@ -31,6 +32,14 @@ type BackendManagerJob = {
     after_photo?: boolean;
     checklist?: boolean;
   };
+
+  // 🔹 Новое
+  checklist_template?: {
+    id: number;
+    name: string;
+  } | null;
+
+  checklist_items?: string[] | null;
 };
 
 function encodeQS(params: Record<string, string>) {
@@ -63,16 +72,19 @@ function mapBackendJobToPlanningJob(j: BackendManagerJob): PlanningJob {
       after_photo: Boolean(after),
       check_out: false,
     },
+    // 🔹 Новое
+    checklist_template: j.checklist_template ?? null,
+    checklist_items: j.checklist_items ?? null,
   };
 }
 
 export async function fetchPlanningJobs(
-  filters: PlanningFilters
+  filters: PlanningFilters,
 ): Promise<PlanningJob[]> {
   const qs = encodeQS({ date: filters.date });
 
   const res = await apiClient.get<BackendManagerJob[]>(
-    `/api/manager/jobs/planning/?${qs}`
+    `/api/manager/jobs/planning/?${qs}`,
   );
 
   const jobs = res.data.map(mapBackendJobToPlanningJob);
@@ -87,10 +99,27 @@ export async function fetchPlanningJobs(
 
 // ===== NEW: meta + create job =====
 
+type PlanningMetaChecklistTemplate = {
+  id: number;
+  name: string;
+
+  // Краткое описание шаблона — "для чего" он.
+  description?: string | null;
+
+  // Полный список пунктов (в правильном порядке).
+  items?: string[] | null;
+
+  // Первые несколько пунктов — превью для списков.
+  items_preview?: string[] | null;
+
+  // Общее количество пунктов.
+  items_count?: number | null;
+};
+
 export type PlanningMeta = {
   cleaners: { id: number; full_name: string; phone: string | null }[];
   locations: { id: number; name: string; address: string | null }[];
-  checklist_templates: { id: number; name: string }[];
+  checklist_templates: PlanningMetaChecklistTemplate[];
 };
 
 export type CreateJobPayload = {
@@ -132,12 +161,12 @@ export async function fetchPlanningMeta(): Promise<PlanningMeta> {
 }
 
 export async function createPlanningJob(
-  payload: CreateJobPayload
+  payload: CreateJobPayload,
 ): Promise<PlanningJob> {
   try {
     const res = await apiClient.post<BackendCreatedJob>(
       "/api/manager/jobs/",
-      payload
+      payload,
     );
 
     const created = res.data;
@@ -171,14 +200,14 @@ export async function createPlanningJob(
       if (data?.code === "trial_expired") {
         const err: TrialExpiredError = new Error(
           data?.detail ||
-            "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade."
+            "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade.",
         );
         err.code = "trial_expired";
         throw err;
       }
 
       const err: TrialExpiredError = new Error(
-        data?.detail || "You are not allowed to create jobs."
+        data?.detail || "You are not allowed to create jobs.",
       );
       err.code = data?.code || "forbidden";
       throw err;
@@ -202,7 +231,7 @@ export type JobsHistoryFilters = {
 };
 
 export async function fetchJobsHistory(
-  filters: JobsHistoryFilters
+  filters: JobsHistoryFilters,
 ): Promise<PlanningJob[]> {
   const params = new URLSearchParams({
     date_from: filters.dateFrom,
@@ -222,7 +251,7 @@ export async function fetchJobsHistory(
   }
 
   const res = await apiClient.get<PlanningJob[]>(
-    `/api/manager/jobs/history/?${params.toString()}`
+    `/api/manager/jobs/history/?${params.toString()}`,
   );
 
   return res.data;

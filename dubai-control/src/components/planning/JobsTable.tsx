@@ -115,6 +115,11 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
               const statusCfg = STATUS_CONFIG[job.status];
               const hasSlaIssue = job.sla_status === "violated";
 
+              const checklistTemplate = job.checklist_template ?? null;
+              const checklistOk = Boolean(job.proof?.checklist);
+              const checklistBadgeIsWarning =
+                job.status === "completed" && !checklistOk;
+
               return (
                 <tr
                   key={job.id}
@@ -128,6 +133,21 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                     <div className="text-sm text-muted-foreground">
                       {job.scheduled_date}
                     </div>
+
+                    {checklistTemplate && (
+                      <div className="mt-1">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                            checklistBadgeIsWarning
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-50 text-slate-700",
+                          )}
+                        >
+                          {checklistTemplate.name}
+                        </span>
+                      </div>
+                    )}
                   </td>
 
                   <td className="px-4 py-4">
@@ -158,7 +178,7 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                          statusCfg.className
+                          statusCfg.className,
                         )}
                       >
                         {statusCfg.label}

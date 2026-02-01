@@ -1211,6 +1211,51 @@ checklist_not_completed
 
 Таким образом, checklist templates напрямую участвуют в SLA-логике и аналитике качества выполнения работ.
 
+Checklist flow (manager → job → SLA)
+
+Реализована сквозная логика чеклистов: менеджер выбирает checklist_template при создании job, после чего backend создаёт набор JobChecklistItem, привязанных к job. Чеклист существует как обязательная часть proof-флоу, наряду с before/after фото.
+
+Во фронтенде (JobSidePanel) менеджер видит:
+название применённого checklist template;
+превью пунктов чеклиста с возможностью раскрыть полный список;
+статус чеклиста, зависящий от состояния job (Pending для незавершённых, Complete / Not completed для завершённых).
+
+SLA-причина checklist_not_completed возникает только для completed jobs, у которых обязательные пункты чеклиста не выполнены.
+---
+
+### 2. DEV_BRIEF.md
+
+**Куда вставить**  
+Ближе к блоку про jobs/planning и чеклисты (там, где уже упоминается SLA-причина `checklist_not_completed`).
+
+**Текст блока:**
+
+```markdown
+### Checklist templates — инициализация и использование
+
+Для новых компаний базовые чеклисты создаются лениво при первом запросе менеджера к `GET /api/manager/meta/`.  
+Хелпер `create_default_checklist_templates_for_company(company)`:
+
+* проверяет, есть ли у компании хотя бы один `ChecklistTemplate` с пунктами (`items__isnull=False`);
+* если нет — создаёт 4 дефолтных шаблона:
+  * `Apartment – Standard (6 items)`
+  * `Apartment – Deep (12 items)`
+  * `Office – Standard (8 items)`
+  * `Villa – Full (12 items)`
+* для каждого шаблона создаёт `ChecklistTemplateItem` с корректным `order` и `is_required=True`.
+
+Эндпоинт `GET /api/manager/meta/` возвращает эти шаблоны в поле `checklist_templates` с дополнительными полями:
+
+* `description` — краткое текстовое описание;
+* `items_preview` — первые 3–4 пункта чеклиста (для превью в интерфейсе);
+* `items_count` — общее количество пунктов.
+
+Фронтенд (панель планирования `CreateJobDrawer`) использует `checklist_templates` как:
+
+* источник для выпадающего списка чеклистов при создании `Job`;
+* основу для UX вокруг SLA-причины `checklist_not_completed` — менеджер явно видит, какой чеклист был выбран и сколько пунктов в нём должно быть закрыто.
+
+
 ### 15.7. Check-out Block ↔ API
 
 Кнопка Check-out видна при `status == "in_progress"`.

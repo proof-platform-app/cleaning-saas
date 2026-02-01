@@ -1190,6 +1190,24 @@ Content-Type: application/json
 
 Менеджер может выбрать чек-лист при создании job.
 
+## Checklist templates in PlanningMeta
+
+Эндпоинт GET /api/manager/meta/ возвращает список checklist_templates, используемых в Create Job Drawer.
+В ответ попадают только шаблоны чек-листов текущей компании, у которых существует как минимум один пункт (ChecklistTemplateItem).
+
+Если у компании на момент запроса отсутствуют такие шаблоны, backend автоматически инициализирует стандартный набор чек-листов (Apartment / Office / Villa) и возвращает их в этом же ответе.
+
+Поле ответа:
+
+"checklist_templates": [
+  { "id": 7, "name": "Apartment – Standard (6 items)" },
+  { "id": 8, "name": "Apartment – Deep (12 items)" }
+]
+
+
+При создании job выбранный шаблон передаётся как checklist_template_id.
+Если чек-лист не требуется, поле передаётся как null.
+
 **Endpoint**
 
 `GET /api/manager/checklists/templates/`
@@ -2068,6 +2086,9 @@ There is no separate "owner PDF" endpoint.
 The Owner overview shown in the UI is a presentation layer over the same aggregated data and does not introduce additional metrics beyond what is already included in the PDF.
 
 ---
+## Cleaner authentication (phone + PIN)
+
+Реализована схема аутентификации клинеров через номер телефона и 4-значный PIN. Менеджер создаёт клинера через POST /api/manager/cleaners/, указывая имя, телефон, опциональный email и статус активности. PIN может быть задан при создании либо сгенерирован сервером при сбросе. Для входа клинер использует endpoint POST /api/auth/cleaner-login/ с параметрами phone и pin, в ответ возвращается auth token и данные пользователя. Сброс PIN доступен только менеджеру через POST /api/manager/cleaners/{id}/reset-pin/ и возвращает новый PIN, который отображается один раз.
 
 ## 10. API Contract — зафиксированные поля для Mobile Layer 1
 
@@ -2149,6 +2170,41 @@ The Owner overview shown in the UI is a presentation layer over the same aggrega
   * обязателен для check-out, если `required = true` (все required должны быть `is_completed = true`).
 * Backend остаётся единственным источником истины.
   UI лишь повторяет эти ограничения и не вводит свои правила.
+
+  #### Checklist templates in manager meta
+
+**GET /api/manager/meta/** теперь возвращает в поле `checklist_templates` расширенный объект:
+
+```json
+{
+  "id": 1,
+  "name": "Apartment – Standard (6 items)",
+  "description": "",
+  "items_preview": [
+    "Vacuum all floors",
+    "Mop hard floors",
+    "Dust all surfaces"
+  ],
+  "items_count": 6
+}
+description — краткое описание шаблона (для чего используется).
+items_preview — первые N пунктов чеклиста (используются как превью в UI).
+items_count — общее количество пунктов в шаблоне.
+
+Если у компании yet нет ни одного валидного шаблона с пунктами, при первом запросе GET /api/manager/meta/ вызывается хелпер create_default_checklist_templates_for_company(company) и создаются базовые шаблоны:
+
+Apartment – Standard (6 items)
+Apartment – Deep (12 items)
+Office – Standard (8 items)
+Villa – Full (12 items)
+
+Checklist templates & job checklist linkage
+
+Эндпоинт GET /api/manager/meta/ возвращает список checklist_templates, включающий: id, name, description, items_preview и items_count. Эти данные используются фронтендом для осознанного выбора шаблона при создании job.
+
+При создании job через POST /api/manager/jobs/ можно передать поле checklist_template_id. Если оно указано, на стороне backend автоматически создаётся чеклист job на основе выбранного шаблона. Если поле не передано, job создаётся без чеклиста.
+
+Состояние чеклиста job учитывается в proof-блоке (proof.checklist) и используется для вычисления SLA.
 
 ### 10.4. Job Events / Timeline (Mobile Layer 1)
 

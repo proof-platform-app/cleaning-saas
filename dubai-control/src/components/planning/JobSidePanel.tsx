@@ -44,7 +44,11 @@ type JobSidePanelProps = {
   evidenceContext?: EvidenceContext;
 };
 
-export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProps) {
+export function JobSidePanel({
+  job,
+  onClose,
+  evidenceContext,
+}: JobSidePanelProps) {
   const proof = job.proof;
   const before = proof.before_photo;
   const after = proof.after_photo;
@@ -63,8 +67,8 @@ export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProp
     job.status === "completed"
       ? "bg-emerald-100 text-emerald-700"
       : job.status === "in_progress"
-      ? "bg-blue-100 text-blue-700"
-      : "bg-slate-100 text-slate-700";
+        ? "bg-blue-100 text-blue-700"
+        : "bg-slate-100 text-slate-700";
 
   const slaStatus = job.sla_status ?? "ok";
   const slaReasons = job.sla_reasons ?? [];
@@ -78,6 +82,9 @@ export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProp
   const [activeSlaReason, setActiveSlaReason] = useState<string | null>(
     evidenceContext?.reasonCode ?? null,
   );
+
+  // Раскрытие полного списка пунктов чеклиста
+  const [showFullChecklistItems, setShowFullChecklistItems] = useState(false);
 
   const scrollToRef = (ref: React.RefObject<HTMLDivElement>) => {
     if (!ref.current) return;
@@ -113,6 +120,35 @@ export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProp
     (evidenceContext.reasonLabel ||
       SLA_REASON_LABELS[evidenceContext.reasonCode as SlaReasonCode] ||
       evidenceContext.reasonCode.replace(/_/g, " "));
+
+  // Checklist данные для панели
+  const checklistTemplate = job.checklist_template ?? null;
+  const checklistItemsAll = job.checklist_items ?? [];
+  const checklistItems: string[] = Array.isArray(checklistItemsAll)
+    ? checklistItemsAll.filter((t) => !!t && t.trim().length > 0)
+    : [];
+
+  const checklistPreviewItems = checklistItems.slice(0, 4);
+  const checklistExtraCount =
+    checklistItems.length > checklistPreviewItems.length
+      ? checklistItems.length - checklistPreviewItems.length
+      : 0;
+
+  const checklistItemsToShow = showFullChecklistItems
+    ? checklistItems
+    : checklistPreviewItems;
+
+  // 🔹 Новая логика текста и стиля бейджа статуса чеклиста
+  const isCompletedJob = job.status === "completed";
+
+  const checklistStatusLabel =
+    checklist ? "Complete" : isCompletedJob ? "Not completed" : "Pending";
+
+  const checklistStatusClass = checklist
+    ? "border-emerald-200 text-emerald-700 bg-emerald-50"
+    : isCompletedJob
+      ? "border-amber-200 text-amber-700 bg-amber-50"
+      : "border-slate-200 text-slate-600 bg-slate-50";
 
   return (
     <div className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l border-border z-50">
@@ -255,6 +291,67 @@ export function JobSidePanel({ job, onClose, evidenceContext }: JobSidePanelProp
               </div>
             ) : null}
           </div>
+
+          {/* Checklist template + items */}
+          {(checklistTemplate || checklistItemsToShow.length > 0) && (
+            <div className="space-y-2 mt-2">
+              <div className="flex items-center gap-2 text-xs font-medium tracking-wide uppercase text-muted-foreground">
+                <CheckSquare className="w-3 h-3" />
+                <span>Checklist</span>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-muted/40 px-4 py-3 space-y-2">
+                {/* Название чек-листа */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium text-foreground">
+                    {checklistTemplate
+                      ? checklistTemplate.name
+                      : "Checklist attached to this job"}
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs font-medium rounded-full px-2 py-0.5 border",
+                      checklistStatusClass,
+                    )}
+                  >
+                    {checklistStatusLabel}
+                  </span>
+                </div>
+
+                {/* Список пунктов */}
+                {checklistItemsToShow.length > 0 && (
+                  <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                    {checklistItemsToShow.map((text, idx) => (
+                      <li
+                        key={`${idx}-${text.slice(0, 10)}`}
+                        className="flex gap-2"
+                      >
+                        <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-slate-300" />
+                        <span>{text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Кнопка раскрытия / сворачивания */}
+                {checklistExtraCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowFullChecklistItems((prev) => !prev)
+                    }
+                    className="mt-1 text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    {showFullChecklistItems ? (
+                      <>Hide extra items</>
+                    ) : (
+                      <>+ {checklistExtraCount} more items</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Proof of work */}
           <div className="mt-4">

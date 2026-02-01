@@ -65,99 +65,135 @@ logger = logging.getLogger(__name__)
 DEFAULT_CHECKLIST_TEMPLATES = [
     {
         "name": "Apartment – Standard (6 items)",
+        "description": "Regular maintenance cleaning for occupied apartments.",
         "items": [
-            "Vacuum all floors",
-            "Mop hard floors",
-            "Dust all surfaces",
-            "Clean bathroom fixtures",
-            "Wipe kitchen surfaces",
-            "Empty all trash bins",
+            {"text": "Vacuum all floors", "is_required": True},
+            {"text": "Mop hard floors", "is_required": True},
+            {"text": "Dust all surfaces", "is_required": True},
+            {"text": "Clean bathroom fixtures", "is_required": True},
+            {"text": "Wipe kitchen surfaces", "is_required": True},
+            {"text": "Empty all trash bins", "is_required": True},
         ],
     },
     {
         "name": "Apartment – Deep (12 items)",
+        "description": "Deep cleaning for move-in / move-out or periodic general cleaning.",
         "items": [
-            "Vacuum all floors",
-            "Mop hard floors",
-            "Dust all reachable surfaces",
-            "Dust high surfaces (tops of wardrobes, shelves)",
-            "Clean bathroom fixtures (sink, toilet, shower, bathtub)",
-            "Descale taps and shower heads (if needed)",
-            "Wipe kitchen countertops and backsplash",
-            "Clean outside of kitchen appliances (fridge, oven, microwave)",
-            "Clean inside microwave and oven (where applicable)",
-            "Clean windows and mirrors (reachable from inside)",
-            "Disinfect door handles and light switches",
-            "Empty all trash bins and replace liners",
+            {"text": "Vacuum all floors", "is_required": True},
+            {"text": "Mop hard floors", "is_required": True},
+            {"text": "Dust all reachable surfaces", "is_required": True},
+            {"text": "Dust high surfaces (tops of wardrobes, shelves)", "is_required": True},
+            {"text": "Clean bathroom fixtures (sink, toilet, shower, bathtub)", "is_required": True},
+            {"text": "Descale taps and shower heads (if needed)", "is_required": False},
+            {"text": "Wipe kitchen countertops and backsplash", "is_required": True},
+            {"text": "Clean outside of kitchen appliances (fridge, oven, microwave)", "is_required": False},
+            {"text": "Clean inside microwave and oven (where applicable)", "is_required": False},
+            {"text": "Clean windows and mirrors (reachable from inside)", "is_required": True},
+            {"text": "Disinfect door handles and light switches", "is_required": True},
+            {"text": "Empty all trash bins and replace liners", "is_required": True},
         ],
     },
     {
         "name": "Office – Standard (8 items)",
+        "description": "Core office cleaning for work areas, meeting rooms, toilets and kitchen.",
         "items": [
-            "Vacuum carpets and hard floors in work areas",
-            "Wipe desks and work surfaces",
-            "Clean meeting room tables and chairs",
-            "Empty all office trash bins",
-            "Sanitize high-touch points",
-            "Clean and restock toilets",
-            "Clean kitchen / coffee area surfaces",
-            "Tidy reception / entrance area",
+            {"text": "Vacuum carpets and hard floors in work areas", "is_required": True},
+            {"text": "Wipe desks and work surfaces (without moving personal items)", "is_required": True},
+            {"text": "Clean meeting room tables and chairs", "is_required": True},
+            {"text": "Empty all office trash bins", "is_required": True},
+            {"text": "Sanitize high-touch points (door handles, switches, railings)", "is_required": True},
+            {"text": "Clean and restock toilets (sinks, toilets, supplies)", "is_required": True},
+            {"text": "Clean kitchen / coffee area surfaces (countertops, sink, tables)", "is_required": True},
+            {"text": "Tidy reception / entrance area (floor, desk, glass surfaces)", "is_required": True},
         ],
     },
     {
         "name": "Villa – Full (12 items)",
+        "description": "Full villa cleaning: living areas, bedrooms, bathrooms and terraces.",
         "items": [
-            "Vacuum all floors in living areas",
-            "Mop hard floors (hallways, kitchen, bathrooms)",
-            "Dust furniture and decor in living areas",
-            "Clean glass tables and mirrors",
-            "Clean and disinfect all bathrooms",
-            "Wipe kitchen countertops and backsplash",
-            "Clean outside of kitchen appliances",
-            "Tidy and dust bedrooms (nightstands, dressers, headboards)",
-            "Change bed linen (if requested)",
-            "Clean and sweep balconies / terraces (if accessible)",
-            "Sanitize door handles, switches and railings (stairs)",
-            "Empty all trash bins (indoor and outdoor where applicable)",
+            {"text": "Vacuum all floors in living areas", "is_required": True},
+            {"text": "Mop hard floors (hallways, kitchen, bathrooms)", "is_required": True},
+            {"text": "Dust furniture and decor in living areas", "is_required": True},
+            {"text": "Clean glass tables and mirrors", "is_required": True},
+            {"text": "Clean and disinfect all bathrooms (toilets, sinks, showers, bathtubs)", "is_required": True},
+            {"text": "Wipe kitchen countertops and backsplash", "is_required": True},
+            {"text": "Clean outside of kitchen appliances", "is_required": True},
+            {"text": "Tidy and dust bedrooms (nightstands, dressers, headboards)", "is_required": True},
+            {"text": "Change bed linen (if requested)", "is_required": False},
+            {"text": "Clean and sweep balconies / terraces (if accessible)", "is_required": False},
+            {"text": "Sanitize door handles, switches and railings (stairs)", "is_required": True},
+            {"text": "Empty all trash bins (indoor and outdoor where applicable)", "is_required": True},
         ],
     },
 ]
 
-
 def create_default_checklist_templates_for_company(company: Company) -> None:
     """
     Гарантирует, что у company есть базовые шаблоны чек-листов.
-    Идемпотентная функция — лишние копии не создаёт.
+
+    Идемпотентная функция:
+    - если у компании уже есть шаблоны с пунктами, ничего не делает;
+    - если нужных шаблонов нет, создаёт их;
+    - если шаблон есть, но без description, аккуратно дописывает его;
+    - не создаёт дубликаты пунктов.
     """
 
-    # Уже есть хоть какие-то шаблоны с пунктами? Тогда ничего не делаем.
+    # Уже есть хоть какие-то шаблоны с пунктами? Тогда считаем, что компания
+    # сама всё настроила — и ничего не трогаем.
     has_any_templates = ChecklistTemplate.objects.filter(
         company=company,
-        items__isnull=False,  # related_name = "items"
+        items__isnull=False,  # related_name="items"
     ).exists()
 
     if has_any_templates:
         return
 
     for tmpl_spec in DEFAULT_CHECKLIST_TEMPLATES:
-        template, _ = ChecklistTemplate.objects.get_or_create(
+        # 1) создаём или находим шаблон по имени
+        template, created = ChecklistTemplate.objects.get_or_create(
             company=company,
             name=tmpl_spec["name"],
             defaults={
-                "description": "",
+                "description": tmpl_spec.get("description", "") or "",
                 "is_active": True,
             },
         )
 
-        for order, item_text in enumerate(tmpl_spec["items"], start=1):
-            ChecklistTemplateItem.objects.get_or_create(
-                template=template,
-                text=item_text,  # ВАЖНО: поле text, не name
-                defaults={
-                    "order": order,
-                    "is_required": True,
-                },
-            )
+        # если шаблон уже был, но без описания — аккуратно его добавим
+        updated_fields: list[str] = []
+        new_description = tmpl_spec.get("description", "") or ""
+        if not template.description and new_description:
+            template.description = new_description
+            updated_fields.append("description")
+
+        if not template.is_active:
+            template.is_active = True
+            updated_fields.append("is_active")
+
+        if updated_fields:
+            template.save(update_fields=updated_fields)
+
+        # 2) создаём пункты, если их ещё нет
+        if not template.items.exists():
+            for order, item_spec in enumerate(tmpl_spec["items"], start=1):
+                if isinstance(item_spec, str):
+                    text = item_spec
+                    is_required = True
+                else:
+                    text = item_spec.get("text", "").strip()
+                    is_required = bool(item_spec.get("is_required", True))
+
+                if not text:
+                    continue
+
+                ChecklistTemplateItem.objects.get_or_create(
+                    template=template,
+                    text=text,
+                    defaults={
+                        "order": order,
+                        "is_required": is_required,
+                    },
+                )
 
 VALID_SLA_REASONS = {
     "missing_before_photo",
@@ -437,27 +473,43 @@ class ManagerMetaView(APIView):
             .order_by("id")
         )
 
-        return Response(
-            {
-                "cleaners": [
-                    {"id": c.id, "full_name": c.full_name, "phone": c.phone}
-                    for c in cleaners_qs
-                ],
-                "locations": [
-                    {
-                        "id": l.id,
-                        "name": l.name,
-                        "address": getattr(l, "address", "") or "",
-                    }
-                    for l in locations_qs
-                ],
-                "checklist_templates": [
-                    {"id": t.id, "name": t.name}
-                    for t in templates_qs
-                ],
-            },
-            status=status.HTTP_200_OK,
-        )
+        payload = {
+            "cleaners": [
+                {"id": c.id, "full_name": c.full_name, "phone": c.phone}
+                for c in cleaners_qs
+            ],
+            "locations": [
+                {
+                    "id": l.id,
+                    "name": l.name,
+                    "address": getattr(l, "address", "") or "",
+                }
+                for l in locations_qs
+            ],
+            "checklist_templates": [],
+        }
+
+        for t in templates_qs:
+            # все пункты чек-листа в правильном порядке
+            items_qs = t.items.order_by("order", "id")
+            all_items = [item.text for item in items_qs]
+
+            payload["checklist_templates"].append(
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    # Краткое описание шаблона — можно править в админке.
+                    "description": getattr(t, "description", "") or "",
+                    # Полный список пунктов (для раскрытия в UI).
+                    "items": all_items,
+                    # Первые несколько пунктов — превью для списков.
+                    "items_preview": all_items[:4],
+                    # Общее количество пунктов.
+                    "items_count": len(all_items),
+                }
+            )
+
+        return Response(payload, status=status.HTTP_200_OK)
 
 class TodayJobsView(APIView):
     """
@@ -1848,6 +1900,9 @@ def build_planning_job_payload(job: Job):
     except Exception:
         items = []
 
+    # полный список текстов пунктов для UI (JobSidePanel, бейджи)
+    checklist_items_texts = [getattr(it, "text", "").strip() for it in items if getattr(it, "text", "").strip()]
+
     if not items:
         checklist_completed = False
     else:
@@ -1884,6 +1939,16 @@ def build_planning_job_payload(job: Job):
 
     sla_status = "violated" if sla_reasons else "ok"
 
+    # Пытаемся вытащить шаблон чек-листа (если job его хранит)
+    checklist_template = getattr(job, "checklist_template", None)
+
+    checklist_template_payload = None
+    if checklist_template is not None:
+        checklist_template_payload = {
+            "id": checklist_template.id,
+            "name": checklist_template.name,
+        }
+
     return {
         "id": job.id,
         "scheduled_date": job.scheduled_date,
@@ -1911,9 +1976,10 @@ def build_planning_job_payload(job: Job):
         },
         "sla_status": sla_status,
         "sla_reasons": sla_reasons,
+        # 🔹 Новый блок: «что за чек-лист» + список пунктов
+        "checklist_template": checklist_template_payload,
+        "checklist_items": checklist_items_texts,
     }
-
-
 
 class ManagerPlanningJobsView(APIView):
     """

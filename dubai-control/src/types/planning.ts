@@ -20,6 +20,15 @@ export type PlanningJob = {
   sla_status?: "ok" | "violated";
   sla_reasons?: string[];
 
+  // 🔹 чеклист-шаблон, привязанный к job
+  checklist_template?: {
+    id: number | null;
+    name: string | null;
+  } | null;
+
+  // 🔹 полный список пунктов чеклиста для этой job
+  checklist_items?: string[] | null;
+
   location: {
     id: number | null;
     name: string | null;
@@ -41,6 +50,7 @@ export type PlanningFilters = {
   locationId: number | null;
   statuses: PlanningJobStatus[];
 };
+
 // ---- Performance (SLA summary) ----
 
 // Фильтры для performance-экрана

@@ -1,4 +1,3 @@
-// dubai-control/src/components/planning/CreateJobDrawer.tsx
 import React, { useEffect, useState, FormEvent, useMemo } from "react";
 import type { PlanningJob } from "@/types/planning";
 import {
@@ -75,6 +74,9 @@ export function CreateJobDrawer({
   // manager notes (optional)
   const [managerNotes, setManagerNotes] = useState("");
 
+  // раскрытие полного списка пунктов чеклиста
+  const [showAllChecklistItems, setShowAllChecklistItems] = useState(false);
+
   // ===== ui state =====
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -135,6 +137,7 @@ export function CreateJobDrawer({
     setSubmitErrorCode(null);
     setTrialExpired(false);
     setCompanyBlocked(false);
+    setShowAllChecklistItems(false);
 
     // обновим locations (на случай если их добавили на другой вкладке давно)
     void reloadLocations();
@@ -152,6 +155,41 @@ export function CreateJobDrawer({
     if (locations.length === 0) return;
     setLocationId(locations[0].id);
   }, [open, locationId, locations]);
+
+  // при смене шаблона сбрасываем разворот чеклиста
+  useEffect(() => {
+    setShowAllChecklistItems(false);
+  }, [checklistTemplateId]);
+
+  // ===== checklist helpers =====
+  const selectedChecklistTemplate = useMemo(
+    () =>
+      meta?.checklist_templates?.find(
+        (tpl) => tpl.id === checklistTemplateId,
+      ) ?? null,
+    [meta, checklistTemplateId],
+  );
+
+    const checklistPreviewItems =
+    selectedChecklistTemplate?.items_preview ?? [];
+
+  // Пока бэкенд не отдаёт полный список, используем превью
+  const checklistFullItems =
+    showAllChecklistItems ? checklistPreviewItems : checklistPreviewItems;
+
+
+  const checklistItemsToShow = showAllChecklistItems
+    ? checklistFullItems
+    : checklistPreviewItems;
+
+  const previewLength = checklistPreviewItems.length;
+  const totalItemsCount =
+    typeof selectedChecklistTemplate?.items_count === "number"
+      ? selectedChecklistTemplate.items_count
+      : checklistFullItems.length;
+
+  const checklistRestCount =
+    totalItemsCount > previewLength ? totalItemsCount - previewLength : 0;
 
   // ===== date helpers (hook должен быть до любых return) =====
   const selectedDate = useMemo(() => {
@@ -284,8 +322,8 @@ export function CreateJobDrawer({
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/20" onClick={handleClose} />
 
-      <div className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-background border-l border-border flex flex-col">
-        <div className="p-5 border-b border-border flex items-center justify-between">
+      <div className="absolute right-0 top-0 flex h-full w-full flex-col border-l border-border bg-background sm:w-[420px]">
+        <div className="flex items-center justify-between border-b border-border p-5">
           <div className="font-semibold">Create job</div>
           <button
             className="text-sm text-muted-foreground hover:text-foreground"
@@ -454,16 +492,80 @@ export function CreateJobDrawer({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No checklist</SelectItem>
+
                       {meta.checklist_templates?.map((tpl) => (
                         <SelectItem key={tpl.id} value={String(tpl.id)}>
-                          {tpl.name}
+                          <div className="flex flex-col gap-0.5">
+                            <div className="text-sm font-medium">
+                              {tpl.name}
+                            </div>
+
+                            {tpl.items_preview &&
+                              tpl.items_preview.length > 0 && (
+                                <div
+                                  className="text-xs text-muted-foreground truncate"
+                                  title={tpl.items_preview.join(" · ")}
+                                >
+                                  {tpl.items_preview
+                                    .slice(0, 2)
+                                    .join(" · ")}
+                                  {typeof tpl.items_count === "number" &&
+                                    tpl.items_count >
+                                      tpl.items_preview.length &&
+                                    "…"}
+                                </div>
+                              )}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+
                   <p className="text-xs text-muted-foreground">
                     Choose a checklist for this job, or keep “No checklist”.
                   </p>
+
+                  {selectedChecklistTemplate && (
+                    <div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 space-y-2">
+                      <div className="text-[11px] font-semibold text-muted-foreground">
+                        CHECKLIST DETAILS
+                      </div>
+
+                      <div className="text-sm font-medium">
+                        {selectedChecklistTemplate.name}
+                      </div>
+
+                      {selectedChecklistTemplate.description && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {selectedChecklistTemplate.description}
+                        </p>
+                      )}
+
+                      {checklistItemsToShow.length > 0 && (
+                        <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                          {checklistItemsToShow.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {checklistRestCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowAllChecklistItems((v) => !v)
+                          }
+                          className="text-[11px] text-primary underline cursor-pointer"
+                        >
+                          {showAllChecklistItems
+                            ? "Hide extra items"
+                            : `+ ${checklistRestCount} more item${
+                                checklistRestCount > 1 ? "s" : ""
+                              }`}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Manager notes */}
@@ -483,7 +585,7 @@ export function CreateJobDrawer({
                 {/* company_blocked notice */}
                 {submitErrorCode === "company_blocked" && (
                   <div className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
-                    <div className="font-medium mb-1">⚠️ Account suspended</div>
+                    <div className="mb-1 font-medium">⚠️ Account suspended</div>
                     <p>
                       Your company account is currently suspended. You can view
                       existing jobs and reports, but creating new jobs is
@@ -496,10 +598,9 @@ export function CreateJobDrawer({
                 )}
 
                 {/* generic error (без raw дубля для company_blocked) */}
-                {submitError &&
-                  submitErrorCode !== "company_blocked" && (
-                    <p className="text-sm text-destructive">{submitError}</p>
-                  )}
+                {submitError && submitErrorCode !== "company_blocked" && (
+                  <p className="text-sm text-destructive">{submitError}</p>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={handleClose}>
