@@ -1592,6 +1592,70 @@ Frontend guidelines:
 
 This approach ensures consistent enforcement and avoids frontend-driven business logic.
 
+
+## Job force-complete (manager override)
+
+Force-complete is a manager-only mechanism for handling real-world exceptions
+where a job cannot be completed through the standard mobile execution flow.
+
+Key principles:
+
+- Force-complete does not bypass or weaken mobile enforcement.
+- Cleaners cannot trigger or influence force-complete.
+- Force-complete always results in an SLA violation.
+- The action is fully auditable via Job Timeline and SLA reports.
+
+Implementation notes:
+
+- Force-complete creates a `JobCheckEvent` with type `force_complete`.
+- The manager must provide an explicit reason and a human-readable comment.
+- SLA state is derived from factual proof data plus force-complete context.
+- Force-complete exists to make exceptions explicit, not to normalize incomplete jobs.
+
+This behavior must remain stable and must not be simplified into an alternative
+happy-path for job completion.
+
+---
+
+### SLA & force-complete — технические инварианты
+
+- Job и SLA живут отдельно:
+  - `status` описывает жизненный цикл job.
+  - `sla_status` + `sla_reasons` описывают, насколько корректно выполнены требуемые шаги (check-in/out, фото, чек-лист).
+
+- `force-complete` не «чинит» SLA, а наоборот **принудительно фиксирует нарушение**:
+  - handler для `POST /api/manager/jobs/{id}/force-complete/` обязан:
+    - убедиться, что user — менеджер;
+    - убедиться, что job ещё можно завершить (не `completed` / не `cancelled`);
+    - выставить `status="completed"`;
+    - выставить `sla_status="violated"`;
+    - добавить `reason_code` в `sla_reasons` (если его там ещё нет);
+    - записать `force_completed=true`, `force_completed_at=now`, `force_completed_by=<manager>`.
+
+- Frontend исходит из того, что:
+  - job может быть `completed` и при этом иметь `sla_status="violated"`;
+  - блок **SLA & Proof** — источник правды по качеству исполнения;
+  - кнопка **Force complete job** доступна только для незавершённого job или для кейсов, которые мы явно разрешим (ограничения можно ужесточать/смягчать без изменения контракта).
+
+Эта модель нужна, чтобы в будущем:
+- не ломать операционный процесс завершения джоб из-за проблем с интернетом/фото;
+- строить аналитику и performance-метрики на уровне SLA, а не просто по статусу `completed`.
+
+## Analytics Page — implementation status**
+
+Добавлена отдельная страница `/analytics` в Manager Portal с полной визуализацией операционной аналитики. Страница построена на независимом наборе UI-компонентов (`components/analytics/*`) и не использует legacy-код Reports.
+
+Реализовано:
+
+* KPI-карточки (summary).
+* Графики трендов (jobs completed, avg duration, proof completion).
+* Таблица performance клинеров + comparison chart.
+* Корректная работа layout при свёрнутом sidebar (контент расширяется).
+
+API-вызовы вынесены в `src/api/analytics.ts`, query-параметры формируются вручную (без `params/query`), что соответствует текущей сигнатуре `apiClient`.
+
+Страница стабильно рендерится и использует мок-данные, готова к замене на live API без изменений UI.
+
 ---
 
 ## DEV BRIEF — Job Details stability rules

@@ -22,9 +22,10 @@ import Locations from "./pages/Locations";
 import PricingPage from "./pages/PricingPage";
 import Signup from "./pages/Signup";
 import Performance from "./pages/Performance";
-import Reports from "@/pages/Reports";
-import ViolationJobsPage from "@/pages/ViolationJobsPage";
-import ReportEmailLogsPage from "@/pages/ReportEmailLogs";
+import Reports from "./pages/Reports";
+import ViolationJobsPage from "./pages/ViolationJobsPage";
+import ReportEmailLogsPage from "./pages/ReportEmailLogs";
+import Analytics from "./pages/Analytics";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -93,6 +94,7 @@ const App = () => (
                 path="/reports/email-logs"
                 element={<ReportEmailLogsPage />}
               />
+              <Route path="/analytics" element={<Analytics />} />
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />

@@ -1,6 +1,8 @@
 # backend/apps/api/urls.py
 from django.urls import path
 from apps.marketing.views import DemoRequestCreateView, ContactMessageCreateView
+from . import analytics_views
+
 
 from apps.api.views import (
     # Auth
@@ -8,7 +10,6 @@ from apps.api.views import (
     CleanerPinLoginView,
     ManagerLoginView,
     ManagerSignupView,
-    
 
     # Cleaner jobs
     TodayJobsView,
@@ -16,7 +17,7 @@ from apps.api.views import (
     JobCheckInView,
     JobCheckOutView,
 
-    # Checklist 
+    # Checklist
     ChecklistBulkUpdateView,
     ChecklistItemToggleView,
 
@@ -34,6 +35,7 @@ from apps.api.views import (
     ManagerJobDetailView,
     ManagerPlanningJobsView,
     ManagerJobsHistoryView,
+    ManagerJobForceCompleteView,
     ManagerPerformanceView,
 
     # Create Job
@@ -128,7 +130,7 @@ urlpatterns = [
         name="manager-job-report-email",
     ),
 
-        # Manager: email history for Job PDF
+    # Manager: email history for Job PDF
     path(
         "manager/jobs/<int:pk>/report/emails/",
         ManagerJobReportEmailLogListView.as_view(),
@@ -197,6 +199,11 @@ urlpatterns = [
         "manager/jobs/<int:pk>/",
         ManagerJobDetailView.as_view(),
         name="manager-job-detail",
+    ),
+    path(
+        "manager/jobs/<int:pk>/force-complete/",
+        ManagerJobForceCompleteView.as_view(),
+        name="manager-job-force-complete",
     ),
 
     # Jobs history
@@ -268,12 +275,37 @@ urlpatterns = [
     path(
         "manager/reports/violations/jobs/",
         ManagerViolationJobsView.as_view(),
-        name="manager-violation-jobs",
+        name="manager-violations-jobs",
     ),
-        path(
+    path(
         "manager/report-emails/",
         ManagerReportEmailLogListView.as_view(),
         name="manager-report-email-logs",
+    ),
+    path(
+        "manager/analytics/summary/",
+        analytics_views.analytics_summary,
+        name="manager-analytics-summary",
+    ),
+    path(
+        "manager/analytics/jobs-completed/",
+        analytics_views.analytics_jobs_completed,
+        name="manager-analytics-jobs-completed",
+    ),
+    path(
+        "manager/analytics/job-duration/",
+        analytics_views.analytics_job_duration,
+        name="manager-analytics-job-duration",
+    ),
+    path(
+        "manager/analytics/proof-completion/",
+        analytics_views.analytics_proof_completion,
+        name="manager-analytics-proof-completion",
+    ),
+    path(
+        "manager/analytics/cleaners-performance/",
+        analytics_views.analytics_cleaners_performance,
+        name="manager-analytics-cleaners-performance",
     ),
 
     # =====================

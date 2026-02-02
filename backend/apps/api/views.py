@@ -1,3 +1,4 @@
+# backend/apps/api/views.py
 import os
 import uuid
 import random
@@ -2092,6 +2093,174 @@ def build_planning_job_payload(job: Job):
         "checklist_items": checklist_items_texts,
     }
 
+class ManagerJobForceCompleteView(APIView):
+    """
+    Force-complete job (manager override).
+
+    POST /api/manager/jobs/<id>/force-complete/
+
+    Manager-only action that allows completing a job without full proof,
+    while explicitly marking it as an SLA violation.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        user = request.user
+
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can force-complete jobs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Заблокированная / read-only компания не может форсить джобы
+        if company.is_blocked():
+            code = "trial_expired" if company.is_trial_expired() else "company_blocked"
+            if code == "trial_expired":
+                detail = (
+                    "Your free trial has ended. You can still view existing jobs and "
+                    "download reports, but overriding jobs requires an upgrade."
+                )
+            else:
+                detail = "Your account is currently blocked. Please contact support."
+
+            return Response(
+                {"code": code, "detail": detail},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        job = get_object_or_404(
+            Job.objects.select_related("location", "cleaner"),
+            pk=pk,
+            company=company,
+        )
+
+        # Уже завершённую job форсить нельзя
+        if job.status == Job.STATUS_COMPLETED:
+            return Response(
+                {"detail": "Job is already completed and cannot be force-completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason_code = (request.data.get("reason_code") or "").strip()
+        comment = (request.data.get("comment") or "").strip()
+
+        # разрешённые коды причин: SLA-коды + "other"
+        allowed_reason_codes = set(VALID_SLA_REASONS) | {"other"}
+
+        if not reason_code or reason_code not in allowed_reason_codes:
+            return Response(
+                {"detail": "Invalid or missing 'reason_code'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not comment:
+            return Response(
+                {"detail": "Comment is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        now = timezone.now()
+
+        # --- обновляем job как completed + SLA violated ---
+        job.status = Job.STATUS_COMPLETED
+        if not getattr(job, "actual_end_time", None):
+            job.actual_end_time = now
+
+        # нормализуем текущие причины SLA
+        existing = getattr(job, "sla_reasons", None)
+        if isinstance(existing, str):
+            reasons_list: list[str] = [existing]
+        elif isinstance(existing, (list, tuple)):
+            reasons_list = [str(r) for r in existing if r]
+        elif existing is None:
+            reasons_list = []
+        else:
+            reasons_list = [str(existing)]
+
+        if reason_code not in reasons_list:
+            reasons_list.append(reason_code)
+
+        # явный override SLA
+        try:
+            job.sla_status = "violated"
+        except Exception:
+            # если поля нет, просто игнорируем — reasons всё равно попадут в helper
+            pass
+
+        try:
+            job.sla_reasons = reasons_list
+        except Exception:
+            pass
+
+        # метаданные по force-complete (если такие поля есть в модели)
+        now_dt = now
+        try:
+            job.force_completed = True
+        except Exception:
+            pass
+        try:
+            job.force_completed_at = now_dt
+        except Exception:
+            pass
+        try:
+            job.force_completed_by = user
+        except Exception:
+            pass
+
+        # сохраняем job без update_fields, чтобы не ловить FieldError на несуществующих полях
+        job.save()
+
+        # --- Audit event в JobCheckEvent (минимальный, без payload, чтобы не завалить код) ---
+        try:
+            JobCheckEvent.objects.create(
+                job=job,
+                user=user,
+                event_type="force_complete",  # можно заменить на JobCheckEvent.TYPE_FORCE_COMPLETE, когда он появится
+            )
+        except Exception as exc:
+            # audit не должен ломать основной флоу
+            logger.exception("Failed to create force-complete JobCheckEvent", exc_info=exc)
+
+        # --- Ответ: короткий snapshot по job и SLA ---
+        response_data = {
+            "id": job.id,
+            "status": job.status,
+            "sla_status": getattr(job, "sla_status", None),
+            "sla_reasons": reasons_list,
+        }
+
+        # метаданные force-complete, если есть
+        if hasattr(job, "force_completed"):
+            response_data["force_completed"] = bool(
+                getattr(job, "force_completed", False)
+            )
+
+        if hasattr(job, "force_completed_at"):
+            fc_at = getattr(job, "force_completed_at", None)
+            response_data["force_completed_at"] = (
+                fc_at.isoformat() if fc_at else None
+            )
+
+        if hasattr(job, "force_completed_by"):
+            by = getattr(job, "force_completed_by", None)
+            if by is not None:
+                response_data["force_completed_by"] = {
+                    "id": by.id,
+                    "full_name": getattr(by, "full_name", "") or getattr(by, "email", ""),
+                }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
 class ManagerPlanningJobsView(APIView):
     """
     Job Planning list для менеджера (read-only).
@@ -2351,7 +2520,25 @@ def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
     - reasons: список строковых кодов причин нарушения
       ("missing_before_photo", "missing_after_photo", "checklist_not_completed")
     """
-    # Фотографии
+
+    # 0) Явный override SLA (например, после force-complete)
+    # Если в job.sla_reasons уже что-то лежит — считаем это источником истины.
+    explicit_reasons = getattr(job, "sla_reasons", None)
+
+    normalized_explicit: list[str] = []
+    if explicit_reasons:
+        if isinstance(explicit_reasons, str):
+            normalized_explicit = [explicit_reasons]
+        elif isinstance(explicit_reasons, (list, tuple)):
+            normalized_explicit = [str(r) for r in explicit_reasons if r]
+        else:
+            normalized_explicit = [str(explicit_reasons)]
+
+    if normalized_explicit:
+        # если явно записали причины — это всегда нарушение
+        return "violated", normalized_explicit
+
+    # 1) Фотографии
     before_exists = JobPhoto.objects.filter(
         job=job,
         photo_type=JobPhoto.TYPE_BEFORE,
@@ -2362,7 +2549,7 @@ def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
         photo_type=JobPhoto.TYPE_AFTER,
     ).exists()
 
-    # Чеклист
+    # 2) Чеклист
     checklist_qs = JobChecklistItem.objects.filter(job=job)
 
     if hasattr(JobChecklistItem, "is_required"):
@@ -2392,6 +2579,7 @@ def compute_sla_status_and_reasons_for_job(job: Job) -> tuple[str, list[str]]:
 
     sla_status = "violated" if reasons else "ok"
     return sla_status, reasons
+
 
 class OwnerOverviewView(APIView):
     """

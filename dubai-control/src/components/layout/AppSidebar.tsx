@@ -22,6 +22,7 @@ const navigation = [
   { name: "Job Planning", href: "/planning", icon: CalendarDays },
   { name: "Job History", href: "/history", icon: Clock3 },
   { name: "Performance", href: "/performance", icon: BarChart3 },
+  { name: "Analytics", href: "/analytics", icon: BarChart3 },
   { name: "Reports", href: "/reports", icon: FileText },
   { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -118,7 +119,9 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           to="/"
           className={cn(
             "flex items-center rounded-lg text-sm font-medium text-muted-foreground transition-all duration-200 ease-out hover:bg-sidebar-accent hover:text-foreground",
-            collapsed ? "justify-center px-0 py-2.5" : "justify-start gap-3 px-3 py-2.5",
+            collapsed
+              ? "justify-center px-0 py-2.5"
+              : "justify-start gap-3 px-3 py-2.5",
           )}
         >
           <LogOut className="h-5 w-5" />

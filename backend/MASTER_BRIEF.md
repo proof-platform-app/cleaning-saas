@@ -1132,3 +1132,65 @@ allow quick isolation of problematic cases,
 provide confidence when no violations exist.
 
 A “no violations” state is a positive audit outcome and a key part of the product’s positioning.
+---
+
+## Force complete — controlled exception handling
+
+CleanProof supports a manager-only force-complete mechanism for exceptional
+situations where work was performed but the standard proof flow could not be completed.
+
+Force-complete is not a workaround and does not hide execution issues.
+Every force-completed job is explicitly marked as an SLA violation and remains
+fully visible in reports, timelines, and audit trails.
+
+This approach allows CleanProof to reflect real operational conditions
+without compromising enforcement discipline or data integrity.
+
+### SLA модель и принудительное завершение джоба
+
+- У джоба теперь есть **два независимых измерения**:
+  - `status` — жизненный цикл работы: `scheduled → in_progress → completed`.
+  - `sla_status` — качество выполнения по micro-SLA: `ok` или `violated` + `sla_reasons: string[]`.
+
+- **Нормальный happy-path**:
+  - клинер проходит все шаги (check-in, before photo, checklist, after photo, check-out);
+  - backend выставляет `status=completed`, `sla_status=ok`, `sla_reasons=[]`.
+
+- **Ошибка или неполные доказательства** (плохой интернет, клиент торопит, фото не загрузилось и т.п.):
+  - джоб может быть всё равно **завершён** (через приложение или force-complete),
+  - но SLA помечается как нарушенное: `sla_status=violated`,
+  - причины фиксируются в `sla_reasons`, например:
+    - `missing_before_photo`
+    - `missing_after_photo`
+    - `checklist_not_completed`
+    - `check_in_missing`
+    - `check_out_missing`
+    - `other` (ручный override).
+
+- **Force-complete (manager override)**:
+  - доступен только менеджерам через эндпоинт `/api/manager/jobs/{id}/force-complete/`;
+  - переводит job в `status=completed` даже если нет полного proof;
+  - **обязательно** устанавливает `sla_status=violated` и добавляет выбранную причину в `sla_reasons`;
+  - дополнительно логируются:
+    - `force_completed: true`
+    - `force_completed_at: datetime`
+    - `force_completed_by: { id, full_name }`.
+
+Таким образом, владелец видит два слоя правды:
+1) фактическое выполнение работ (сколько джоб реально закрыто),
+2) дисциплину доказательств и процесса (сколько джоб выполнены с нарушением SLA).
+
+## Analytics — ключевой управленческий слой**
+
+Страница Analytics зафиксирована как отдельный управленческий слой, а не часть Reports.
+Её задача — **операционная прозрачность**, а не отчётность:
+
+* KPI — текущее состояние процессов.
+* Тренды — динамика качества и дисциплины.
+* Performance — сравнение клинеров и выявление системных проблем.
+
+Архитектурно:
+
+* Analytics имеет собственный API-контур.
+* UI построен модульно и масштабируется (добавление новых метрик без ломки страницы).
+* В будущем Analytics станет основой для Performance Scoring, SLA Engine v2 и автоматических алертов.

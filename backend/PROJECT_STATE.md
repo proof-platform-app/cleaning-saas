@@ -364,7 +364,54 @@ jobs with missing/exceptional events.
 This logic is considered final for V1/V1.5 and forms the basis for upcoming features:
 Force complete / override flow
 Enterprise SLA audit extensions
+
 ---
+
+### SLA & Force-complete (фактическое состояние)
+
+✅ Backend:
+- Добавлен эндпоинт `POST /api/manager/jobs/{id}/force-complete/`:
+  - доступен только менеджерам (manager-auth);
+  - если job ещё не `completed`, переводит в `status=completed`;
+  - выставляет `sla_status=violated` и апдейтит `sla_reasons` выбранным кодом;
+  - сохраняет `force_completed`, `force_completed_at`, `force_completed_by`.
+- Job detail API возвращает поля:
+  - `sla_status: "ok" | "violated"`
+  - `sla_reasons: string[]`
+  - `force_completed: bool`
+  - `force_completed_at: datetime | null`
+  - `force_completed_by: { id, full_name } | null`.
+
+✅ Frontend (JobDetails):
+- Правый блок **SLA & Proof**:
+  - показывает `SLA OK` или `SLA violated` на основе `sla_status`;
+  - выводит список причин по `sla_reasons` с человеко-понятными label’ами.
+- В сайдбаре добавлена кнопка **Force complete job**:
+  - открывает модалку с выбором причины (missing before/after photo, checklist not completed, check-in/out missing, other) и комментарием;
+  - отправляет запрос на `POST /api/manager/jobs/{id}/force-complete/`;
+  - после успешного ответа обновляет Job details и SLA блок.
+
+🟡 На будущее:
+- скрывать/дизейблить кнопку Force complete для уже force-completed джобов;
+- добавить лёгкую визуальную подсветку «Completed with SLA issues» в статусе джоба.
+
+## Analytics Page**
+
+Статус: ✅ **Готово (UI + API контракт)**
+
+Что сделано:
+
+* Добавлена страница `/analytics` в Manager Portal.
+* Реализованы KPI, графики, таблицы и comparison chart.
+* Исправлены layout-ограничения при свёрнутом sidebar.
+* Зафиксирован API-контракт аналитики.
+* Страница стабильно отображается и работает на мок-данных.
+
+Что дальше (не реализовано):
+
+* Подключение live-данных из backend (замена моков).
+* Кэширование / агрегация (при росте данных).
+* Связь Analytics ↔ Performance ↔ SLA Engine.---
 
 ## 📱 СЛОЙ 1 — ИСПОЛНЕНИЕ (Mobile Cleaner App)
 

@@ -28,7 +28,12 @@ export function AppLayout() {
           collapsed ? "pl-16" : "pl-64",
         )}
       >
-        <div className="min-h-screen">
+        <div
+          className={cn(
+            "min-h-screen px-6 py-8 mx-auto",
+            collapsed ? "max-w-[1440px]" : "max-w-6xl",
+          )}
+        >
           <Outlet />
         </div>
       </main>

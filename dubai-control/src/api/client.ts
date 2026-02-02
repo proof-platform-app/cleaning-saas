@@ -1,3 +1,5 @@
+// dubai-control/src/api/client.ts
+
 import type { OwnerOverview } from "@/types/reports";
 
 const API_BASE_URL =
@@ -103,6 +105,14 @@ export interface ManagerJobDetail extends ManagerJobSummary {
 
   sla_status?: "ok" | "violated";
   sla_reasons?: string[];
+
+  // force-complete метаданные
+  force_completed?: boolean;
+  force_completed_at?: string | null;
+  force_completed_by?: {
+    id: number;
+    full_name: string;
+  } | null;
 }
 
 // История отправки PDF-отчёта по джобу
@@ -663,6 +673,52 @@ export async function fetchManagerJobDetail(
     timeline,
     sla_status: raw.sla_status,
     sla_reasons: Array.isArray(raw.sla_reasons) ? raw.sla_reasons : [],
+    force_completed: !!raw.force_completed,
+    force_completed_at: raw.force_completed_at ?? null,
+    force_completed_by: raw.force_completed_by ?? null,
+  };
+}
+
+// ---------- Job force-complete ----------
+
+export type ForceCompletePayload = {
+  reason_code: string; // e.g. "missing_after_photo"
+  comment?: string;
+};
+
+export async function forceCompleteJob(
+  jobId: number,
+  payload: ForceCompletePayload
+): Promise<ManagerJobDetail> {
+  await loginManager();
+
+  const raw = await apiFetch<any>(
+    `/api/manager/jobs/${jobId}/force-complete/`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const base = normalizeJob(raw);
+  const photos = normalizePhotos(raw);
+  const timeline = buildJobTimeline(raw);
+  const checklist = normalizeChecklist(raw);
+
+  return {
+    ...base,
+    photos,
+    check_events: Array.isArray(raw.check_events)
+      ? (raw.check_events as ManagerJobCheckEvent[])
+      : [],
+    notes: raw.notes ?? raw.manager_notes ?? null,
+    checklist,
+    timeline,
+    sla_status: raw.sla_status,
+    sla_reasons: Array.isArray(raw.sla_reasons) ? raw.sla_reasons : [],
+    force_completed: !!raw.force_completed,
+    force_completed_at: raw.force_completed_at ?? null,
+    force_completed_by: raw.force_completed_by ?? null,
   };
 }
 

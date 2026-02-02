@@ -2389,6 +2389,203 @@ GET /api/manager/report-emails/ как единый источник данны�
 
 ---
 
+## Job force-complete (manager override)
+
+### Purpose
+
+`force-complete` is a controlled manager-only action that allows completing a job
+when the standard execution flow (photos / checklist) cannot be finished,
+while **explicitly preserving SLA violations**.
+
+This mechanism exists to reflect real-world exceptions without weakening
+mobile enforcement or hiding execution issues.
+
+Force-complete never represents a successful job.
+It always results in an SLA violation.
+
+---
+
+### Endpoint
+
+`POST /api/manager/jobs/<id>/force-complete/`
+
+---
+
+### Permissions & Preconditions
+
+- Allowed role: `manager`
+- Job must belong to the manager’s company
+- Job status must be one of:
+  - `scheduled`
+  - `in_progress`
+- Company must be active and not suspended (read-only companies cannot force-complete jobs)
+
+---
+## Analytics API (Manager)**
+
+Реализован и подключён API-слой аналитики для менеджерского интерфейса. Все эндпоинты принимают диапазон дат через query-параметры `date_from` и `date_to` и возвращают агрегированные данные без бизнес-логики на фронтенде.
+
+Поддерживаемые эндпоинты:
+
+* `GET /api/manager/analytics/summary/` — сводные KPI (jobs completed, on-time rate, proof completion rate, avg duration, issues).
+* `GET /api/manager/analytics/jobs-completed/` — дневной тренд выполненных работ.
+* `GET /api/manager/analytics/job-duration/` — тренд средней длительности jobs.
+* `GET /api/manager/analytics/proof-completion/` — тренды completion rate по before photo / after photo / checklist.
+* `GET /api/manager/analytics/cleaners-performance/` — performance-метрики по каждому клинеру.
+
+API используется страницей `/analytics` в Manager Portal. Контракт зафиксирован, формат ответов согласован с UI-компонентами.
+
+---
+
+### Request Body
+
+```json
+{
+  "reason_code": "missing_after_photo",
+  "comment": "Client left early, cleaner could not take after-photo."
+}
+Fields
+reason_code (required, string)
+
+Allowed values:
+
+missing_before_photo
+missing_after_photo
+checklist_not_completed
+other
+comment (required, non-empty string)
+
+Human-readable explanation provided by the manager.
+This comment is stored in the audit trail and visible in the job timeline.
+
+Backend Behavior
+On successful force-complete:
+Job status is set to completed (if not already).
+actual_end_time is set to current time if missing.
+Job SLA status is set to violated.
+The provided reason_code is added to sla_reasons
+(merged with existing reasons, no duplicates).
+
+A JobCheckEvent is created with:
+event_type = "force_complete"
+user = manager
+comment = request.comment
+payload containing:
+reason_code
+previous job status
+previous SLA status
+
+Force-complete does not modify mobile execution rules and does not unblock
+cleaner-side actions.
+
+Response
+Returns the updated job representation:
+
+{
+  "id": 55,
+  "status": "completed",
+  "sla_status": "violated",
+  "sla_reasons": ["missing_after_photo"],
+  "force_completed": true,
+  "force_completed_at": "2026-02-02T12:34:56Z",
+  "force_completed_by": {
+    "id": 7,
+    "full_name": "Manager Name"
+  }
+}
+Errors
+400 BAD REQUEST
+
+missing or empty comment
+
+invalid or missing reason_code
+
+job already completed
+
+403 FORBIDDEN
+
+company is suspended (read-only mode)
+
+user is not allowed to manage the job
+
+404 NOT FOUND
+
+job does not exist or does not belong to the manager’s company
+
+SLA, Timeline & Reports Impact
+Force-complete always results in sla_status = violated
+
+The force-complete event appears in the Job Timeline
+
+The event is included when filtering timeline by violation-related events
+
+Reports and Analytics consume the same SLA data without special handling
+
+This endpoint intentionally makes exceptions visible, auditable, and measurable.
+ополнительные SLA-поля в ответе:
+
+- `sla_status` — `"ok"` или `"violated"`.
+- `sla_reasons` — массив строковых кодов причин нарушения SLA.
+  Возможные значения (минимальный набор v1):
+  - `"missing_before_photo"`
+  - `"missing_after_photo"`
+  - `"checklist_not_completed"`
+  - `"check_in_missing"`
+  - `"check_out_missing"`
+  - `"other"` (ручной override).
+
+- `force_completed` — `true`, если job был завершён через manager override.
+- `force_completed_at` — ISO datetime момента принудительного завершения (или `null`).
+- `force_completed_by` — объект с данными менеджера, который сделал override:
+  ```json
+  {
+    "id": 16,
+    "full_name": "DevNew Manager"
+  }
+
+### 4.2. Новый эндпоинт force-complete
+
+### POST /api/manager/jobs/{id}/force-complete/
+
+Принудительно помечает job как `completed` и устанавливает `sla_status=violated` с выбранной причиной.
+
+Только для аутентифицированных менеджеров.
+
+**Request**
+
+```http
+POST /api/manager/jobs/56/force-complete/
+Authorization: Token <manager-token>
+Content-Type: application/json
+{
+  "reason_code": "missing_after_photo",
+  "comment": "Client left early, cleaner could not take after-photo."
+}
+reason_code — обязательный код причины из списка:
+missing_before_photo
+missing_after_photo
+checklist_not_completed
+check_in_missing
+check_out_missing
+other
+comment — необязательный текстовый комментарий менеджера.
+
+Responses
+200 OK — job успешно force-completed. Тело ответа — обновлённый объект job (тот же формат, что в GET /api/manager/jobs/{id}/), включая:
+
+status: "completed"
+sla_status: "violated"
+sla_reasons (содержит переданный reason_code)
+force_completed: true
+
+force_completed_at
+force_completed_by.
+400 Bad Request — неверный reason_code или бизнес-ошибка (например, job уже completed).
+403 Forbidden — user не является менеджером.
+404 Not Found — job не найден.
+
+
+
 ## Итоговое правило
 
 Любая новая функциональность должна либо:
@@ -2399,3 +2596,5 @@ GET /api/manager/report-emails/ как единый источник данны�
 ```
 ::contentReference[oaicite:0]{index=0}
 ```
+
+
