@@ -1054,6 +1054,9 @@ The "Owner overview" section in the UI is a visual summary of the same aggregate
 
 No parallel owner-specific PDF is planned at this stage to avoid duplication and unnecessary complexity.
 
+## Email history — manager-facing audit trail
+
+Раздел Email history оформлен как полноценный управленческий инструмент, а не технический лог. Менеджер видит единую историю всех отправленных отчётов с возможностью быстро отфильтровать: дату отправки, тип отчёта (job, weekly, monthly), конкретный job или период, получателя и статус доставки (sent / failed). Фильтрация по датам работает строго по фактической дате отправки email, что исключает путаницу между датой job и датой формирования отчёта. Экран готов к дальнейшему развитию (повторная отправка, SLA доставки, диагностика ошибок).
 
 ### Commercial enforcement & read-only mode (DONE)
 

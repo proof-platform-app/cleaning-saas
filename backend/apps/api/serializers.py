@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent, JobPhoto
 from apps.locations.models import Location, ChecklistTemplate, ChecklistTemplateItem
+from apps.marketing.models import ReportEmailLog
 
 User = get_user_model()
 
@@ -385,3 +386,39 @@ class ManagerViolationJobSerializer(serializers.ModelSerializer):
             "sla_status",
             "sla_reasons",
         ]
+class ReportEmailLogSerializer(serializers.ModelSerializer):
+    """
+    Лёгкий сериализатор для таблицы email-логов в разделе Reports.
+
+    company_id оставляем как есть (это просто int, без FK),
+    а по user отдаём небольшой объект с id + name.
+    """
+
+    sent_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReportEmailLog
+        fields = [
+            "id",
+            "created_at",
+            "kind",
+            "status",
+            "job_id",
+            "period_from",
+            "period_to",
+            "to_email",
+            "subject",
+            "company_id",
+            "sent_by",
+        ]
+
+    def get_sent_by(self, obj):
+        user = getattr(obj, "user", None)
+        if not user:
+            return None
+
+        full_name = getattr(user, "full_name", None) or getattr(user, "email", None)
+        return {
+            "id": user.id,
+            "full_name": full_name,
+        }

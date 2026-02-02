@@ -1,6 +1,7 @@
 // dubai-control/src/pages/Reports.tsx
+
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getWeeklyReport,
@@ -108,7 +109,10 @@ function buildNarrativeSummary(report: ManagerReport): string {
   return sentences.join(" ");
 }
 
-export default function Reports() {
+export default function ReportsPage() {
+  const location = useLocation();
+  const isEmailHistory = location.pathname.startsWith("/reports/email-logs");
+
   const [mode, setMode] = useState<ReportMode>("weekly");
 
   const [ownerOverview, setOwnerOverview] = useState<OwnerOverview | null>(null);
@@ -288,13 +292,41 @@ export default function Reports() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card/50">
-        <div className="px-6 py-6 max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Reports</h1>
-            <p className="text-muted-foreground mt-1">
-              Weekly and monthly SLA performance summaries you can share with
-              owners.
-            </p>
+        <div className="px-6 py-6 flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">
+                Reports
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Weekly and monthly SLA performance summaries you can share with
+                owners.
+              </p>
+            </div>
+
+            {/* Tabs: Overview / Email history */}
+            <div className="inline-flex items-center gap-2 rounded-full bg-muted px-1 py-1 text-xs">
+              <Link
+                to="/reports"
+                className={`px-3 py-1 rounded-full ${
+                  isEmailHistory
+                    ? "text-muted-foreground"
+                    : "bg-background shadow-sm text-foreground"
+                }`}
+              >
+                Overview
+              </Link>
+              <Link
+                to="/reports/email-logs"
+                className={`px-3 py-1 rounded-full ${
+                  isEmailHistory
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Email history
+              </Link>
+            </div>
           </div>
 
           <div className="flex flex-col items-end gap-2">
@@ -441,7 +473,7 @@ export default function Reports() {
       </Dialog>
 
       {/* Content */}
-      <div className="px-6 py-6 max-w-7xl mx-auto space-y-6">
+      <div className="px-6 py-6 space-y-6">
         {/* ==== OWNER LAYER =================================================== */}
         <div className="mb-10 rounded-2xl border border-border bg-muted/40 px-6 py-5">
           <div className="mb-4 flex items-center justify-between">

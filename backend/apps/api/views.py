@@ -58,6 +58,7 @@ from .serializers import (
     ManagerViolationJobSerializer,
     compute_sla_status_for_job,
     compute_sla_reasons_for_job,
+    ReportEmailLogSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -2757,6 +2758,217 @@ class ManagerViolationJobsView(APIView):
                 "total_pages": 1,
             },
             "jobs": jobs_payload,
+        }
+
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ManagerReportEmailLogListView(APIView):
+    """
+    Глобальная таблица email-логов для менеджера.
+
+    GET /api/manager/report-emails/
+
+    Поддерживает фильтры:
+    - date_from (YYYY-MM-DD, по created_at)
+    - date_to   (YYYY-MM-DD, по created_at)
+    - status    (sent / failed)
+    - kind      (job_report / weekly_report / monthly_report)
+    - job_id
+    - email     (contains по to_email)
+
+    Плюс простая пагинация:
+    - page (>= 1, по умолчанию 1)
+    - page_size (по умолчанию 50, максимум, например, 200)
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        company = getattr(user, "company", None)
+
+        # только менеджер может смотреть логи
+        if getattr(user, "role", None) != User.ROLE_MANAGER:
+            return Response(
+                {"detail": "Only managers can view report email logs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not company:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # базовый queryset: все логи этой компании
+        qs = (
+            ReportEmailLog.objects.filter(company_id=company.id)
+            .select_related("user")
+            .order_by("-created_at")
+        )
+
+        # --- фильтры по дате ---
+        date_from_str = (request.query_params.get("date_from") or "").strip()
+        date_to_str = (request.query_params.get("date_to") or "").strip()
+
+        if date_from_str:
+            try:
+                date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+                qs = qs.filter(created_at__date__gte=date_from)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date_from. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if date_to_str:
+            try:
+                date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+                qs = qs.filter(created_at__date__lte=date_to)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid date_to. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # --- фильтр по статусу ---
+        status_param = (request.query_params.get("status") or "").strip()
+        if status_param in (
+            ReportEmailLog.STATUS_SENT,
+            ReportEmailLog.STATUS_FAILED,
+        ):
+            qs = qs.filter(status=status_param)
+
+        # --- фильтр по типу отчёта ---
+        kind = (request.query_params.get("kind") or "").strip()
+        valid_kinds = {
+            ReportEmailLog.KIND_JOB_REPORT,
+            ReportEmailLog.KIND_WEEKLY_REPORT,
+            ReportEmailLog.KIND_MONTHLY_REPORT,
+        }
+        if kind:
+            if kind not in valid_kinds:
+                return Response(
+                    {
+                        "detail": (
+                            "Invalid kind. Use job_report, weekly_report "
+                            "or monthly_report."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            qs = qs.filter(kind=kind)
+
+        # --- фильтр по job_id ---
+        job_id_str = (request.query_params.get("job_id") or "").strip()
+        if job_id_str:
+            try:
+                job_id = int(job_id_str)
+                qs = qs.filter(job_id=job_id)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid job_id. Must be integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # --- фильтр по email (to_email contains) ---
+        email_substring = (request.query_params.get("email") or "").strip()
+        if email_substring:
+            qs = qs.filter(to_email__icontains=email_substring)
+
+        # --- пагинация (простая, без DRF paginator) ---
+        try:
+            page = int(request.query_params.get("page", "1"))
+        except ValueError:
+            page = 1
+
+        try:
+            page_size = int(request.query_params.get("page_size", "50"))
+        except ValueError:
+            page_size = 50
+
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 50
+        if page_size > 200:
+            page_size = 200
+
+        total_count = qs.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        logs = list(qs[start:end])
+
+        # --- подгружаем связанные jobs для job_report-логов ---
+        job_ids = [log.job_id for log in logs if log.job_id]
+        jobs_map = {
+            job.id: job
+            for job in Job.objects.filter(id__in=job_ids)
+            .select_related("company", "location", "cleaner")
+        }
+
+        results = []
+        for log in logs:
+            job = jobs_map.get(log.job_id)
+
+            # дата/время отправки
+            sent_at = log.created_at.isoformat() if log.created_at else None
+
+            # job / period
+            if log.kind == ReportEmailLog.KIND_JOB_REPORT and job:
+                job_period = f"Job #{job.id}"
+                company_name = getattr(job.company, "name", "") or ""
+                location_name = getattr(job.location, "name", "") or ""
+                cleaner_name = (
+                    getattr(job.cleaner, "full_name", "")
+                    or getattr(job.cleaner, "email", "")
+                    or ""
+                )
+            else:
+                # weekly / monthly — показываем период в одной строке
+                if log.period_from and log.period_to:
+                    job_period = f"{log.period_from} – {log.period_to}"
+                else:
+                    job_period = ""
+                company_name = getattr(company, "name", "") or ""
+                location_name = ""
+                cleaner_name = ""
+
+            sent_by = (
+                getattr(log.user, "full_name", None)
+                or getattr(log.user, "email", None)
+                or ""
+            )
+
+            results.append(
+                {
+                    "id": log.id,
+                    "kind": log.kind,
+                    "sent_at": sent_at,
+                    "job_id": log.job_id,
+                    "job_period": job_period,          # для колонки "Job / Period"
+                    "company_name": company_name,      # колонка COMPANY
+                    "location_name": location_name,    # колонка LOCATION
+                    "cleaner_name": cleaner_name,      # колонка CLEANER
+                    "target_email": log.to_email or "",# колонка TARGET EMAIL
+                    "status": log.status,
+                    "sent_by": sent_by,                # колонка SENT BY
+                }
+            )
+
+        next_page = page + 1 if end < total_count else None
+        previous_page = page - 1 if page > 1 else None
+
+        payload = {
+            "count": total_count,
+            "page": page,
+            "page_size": page_size,
+            "next_page": next_page,
+            "previous_page": previous_page,
+            "results": results,
         }
 
         return Response(payload, status=status.HTTP_200_OK)

@@ -23,7 +23,8 @@ import PricingPage from "./pages/PricingPage";
 import Signup from "./pages/Signup";
 import Performance from "./pages/Performance";
 import Reports from "@/pages/Reports";
-import ViolationJobsPage from "@/pages/ViolationJobsPage"; // ⬅️ добавили
+import ViolationJobsPage from "@/pages/ViolationJobsPage";
+import ReportEmailLogsPage from "@/pages/ReportEmailLogs";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -87,6 +88,10 @@ const App = () => (
               <Route
                 path="/reports/violations"
                 element={<ViolationJobsPage />}
+              />
+              <Route
+                path="/reports/email-logs"
+                element={<ReportEmailLogsPage />}
               />
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />

@@ -2263,6 +2263,11 @@ Checklist templates & job checklist linkage
 * данные read-only;
 * порядок событий определяется backend (по `created_at`), фронт порядок не переупорядочивает.
 
+## Email history — API contract (manager reports)
+
+Зафиксирован полный контракт раздела Email history для менеджера. Экран использует эндпоинт
+GET /api/manager/report-emails/ как единый источник данных для истории отправки всех отчётов (job, weekly, monthly). Контракт поддерживает фильтрацию по дате отправки (date_from, date_to — по created_at, формат YYYY-MM-DD), статусу (sent, failed), типу отчёта (job_report, weekly_report, monthly_report), job_id и части email получателя. Реализована серверная пагинация (page, page_size). Ответ стандартизирован и содержит count, параметры пагинации и массив results[] с денормализованными полями для UI: job_period, company_name, location_name, cleaner_name, target_email, status, sent_by, sent_at.
+
 ### 10.5. Guard Rails (API + UI договорённость)
 
 **Backend**

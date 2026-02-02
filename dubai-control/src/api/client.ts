@@ -1,5 +1,3 @@
-// dubai-control/src/api/client.ts
-
 import type { OwnerOverview } from "@/types/reports";
 
 const API_BASE_URL =
@@ -919,7 +917,7 @@ export const apiClient = {
   },
 };
 
-// ---- Reports: email weekly / monthly (MVP stub) ----
+// ---- Reports: email weekly / monthly ----
 
 // Email weekly report (optionally to custom email)
 export async function emailWeeklyReport(email?: string): Promise<any> {
@@ -1086,6 +1084,149 @@ export async function getMonthlyReport(): Promise<ManagerReport> {
   );
   return res.data;
 }
+
+// ---- PDF download for weekly/monthly manager reports ----
+
+export async function downloadManagerReportPdf(
+  mode: "weekly" | "monthly"
+): Promise<Blob> {
+  await loginManager();
+
+  const path =
+    mode === "weekly"
+      ? "/api/manager/reports/weekly/pdf/"
+      : "/api/manager/reports/monthly/pdf/";
+
+  // если на бэке POST — можно поменять method на "POST"
+  return apiFetchBlob(path, { method: "GET" });
+}
+
+// ---------- Email Logs API (глобальные логи отправки отчётов) ----------
+
+export type EmailLogKind = "job_report" | "weekly_report" | "monthly_report";
+export type EmailLogStatus = "sent" | "failed";
+
+export type EmailLog = {
+  id: number;
+  sent_at: string;
+  kind: EmailLogKind | string;
+  job_id: number | null;
+  job_period: string; // то, что мы собираем на бэке для колонки "Job / Period"
+  company_name: string | null;
+  location_name: string | null;
+  cleaner_name: string | null;
+  target_email: string | null;
+  status: EmailLogStatus | string;
+  sent_by: string | null;
+};
+
+export type EmailLogsPagination = {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
+
+export type EmailLogsResponse = {
+  results: EmailLog[];
+  pagination: EmailLogsPagination;
+};
+
+export type EmailLogsFilters = {
+  page?: number;
+  page_size?: number;
+  status?: "all" | EmailLogStatus;
+  kind?: "all" | "job" | "weekly" | "monthly";
+  date_from?: string; // "YYYY-MM-DD" или пустая строка
+  date_to?: string;   // "YYYY-MM-DD" или пустая строка
+  job_id?: string;
+  email?: string;
+};
+
+export async function getEmailLogs(
+  filters: EmailLogsFilters
+): Promise<EmailLogsResponse> {
+  await loginManager();
+
+  const params = new URLSearchParams();
+
+  // --- пагинация с дефолтами ---
+  const page =
+    typeof filters.page === "number" && filters.page > 0 ? filters.page : 1;
+  const pageSize =
+    typeof filters.page_size === "number" && filters.page_size > 0
+      ? filters.page_size
+      : 50;
+
+  params.set("page", String(page));
+  params.set("page_size", String(pageSize));
+
+  // --- статус (sent / failed) ---
+  if (filters.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+
+  // --- тип отчёта (job / weekly / monthly) ---
+  if (filters.kind && filters.kind !== "all") {
+    const kindMap: Record<"job" | "weekly" | "monthly", EmailLogKind> = {
+      job: "job_report",
+      weekly: "weekly_report",
+      monthly: "monthly_report",
+    };
+    params.set("kind", kindMap[filters.kind]);
+  }
+
+  // --- даты: важное исправление — ключи date_from / date_to ---
+  if (filters.date_from) {
+    params.set("date_from", filters.date_from);
+  }
+
+  if (filters.date_to) {
+    params.set("date_to", filters.date_to);
+  }
+
+  // --- job_id ---
+  if (filters.job_id) {
+    params.set("job_id", filters.job_id.trim());
+  }
+
+  // --- email substring ---
+  if (filters.email) {
+    params.set("email", filters.email.trim());
+  }
+
+  const qs = params.toString();
+  const path = qs
+    ? `/api/manager/report-emails/?${qs}`
+    : "/api/manager/report-emails/";
+
+  // сырой ответ бэка
+  const { data } = await apiClient.get<{
+    count: number;
+    page: number;
+    page_size: number;
+    next_page: number | null;
+    previous_page: number | null;
+    results: EmailLog[];
+  }>(path);
+
+  const totalItems = data.count;
+  const totalPages = data.page_size
+    ? Math.ceil(totalItems / data.page_size)
+    : 1;
+
+  return {
+    results: data.results,
+    pagination: {
+      page: data.page,
+      page_size: data.page_size,
+      total_items: totalItems,
+      total_pages: totalPages,
+    },
+  };
+}
+
+// ---------- Owner overview (для блока For owners на /reports) ----------
 
 export async function getOwnerOverview(days?: number): Promise<OwnerOverview> {
   const params = days ? `?days=${days}` : "";

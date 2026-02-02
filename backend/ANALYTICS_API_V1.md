@@ -1,23 +1,70 @@
 # Analytics API v1 — semantics only
 
-Документ фиксирует **первую версию контрактов Analytics API**.  
-Это не план на немедрую разработку, а «каркас» для будущей реализации.
+Документ фиксирует **первую версию контрактов Analytics API**.
+Это не план на немедленную разработку, а «каркас» для будущей реализации.
 
-- Текущий статус всех эндпоинтов: **NOT IMPLEMENTED**
-- Модели / миграции под них специально не заводим
-- Реализация позже должна опираться на уже существующие сущности:
-  - `Job`
-  - `JobCheckEvent`
-  - `JobChecklistItem`
-  - `JobPhoto`
-- Любая оптимизация (агрегирующие таблицы, кэш, события) — **отдельным этапом**, поверх этих контрактов.
+* Текущий статус всех эндпоинтов: **NOT IMPLEMENTED**
+* Модели / миграции под них специально не заводим
+* Реализация позже должна опираться на уже существующие сущности:
+
+  * `Job`
+  * `JobCheckEvent`
+  * `JobChecklistItem`
+  * `JobPhoto`
+* Любая оптимизация (агрегирующие таблицы, кэш, события) — **отдельным этапом**, поверх этих контрактов.
 
 Общее:
 
-- Все эндпоинты доступны **только менеджеру** (`User.role = manager`)
-- Скоуп — **в пределах компании** (`user.company`)
-- Auth: `TokenAuthentication` (как во всём API)
-- Формат дат: `YYYY-MM-DD` (UTC или GST — TBD, но единообразно для всех эндпоинтов)
+* Все эндпоинты доступны **только менеджеру** (`User.role = manager`)
+* Скоуп — **в пределах компании** (`user.company`)
+* Auth: `TokenAuthentication` (как во всём API)
+* Формат дат: `YYYY-MM-DD` (UTC или GST — TBD, но единообразно для всех эндпоинтов)
+
+---
+
+## 📌 Time Semantics & Source-of-Truth Rules
+
+Analytics API v1 relies on **explicit and consistent time semantics** to avoid ambiguity between planning, execution and communication layers.
+
+For every metric, the **source-of-truth timestamp** must be clearly defined.
+
+### Core rules
+
+1. **Job-based metrics**
+
+   * Metrics related to job completion (e.g. `jobs_completed`, trends):
+
+     * are calculated based on the date of **actual job completion**;
+     * source field: `actual_end_time`.
+   * `scheduled_date` is never used for analytics aggregation.
+
+2. **Duration-based metrics**
+
+   * Job duration is calculated strictly as:
+
+     * `actual_end_time - actual_start_time`.
+   * Scheduled times are not used for duration analytics.
+
+3. **Proof-related metrics**
+
+   * Proof completion (before / after / checklist) is evaluated:
+
+     * at the moment the job reaches `completed` status;
+     * regardless of when individual proof items were uploaded.
+   * Late uploads do not shift the analytics date.
+
+4. **Issue / SLA-related metrics**
+
+   * Issues are attributed to the **job completion date**,
+     not to the date when the issue was detected or reported.
+
+5. **Communication & delivery events**
+
+   * Email delivery and report sending:
+
+     * use their own timestamps (`created_at`);
+     * are explicitly **out of scope** for Analytics API v1 metrics.
+   * Communication timelines must never affect execution analytics.
 
 ---
 
@@ -25,11 +72,11 @@
 
 Карточки на странице Analytics:
 
-- Jobs Completed Today
-- On-time Completion
-- Proof Completion
-- Avg Job Duration
-- Issues Detected
+* Jobs Completed Today
+* On-time Completion
+* Proof Completion
+* Avg Job Duration
+* Issues Detected
 
 ### 1.1. Endpoint
 
@@ -37,16 +84,18 @@
 
 ### Query params
 
-- `from` — дата начала периода, `YYYY-MM-DD` (обязательный)
-- `to` — дата конца периода, включительно, `YYYY-MM-DD` (обязательный)
+* `from` — дата начала периода, `YYYY-MM-DD` (обязательный)
+* `to` — дата конца периода, включительно, `YYYY-MM-DD` (обязательный)
 
 Примеры:
 
 ```http
 GET /api/manager/analytics/summary/?from=2026-01-06&to=2026-01-19
-Response (v1, минимальный)
-json
-Копировать код
+```
+
+Response (v1, минимальный):
+
+```json
 {
   "jobs_completed": 24,
   "on_time_completion_rate": 0.94,
@@ -54,95 +103,130 @@ json
   "avg_job_duration_hours": 2.4,
   "issues_detected": 3
 }
-Семантика полей:
+```
 
-jobs_completed — количество job в статусе completed за период.
+### Семантика полей
 
-on_time_completion_rate — доля job, завершённых не позже планового времени окончания (TBD: точное правило будем формализовать при реализации).
+* **jobs_completed** — количество job в статусе `completed` за период
+  (по `actual_end_time`).
 
-proof_completion_rate — доля job, где выполнен полный proof:
+* **on_time_completion_rate** — доля job, завершённых не позже планового времени окончания
+  (TBD: точное правило формализуется при реализации).
 
-есть before_photo
+* **proof_completion_rate** — доля job, где выполнен полный proof:
 
-есть after_photo
+  * есть before_photo;
+  * есть after_photo;
+  * все обязательные пункты чек-листа закрыты.
 
-все обязательные пункты чек-листа закрыты.
+* **avg_job_duration_hours** — средняя фактическая длительность job
+  (`actual_start_time → actual_end_time`) в часах.
 
-avg_job_duration_hours — средняя фактическая длительность job (по actual_start_time → actual_end_time) в часах.
+* **issues_detected** — количество job, помеченных как issue
+  (TBD: источник флага будет определён при реализации).
 
-issues_detected — количество job, отмеченных как «issue» (TBD: источник статуса issue или набора флагов определим позже).
+Status: **NOT IMPLEMENTED**
 
-Status: NOT IMPLEMENTED
+---
 
-2. Jobs Completed — дневной тренд
+## 2. Jobs Completed — дневной тренд
+
 Линейный график «Jobs Completed» за период.
 
-2.1. Endpoint
-GET /api/manager/analytics/jobs-completed/
+### 2.1. Endpoint
 
-Query params
-from — дата начала, YYYY-MM-DD (обязательный)
+`GET /api/manager/analytics/jobs-completed/`
 
-to — дата конца, YYYY-MM-DD (обязательный)
+### Query params
 
+* `from` — дата начала, `YYYY-MM-DD` (обязательный)
+* `to` — дата конца, `YYYY-MM-DD` (обязательный)
 
+Пример:
+
+```http
 GET /api/manager/analytics/jobs-completed/?from=2026-01-06&to=2026-01-19
-Response
+```
 
+Response:
+
+```json
 [
   { "date": "2026-01-06", "jobs_completed": 18 },
   { "date": "2026-01-07", "jobs_completed": 21 },
   { "date": "2026-01-08", "jobs_completed": 23 }
 ]
-Семантика:
+```
 
-date — календарная дата.
+### Семантика
 
-jobs_completed — количество job в статусе completed за этот день.
+* **date** — календарная дата (по `actual_end_time`).
+* **jobs_completed** — количество job в статусе `completed` за день.
 
-Status: NOT IMPLEMENTED
+Status: **NOT IMPLEMENTED**
 
-3. Job Duration — тренд средней длительности
+---
+
+## 3. Job Duration — тренд средней длительности
+
 Линейный график «Average Job Duration» за период.
 
-3.1. Endpoint
-GET /api/manager/analytics/job-duration/
+### 3.1. Endpoint
 
-Query params
-from — дата начала, YYYY-MM-DD (обязательный)
+`GET /api/manager/analytics/job-duration/`
 
-to — дата конца, YYYY-MM-DD (обязательный)
+### Query params
 
+* `from` — дата начала, `YYYY-MM-DD` (обязательный)
+* `to` — дата конца, `YYYY-MM-DD` (обязательный)
 
+Пример:
+
+```http
 GET /api/manager/analytics/job-duration/?from=2026-01-06&to=2026-01-19
-Response
+```
 
+Response:
+
+```json
 [
   { "date": "2026-01-06", "avg_job_duration_hours": 2.3 },
   { "date": "2026-01-07", "avg_job_duration_hours": 2.1 },
   { "date": "2026-01-08", "avg_job_duration_hours": 2.5 }
 ]
-Семантика:
+```
 
-avg_job_duration_hours — средняя фактическая длительность job за день, в часах.
+### Семантика
 
-Status: NOT IMPLEMENTED
+* **avg_job_duration_hours** — средняя фактическая длительность job за день
+  (`actual_end_time - actual_start_time`).
 
-4. Proof Completion Trend
+Status: **NOT IMPLEMENTED**
+
+---
+
+## 4. Proof Completion Trend
+
 Столбчатый график: Before / After / Checklist completion per day.
 
-4.1. Endpoint
-GET /api/manager/analytics/proof-completion/
+### 4.1. Endpoint
 
-Query params
-from — дата начала, YYYY-MM-DD (обязательный)
+`GET /api/manager/analytics/proof-completion/`
 
-to — дата конца, YYYY-MM-DD (обязательный)
+### Query params
 
+* `from` — дата начала, `YYYY-MM-DD` (обязательный)
+* `to` — дата конца, `YYYY-MM-DD` (обязательный)
 
+Пример:
+
+```http
 GET /api/manager/analytics/proof-completion/?from=2026-01-06&to=2026-01-19
-Response
+```
 
+Response:
+
+```json
 [
   {
     "date": "2026-01-06",
@@ -157,39 +241,42 @@ Response
     "checklist_rate": 0.90
   }
 ]
-Семантика:
+```
 
-before_photo_rate — доля job за день, где загружено before-фото.
+### Семантика
 
-after_photo_rate — доля job за день, где загружено after-фото.
+* **before_photo_rate** — доля job с загруженным before-фото.
+* **after_photo_rate** — доля job с загруженным after-фото.
+* **checklist_rate** — доля job, где все обязательные пункты чек-листа закрыты.
 
-checklist_rate — доля job за день, где все обязательные пункты чек-листа закрыты.
+Оценка производится **в момент completion job**, независимо от времени загрузки отдельных элементов proof.
 
-Базируется на текущей логике proof из Job Planning:
+Status: **NOT IMPLEMENTED**
 
-before_uploaded
+---
 
-after_uploaded
+## 5. Cleaner Performance — таблица по клинерам
 
-checklist_completed
-
-Status: NOT IMPLEMENTED
-
-5. Cleaner Performance — таблица по клинерам
 Таблица «Cleaner Performance» + бар-чарт «Jobs by Cleaner».
 
-5.1. Endpoint
-GET /api/manager/analytics/cleaners-performance/
+### 5.1. Endpoint
 
-Query params
-from — дата начала, YYYY-MM-DD (обязательный)
+`GET /api/manager/analytics/cleaners-performance/`
 
-to — дата конца, YYYY-MM-DD (обязательный)
+### Query params
 
+* `from` — дата начала, `YYYY-MM-DD` (обязательный)
+* `to` — дата конца, `YYYY-MM-DD` (обязательный)
 
+Пример:
+
+```http
 GET /api/manager/analytics/cleaners-performance/?from=2026-01-06&to=2026-01-19
-Response
+```
 
+Response:
+
+```json
 [
   {
     "cleaner_id": 3,
@@ -210,49 +297,38 @@ Response
     "issues": 1
   }
 ]
-Семантика:
+```
 
-cleaner_id, cleaner_name — идентификатор и имя клинера.
+### Семантика
 
-jobs_completed — количество job в статусе completed за период.
+* **jobs_completed** — количество job в статусе `completed` за период.
+* **avg_duration_hours** — средняя фактическая длительность job.
+* **on_time_rate** — доля job, завершённых вовремя.
+* **proof_rate** — доля job с полным proof.
+* **issues** — количество job с issue-флагом.
 
-avg_duration_hours — средняя длительность job для этого клинера.
+Status: **NOT IMPLEMENTED**
 
-on_time_rate — доля job, завершённых вовремя.
+---
 
-proof_rate — доля job с полным proof (before + after + checklist).
+## 6. Правила развития API
 
-issues — количество job с issue (точное определение будет описано при реализации).
-
-Status: NOT IMPLEMENTED
-
-6. Правила развития API
 Эти контракты — источник истины для Analytics.
-Любая реализация или оптимизация должна соответствовать описанным схемам.
 
 Backward-compatible изменения:
 
-можно добавлять новые поля в ответ (UI их просто не будет использовать);
-
-можно добавлять новые query-параметры с дефолтами.
+* добавление новых полей в ответы;
+* добавление новых query-параметров с дефолтами.
 
 Breaking changes:
 
-переименование существующих полей;
+* переименование полей;
+* изменение семантики без смены имени;
+* изменение обязательности параметров.
 
-изменение семантики полей без смены имени;
+Такие изменения допускаются **только с явной версией v2** и новой секцией в этом файле.
 
-изменение обязательности параметров.
-
-Такие изменения допускаются только с явной пометкой v2 и новой секцией в этом файле.
-
-В этой версии (v1) мы сознательно:
-
-не вводим отдельные таблицы для агрегатов,
-
-не обсуждаем обновление данных в реальном времени,
-
-считаем, что «обновление раз в N минут» — задача будущего этапа.
+---
 
 ## 📌 Relationship to SLA Performance & Reports (UI Layer)
 
