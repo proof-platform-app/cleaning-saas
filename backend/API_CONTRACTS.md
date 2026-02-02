@@ -2584,6 +2584,36 @@ force_completed_by.
 403 Forbidden — user не является менеджером.
 404 Not Found — job не найден.
 
+## Manager Analytics API (summary + cleaners performance)
+
+**Summary**
+
+`GET /api/manager/analytics/summary/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+
+Возвращает агрегированную статистику по джобам за период:
+
+- `jobs_completed` — количество завершённых джобов;
+- `on_time_completion_rate` — доля джобов, завершённых вовремя (0–1);
+- `proof_completion_rate` — доля джобов с полным набором пруфов (0–1);
+- `avg_job_duration_hours` — средняя длительность джоба в часах (float);
+- `issues_detected` — количество зафиксированных нарушений/SLA-issues.
+
+Используется Manager Portal на странице `/analytics` для верхнего блока KPI-карточек.
+
+**Cleaner performance**
+
+`GET /api/manager/analytics/cleaners-performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+
+Возвращает список клинеров с метриками за период:
+
+- `cleaner_id`, `cleaner_name`
+- `jobs_completed`
+- `avg_job_duration_hours`
+- `on_time_rate` (0–1)
+- `proof_rate` (0–1)
+- `issues`
+
+Используется для таблицы «Cleaner Performance» и сравнительного графика по клинерам на странице `/analytics`.
 
 
 ## Итоговое правило

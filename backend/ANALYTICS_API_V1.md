@@ -408,3 +408,17 @@ This separation allows CleanProof to:
 * Support multiple UX layers (operational, managerial, executive) on the same data
 
 ---
+### Operational Analytics — v1 scope (current)
+
+Версия Analytics v1 покрывает базовые операционные метрики и служит «точкой входа» в аналитику:
+
+- `analytics/summary` — агрегированное состояние выполнения работ за период (jobs completed, on-time rate, proof rate, avg duration, issues);
+- `analytics/cleaners-performance` — сравнительная аналитика по клинерам (объём работ, скорость, соблюдение сроков, качество пруфов, нарушения).
+
+Данный слой фиксирует **факт выполнения работ**, но не раскрывает причины отклонений.
+
+**Следующий этап (v1.1 / v2):**
+расширение аналитики за счёт SLA-движка:
+- breakdown нарушений по типам (late start, checklist_not_completed, proof_missing и т.д.);
+- временные графики SLA-соблюдения;
+- связка аналитики с checklist templates и PlanningMeta.

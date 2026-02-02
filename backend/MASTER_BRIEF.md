@@ -1194,3 +1194,17 @@ without compromising enforcement discipline or data integrity.
 * Analytics имеет собственный API-контур.
 * UI построен модульно и масштабируется (добавление новых метрик без ломки страницы).
 * В будущем Analytics станет основой для Performance Scoring, SLA Engine v2 и автоматических алертов.
+
+### Менеджерская аналитика — первая версия боевого дашборда
+
+Страница **Analytics** в Manager Portal подключена к живому backend-ядру:
+
+- KPI-блок показывает реальные значения по джобам: количество завершённых, долю on-time completion, proof completion, среднюю длительность и количество issues за выбранный период (пока период зашит на фронте);
+- блок **Performance Breakdown** отображает реальные метрики по каждому клинеру (jobs, avg duration, on-time %, proof %, issues) и визуализирует сравнение клинеров.
+
+Это закрывает базовый сценарий: менеджер видит не «рисованный» дизайн, а живые операционные цифры.
+
+**Дальнейшее развитие блока Analytics:**
+
+1. Управление периодом (date range selector) и единый подход к `date_from` / `date_to` для всех виджетов.
+2. Перевод графиков **Trends** (Jobs Completed / Average Job Duration / Proof Completion Trend) на реальные API-данные, привязанные к SLA-ядру.
