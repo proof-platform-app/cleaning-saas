@@ -1078,3 +1078,57 @@ and allows billing systems to be integrated later without refactoring core flows
 ### Cleaner access & security model
 
 Доступ клинеров к мобильному приложению построен по принципу manager-controlled access. Клинеры не регистрируются самостоятельно и не имеют механизма восстановления PIN. Менеджер является единственной точкой управления: он создаёт клинера, активирует/деактивирует его и при необходимости сбрасывает PIN. Такая модель упрощает онбординг полевых сотрудников, подходит для рынков с низким использованием email и соответствует требованиям MVP по скорости и надёжности.
+
+### Force-complete / override (manager-only)
+
+**Зачем**
+
+В реальной жизни не все job идеально следуют “идеальному” флоу:
+
+- клиент уезжает раньше, клинер не успевает сделать after-photo;
+- чек-лист на месте, но пара пунктов формально не закрыта;
+- часть доказательств теряется (телефон, интернет и т.п.).
+
+Без override менеджер оказывается между молотом и наковальней:
+
+- либо закрыть job “как есть” и сломать концепцию proof/SLA;
+- либо держать её в in_progress бесконечно.
+
+**Решение**
+
+Мы даём менеджеру контролируемый инструмент — **Force complete**:
+
+- кнопка доступна только менеджеру на экране Job Details;
+- при нажатии менеджер обязан указать:
+  - `reason_code` (структурированная причина по SLA),
+  - живой `comment` (что произошло);
+- job переводится в `completed`, но:
+  - SLA помечается как `violated`,
+  - в причинах явно указан override.
+
+**Что это даёт**
+
+- SLA становится реалистичным, а не “игрушечным” — система учитывает форс-мажоры.
+- Владелец видит честную картину:
+  - где всё ок по proof,
+  - где были осознанные исключения.
+- Support и аудит получают чёткий трейл:
+  - когда и кто принудительно закрыл job,
+  - с каким комментарием и по какой причине.
+
+> Формула: *“Managers can override the process, but overrides всегда видны owner-у как отдельный тип нарушений.”*
+
+## SLA philosophy: proof-first, violations as exceptions
+
+CleanProof is not a system for detecting cleaner mistakes — it is a system for preventing them.
+
+The product enforces proof completeness before allowing job completion. As a result:
+most jobs have zero SLA violations,
+violations only appear via explicit exceptions (force complete, override, external constraints).
+
+The Job Timeline and SLA views are designed to:
+show facts first,
+allow quick isolation of problematic cases,
+provide confidence when no violations exist.
+
+A “no violations” state is a positive audit outcome and a key part of the product’s positioning.

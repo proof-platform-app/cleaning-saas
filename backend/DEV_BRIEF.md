@@ -1223,6 +1223,74 @@ Checklist flow (manager → job → SLA)
 SLA-причина checklist_not_completed возникает только для completed jobs, у которых обязательные пункты чеклиста не выполнены.
 ---
 
+### Job force-complete (manager override) — backend behavior
+
+**Цель:** дать менеджеру controlled-способ принудительно завершить Job и при этом не ломать SLA-логику.
+
+Техническая реализация:
+
+1. **Endpoint**
+
+   - Новый view `force_complete_job(request, job_id)` в `apps/api/views.py`.
+   - URL: `POST /api/manager/jobs/<int:job_id>/force-complete/`.
+   - Permissions:
+     - `IsAuthenticated`
+     - `IsManager` (наш существующий пермишн для менеджера компании)
+     - компания не `suspended` (проверка через тот же helper, что и для create-job).
+
+2. **Валидация**
+
+   - Находим job компании менеджера.
+   - Разрешены только статусы `scheduled` и `in_progress`.
+   - Из тела запроса читаем:
+     - `reason_code` (обязательный, строка)
+     - `comment` (обязательный, строка, не пустой).
+   - Проверяем, что `reason_code` входит в белый список SLA-кодов (`missing_before_photo`, `missing_after_photo`, `checklist_not_completed` и т.п.).
+
+3. **Изменения в Job**
+
+   - `job.status = "completed"`.
+   - Если нет `actual_end_time` — проставляем текущий `timezone.now()`.
+   - `job.sla_status = "violated"`.
+   - В `job.sla_reasons`:
+     - если список пустой — записываем `[reason_code]`;
+     - если нет — добавляем `reason_code`, не создавая дублей.
+   - Сохраняем job.
+
+4. **Audit trail**
+
+   - Создаём `JobCheckEvent`:
+     - `job = job`
+     - `event_type = "force_complete"`
+     - `user = request.user`
+     - `comment = <comment>`
+     - `payload = { "reason_code": ..., "previous_status": ..., "previous_sla_status": ... }`.
+
+   Это позволяет в будущем выводить override в таймлайне и PDF.
+
+5. **Ответ**
+
+   - Возвращаем сериализованный `ManagerJobDetail` (тот же serializer, что и в `GET /api/manager/jobs/<id>/`), чтобы фронт сразу получил обновлённый статус, SLA и флаги override.
+
+
+## SLA model and violation visibility
+
+CleanProof enforces SLA correctness by design at the execution layer (mobile cleaner app).
+
+A cleaner cannot complete a job unless:
+check-in and check-out are performed,
+before and after photos are uploaded,
+checklist is fully completed.
+
+Because of this, SLA violations are exceptional events, not normal workflow outcomes.
+The Job Timeline UI includes a “show only violations” mode, intended for:
+audit,
+owner review,
+enterprise compliance checks.
+
+An empty violations view is a successful SLA result, not an error state.
+This must be preserved and clearly communicated in UI/UX.
+
 ### 2. DEV_BRIEF.md
 
 **Куда вставить**  

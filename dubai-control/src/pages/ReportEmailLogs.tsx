@@ -198,6 +198,8 @@ export default function ReportEmailLogsPage() {
     return "All dates";
   })();
 
+  const currentKind = filters.kind ?? "all";
+
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card/50">
@@ -258,24 +260,36 @@ export default function ReportEmailLogsPage() {
               </Select>
             </div>
 
+            {/* Report type — tabs вместо Select */}
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-muted-foreground">
                 Report type
               </span>
-              <Select
-                value={filters.kind ?? "all"}
-                onValueChange={handleKindChange}
-              >
-                <SelectTrigger className="w-[160px] h-10">
-                  <SelectValue placeholder="All kinds" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="job">Job report</SelectItem>
-                  <SelectItem value="weekly">Weekly report</SelectItem>
-                  <SelectItem value="monthly">Monthly report</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="inline-flex items-center rounded-full bg-muted px-1 py-1 text-xs">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "job", label: "Job" },
+                  { value: "weekly", label: "Weekly" },
+                  { value: "monthly", label: "Monthly" },
+                ].map((tab) => {
+                  const active = currentKind === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => handleKindChange(tab.value)}
+                      className={cn(
+                        "px-3 py-1 rounded-full transition-colors",
+                        active
+                          ? "bg-background shadow-sm text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -453,7 +467,7 @@ export default function ReportEmailLogsPage() {
           !isError &&
           pagination &&
           pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center justify_between text-xs text-muted-foreground">
               <div>
                 Page {pagination.page} of {pagination.total_pages}
               </div>

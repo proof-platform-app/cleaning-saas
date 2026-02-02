@@ -1,3 +1,5 @@
+// dubai-control/src/pages/JobDetails.tsx
+
 import type React from "react";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
@@ -43,6 +45,8 @@ interface UITimelineStep {
   time?: string;
   completed: boolean;
   icon: React.ElementType;
+  // связан ли шаг с SLA-нарушениями (missing_* / checklist_not_completed)
+  isViolationRelated: boolean;
 }
 
 function formatDate(dateStr?: string | null) {
@@ -83,9 +87,16 @@ function mapTimelineToUI(
   steps: JobTimelineStep[],
   job: ManagerJobDetail
 ): UITimelineStep[] {
+  const slaReasons = Array.isArray(job.sla_reasons) ? job.sla_reasons : [];
+
+  const hasMissingBefore = slaReasons.includes("missing_before_photo");
+  const hasMissingAfter = slaReasons.includes("missing_after_photo");
+  const hasChecklistIssue = slaReasons.includes("checklist_not_completed");
+
   return steps.map((step): UITimelineStep => {
     let icon: React.ElementType = Circle;
     let time: string | undefined;
+    let isViolationRelated = false;
 
     switch (step.key) {
       case "scheduled":
@@ -102,7 +113,9 @@ function mapTimelineToUI(
         } else if (job.scheduled_date) {
           time = formatDate(job.scheduled_date);
         }
+        isViolationRelated = false;
         break;
+
       case "check_in":
       case "check_out":
         icon = MapPin;
@@ -111,16 +124,29 @@ function mapTimelineToUI(
           const formatted = formatTime(step.timestamp);
           time = formatted || undefined;
         }
+        // сейчас SLA по GPS у нас нет в reasons — оставляем false
+        isViolationRelated = false;
         break;
+
       case "before_photo":
+        icon = Camera;
+        // если есть missing_before_photo — считаем этот шаг violation-related
+        isViolationRelated = hasMissingBefore;
+        break;
+
       case "after_photo":
         icon = Camera;
+        isViolationRelated = hasMissingAfter;
         break;
+
       case "checklist":
         icon = CheckCircle2;
+        isViolationRelated = hasChecklistIssue;
         break;
+
       default:
         icon = Circle;
+        isViolationRelated = false;
     }
 
     return {
@@ -129,6 +155,7 @@ function mapTimelineToUI(
       time,
       completed: step.status === "done",
       icon,
+      isViolationRelated,
     };
   });
 }
@@ -161,6 +188,8 @@ export default function JobDetails() {
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(false);
   const [emailHistoryError, setEmailHistoryError] =
     useState<string | null>(null);
+
+  const [showOnlyViolations, setShowOnlyViolations] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -395,6 +424,10 @@ export default function JobDetails() {
     job
   );
 
+  const visibleTimelineSteps: UITimelineStep[] = showOnlyViolations
+    ? timelineSteps.filter((step) => step.isViolationRelated)
+    : timelineSteps;
+
   const beforeUrl =
     job.photos?.before?.url || (job as any).before_photo_url || null;
   const afterUrl =
@@ -626,13 +659,31 @@ export default function JobDetails() {
         <div className="lg:col-span-2 space-y-8">
           {/* Timeline */}
           <div className="bg-card rounded-xl border border-border shadow-card p-6">
-            <h2 className="font-semibold text-foreground mb-6">Job Timeline</h2>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 className="font-semibold text-foreground">Job Timeline</h2>
+              <Button
+                type="button"
+                variant={showOnlyViolations ? "secondary" : "ghost"}
+                size="sm"
+                className="text-xs"
+                onClick={() => setShowOnlyViolations((prev) => !prev)}
+              >
+                {showOnlyViolations ? "Show all events" : "Show only violations"}
+              </Button>
+            </div>
+
             <div className="relative">
               {/* Timeline line */}
               <div className="absolute left-4 top-8 bottom-8 w-px bg-border" />
 
               <div className="space-y-6">
-                {timelineSteps.map((step) => (
+                {visibleTimelineSteps.length === 0 && (
+                  <p className="text-xs text-muted-foreground pl-12">
+                    No violation-related events in this job.
+                  </p>
+                )}
+
+                {visibleTimelineSteps.map((step) => (
                   <div key={step.id} className="relative flex items-start gap-4">
                     <div
                       className={cn(
@@ -825,7 +876,7 @@ export default function JobDetails() {
                     {hourlyRate && (
                       <div>
                         Hourly rate:{" "}
-                          <span className="font-medium">
+                        <span className="font-medium">
                           AED {Number(hourlyRate).toFixed(2)}
                         </span>
                       </div>
@@ -833,7 +884,7 @@ export default function JobDetails() {
                     {flatRate && (
                       <div>
                         Flat rate:{" "}
-                          <span className="font-medium">
+                        <span className="font-medium">
                           AED {Number(flatRate).toFixed(2)}
                         </span>
                       </div>

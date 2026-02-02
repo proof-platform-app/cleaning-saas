@@ -1770,11 +1770,98 @@ Authorization: Token <MANAGER_TOKEN>
 
 ---
 
+### Job force-complete (manager override)
+
+**Purpose**
+
+Позволяет менеджеру принудительно завершить Job и зафиксировать факт override с причиной.  
+Используется в редких случаях, когда клинер не может загрузить фото / закрыть чек-лист, но работа фактически выполнена.
+
+**Endpoint**
+
+`POST /api/manager/jobs/{id}/force-complete/`
+
+- Доступно только менеджеру (`User.role = manager`).
+- Работает только для job со статусами `scheduled` или `in_progress`.
+- Компания должна быть `is_active = True` и не в suspended-состоянии.
+
+**Request body (JSON)**
+
+```json
+{
+  "reason_code": "missing_after_photo",
+  "comment": "Client left early, cleaner couldn't take after-photo."
+}
+Поля:
+
+reason_code — строка, обязательная. Один из доменных кодов SLA, например:
+missing_before_photo
+missing_after_photo
+checklist_not_completed
+comment — строка, обязательная. Живое объяснение от менеджера, почему был сделан override.
+
+Response (200 OK)
+
+{
+  "id": 55,
+  "status": "completed",
+  "sla_status": "violated",
+  "sla_reasons": ["missing_after_photo"],
+  "force_completed": true,
+  "force_completed_by": {
+    "id": 7,
+    "full_name": "DevNew Manager"
+  },
+  "force_completed_at": "2026-02-02T12:34:56Z"
+}
+Семантика:
+
+status — job переводится в completed.
+sla_status — всегда violated (override = осознанное нарушение стандартного proof).
+sla_reasons — включает переданный reason_code (может быть объединён с существующими причинами, если они были).
+force_completed — явный флаг override.
+force_completed_by / force_completed_at — кто и когда сделал override.
+Side effects
+
+При успешном вызове:
+Создаётся JobCheckEvent:
+
+type = "force_complete"
+user = request.user
+comment = <comment из запроса>
+payload = { "reason_code": ..., "previous_status": ..., "previous_sla_status": ... }
+Обновляются поля Job:
+
+status = completed
+
+completed_at / actual_end_time выставляются, если были пустыми
+
+sla_status и sla_reasons приводятся в состояние “нарушено по причине override”
+
+Errors
+
+400 BAD REQUEST — отсутствует reason_code или comment, job уже completed.
+403 FORBIDDEN — компания заблокирована (company_blocked) или trial/plan не позволяет override (на будущее).
+404 NOT FOUND — job не принадлежит компании менеджера или не существует.
+
+##Job Timeline — SLA violation filtering
+
+Job timeline supports a violation-focused view used for audit and SLA review.
+
+By default, the system enforces proof completeness on the cleaner side (check-in/out, photos, checklist), therefore standard jobs cannot produce SLA violations.
+
+The API exposes full job timeline events, while the client may apply a “violations-only” filter, showing only SLA-relevant or exception-related events (e.g. force-complete, missing proof, overrides).
+
+If no violations exist, the timeline is intentionally empty and represented as a valid state:
+“No SLA violations detected”.
+
+This behavior is considered correct and expected, and serves as proof of process integrity rather than absence of data.
+
 ## 9. SLA Reports (Weekly / Monthly) & Reports Email
 
 API предоставляет агрегированные SLA-отчёты для менеджеров, предназначенные для просмотра стейкхолдерами и экспорта.
 
-### 9.1. JSON / PDF отчёты (weekly / monthly)
+## 9.1. JSON / PDF отчёты (weekly / monthly)
 
 **Endpoints**
 

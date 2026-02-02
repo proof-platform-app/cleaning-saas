@@ -349,6 +349,21 @@ Email содержит контекст job, SLA статус и описани�
 ## Email history — implementation status
 
 ✅ Завершён блок Email history в разделе Reports. Реализована единая история отправки email-отчётов (job, weekly, monthly) с рабочими фильтрами, календарём диапазона дат, статусами доставки и серверной пагинацией. Фронт и бэк синхронизированы по API-контракту. Исправлены ошибки фильтрации по датам (используется created_at). Раздел стабилен и готов к использованию как управленческий и аудиторский инструмент.
+
+Job Timeline & SLA — current state ✅
+
+Job Timeline shows full execution flow.
+“Violations-only” filter is implemented as an audit tool.
+Cleaner-side execution prevents incomplete jobs by design.
+Empty violations timeline correctly represents a fully compliant job.
+
+UI behavior confirmed for both:
+jobs with full proof,
+jobs with missing/exceptional events.
+
+This logic is considered final for V1/V1.5 and forms the basis for upcoming features:
+Force complete / override flow
+Enterprise SLA audit extensions
 ---
 
 ## 📱 СЛОЙ 1 — ИСПОЛНЕНИЕ (Mobile Cleaner App)

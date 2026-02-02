@@ -115,6 +115,10 @@ export default function ReportsPage() {
 
   const [mode, setMode] = useState<ReportMode>("weekly");
 
+  // 🔀 Переключатель Owner / Manager view
+  const [view, setView] = useState<"owner" | "manager">("owner");
+  const isOwnerView = view === "owner";
+
   const [ownerOverview, setOwnerOverview] = useState<OwnerOverview | null>(null);
   const [ownerLoading, setOwnerLoading] = useState<boolean>(true);
   const [ownerError, setOwnerError] = useState<string | null>(null);
@@ -217,7 +221,8 @@ export default function ReportsPage() {
       const link = document.createElement("a");
 
       const period = report.period;
-      const filenameBase = mode === "weekly" ? "weekly_report" : "monthly_report";
+      const filenameBase =
+        mode === "weekly" ? "weekly_report" : "monthly_report";
       const filename = `${filenameBase}_${period.from}_to_${period.to}.pdf`;
 
       link.href = url;
@@ -474,6 +479,35 @@ export default function ReportsPage() {
 
       {/* Content */}
       <div className="px-6 py-6 space-y-6">
+        {/* 🔀 Переключатель Owner / Manager view */}
+        <div className="mb-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setView("owner")}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition
+              ${
+                view === "owner"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+          >
+            Owner view
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setView("manager")}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition
+              ${
+                view === "manager"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+          >
+            Manager view
+          </button>
+        </div>
+
         {/* ==== OWNER LAYER =================================================== */}
         <div className="mb-10 rounded-2xl border border-border bg-muted/40 px-6 py-5">
           <div className="mb-4 flex items-center justify-between">
@@ -629,213 +663,228 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* ==== MANAGER LAYER SEPARATOR ======================================= */}
-        <div className="mb-4 mt-2 border-t border-border pt-4">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            For managers
-          </p>
-          <h2 className="mt-1 text-base font-semibold text-foreground">
-            Weekly & monthly SLA reports
-          </h2>
-        </div>
-
-        {loading && (
-          <p className="text-sm text-muted-foreground">
-            Loading {title.toLowerCase()}…
-          </p>
-        )}
-        {error && (
-          <p className="text-sm text-destructive">
-            Failed to load {title.toLowerCase()}. Please try again later.
-          </p>
-        )}
-
-        {report && !loading && !error && (
+        {/* ==== MANAGER LAYER ================================================= */}
+        {!isOwnerView && (
           <>
-            {/* Hero-summary for the selected period */}
-            <div className="rounded-2xl border border-border bg-card px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="space-y-1">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {title}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Period:{" "}
-                  <span className="font-medium text-foreground">
-                    {report.period.from} – {report.period.to}
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-col items-start sm:items-end gap-1">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Issue rate
-                </p>
-                <p className="text-2xl font-semibold text-foreground">
-                  {(report.summary.issue_rate * 100).toFixed(1)}%
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {report.summary.jobs_count} jobs ·{" "}
-                  {report.summary.violations_count} with issues
-                </p>
-              </div>
+            {/* ==== MANAGER LAYER SEPARATOR =================================== */}
+            <div className="mb-4 mt-2 border-t border-border pt-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                For managers
+              </p>
+              <h2 className="mt-1 text-base font-semibold text-foreground">
+                Weekly & monthly SLA reports
+              </h2>
             </div>
 
-            {/* Narrative summary — короткий вывод для менеджера */}
-            {narrative && (
-              <div className="text-sm text-muted-foreground max-w-3xl">
-                {narrative}
-              </div>
+            {loading && (
+              <p className="text-sm text-muted-foreground">
+                Loading {title.toLowerCase()}…
+              </p>
+            )}
+            {error && (
+              <p className="text-sm text-destructive">
+                Failed to load {title.toLowerCase()}. Please try again later.
+              </p>
             )}
 
-            {/* Top SLA reasons — ПОЧЕМУ. Ставим выше таблиц */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="text-sm font-medium mb-1">Top SLA reasons</div>
-              <p className="text-xs text-muted-foreground mb-4">
-                What causes SLA violations most frequently in this period.
-              </p>
-
-              {report.top_reasons.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No SLA violations in this period.
-                </p>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  {report.top_reasons.map((r) => (
-                    <button
-                      key={r.code}
-                      type="button"
-                      onClick={() => {
-                        navigate(
-                          `/reports/violations?reason=${encodeURIComponent(
-                            r.code,
-                          )}&period_start=${report.period.from}&period_end=${
-                            report.period.to
-                          }`,
-                        );
-                      }}
-                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
-                    >
-                      <span>{formatReasonCode(r.code)}</span>
-                      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
-                        × {r.count}
+            {report && !loading && !error && (
+              <>
+                {/* Hero-summary for the selected period */}
+                <div className="rounded-2xl border border-border bg-card px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                      {title}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Period:{" "}
+                      <span className="font-medium text-foreground">
+                        {report.period.from} – {report.period.to}
                       </span>
-                    </button>
-                  ))}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-start sm:items-end gap-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Issue rate
+                    </p>
+                    <p className="text-2xl font-semibold text-foreground">
+                      {(report.summary.issue_rate * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {report.summary.jobs_count} jobs ·{" "}
+                      {report.summary.violations_count} with issues
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Who / Where — Cleaners + Locations */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Cleaners */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="text-sm font-medium mb-1">
-                  Cleaners with issues
-                </div>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Who generates the most SLA violations in this period.
-                </p>
-
-                {report.cleaners.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No jobs in this period.
-                  </p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-muted-foreground">
-                        <th className="text-left py-1.5">Cleaner</th>
-                        <th className="text-right py-1.5">Jobs</th>
-                        <th className="text-right py-1.5">SLA violations</th>
-                        <th className="text-right py-1.5 pr-1.5">Evidence</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.cleaners.map((cl) => (
-                        <tr
-                          key={cl.id ?? cl.name}
-                          className="border-t border-border/40"
-                        >
-                          <td className="py-1.5">{cl.name}</td>
-                          <td className="py-1.5 text-right">
-                            {cl.jobs_count}
-                          </td>
-                          <td className="py-1.5 text-right font-medium">
-                            {cl.violations_count}
-                          </td>
-                          <td className="py-1.5 text-right">
-                            <Link
-                              to={buildHistoryUrl({
-                                periodFrom: report.period.from,
-                                periodTo: report.period.to,
-                                cleanerId: cl.id ?? null,
-                              })}
-                              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                            >
-                              View jobs →
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {/* Narrative summary — короткий вывод для менеджера */}
+                {narrative && (
+                  <div className="text-sm text-muted-foreground max-w-3xl">
+                    {narrative}
+                  </div>
                 )}
-              </div>
 
-              {/* Locations */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <div className="text-sm font-medium mb-1">
-                  Locations with issues
-                </div>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Where SLA problems appear most often in this period.
-                </p>
-
-                {report.locations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No jobs in this period.
+                {/* Top SLA reasons — ПОЧЕМУ. Ставим выше таблиц */}
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <div className="text-sm font-medium mb-1">
+                    Top SLA reasons
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    What causes SLA violations most frequently in this period.
                   </p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-muted-foreground">
-                        <th className="text-left py-1.5">Location</th>
-                        <th className="text-right py-1.5">Jobs</th>
-                        <th className="text-right py-1.5">SLA violations</th>
-                        <th className="text-right py-1.5 pr-1.5">Evidence</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.locations.map((loc) => (
-                        <tr
-                          key={loc.id ?? loc.name}
-                          className="border-t border-border/40"
+
+                  {report.top_reasons.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No SLA violations in this period.
+                    </p>
+                  ) : (
+                    <div className="space-y-1 text-sm">
+                      {report.top_reasons.map((r) => (
+                        <button
+                          key={r.code}
+                          type="button"
+                          onClick={() => {
+                            navigate(
+                              `/reports/violations?reason=${encodeURIComponent(
+                                r.code,
+                              )}&period_start=${report.period.from}&period_end=${
+                                report.period.to
+                              }`,
+                            );
+                          }}
+                          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
                         >
-                          <td className="py-1.5">{loc.name}</td>
-                          <td className="py-1.5 text-right">
-                            {loc.jobs_count}
-                          </td>
-                          <td className="py-1.5 text-right font-medium">
-                            {loc.violations_count}
-                          </td>
-                          <td className="py-1.5 text-right">
-                            <Link
-                              to={buildHistoryUrl({
-                                periodFrom: report.period.from,
-                                periodTo: report.period.to,
-                                locationId: loc.id ?? null,
-                              })}
-                              className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                            >
-                              View jobs →
-                            </Link>
-                          </td>
-                        </tr>
+                          <span>{formatReasonCode(r.code)}</span>
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
+                            × {r.count}
+                          </span>
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Who / Where — Cleaners + Locations */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Cleaners */}
+                  <div className="rounded-xl border border-border bg-card p-4">
+                    <div className="text-sm font-medium mb-1">
+                      Cleaners with issues
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Who generates the most SLA violations in this period.
+                    </p>
+
+                    {report.cleaners.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No jobs in this period.
+                      </p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-muted-foreground">
+                            <th className="text-left py-1.5">Cleaner</th>
+                            <th className="text-right py-1.5">Jobs</th>
+                            <th className="text-right py-1.5">
+                              SLA violations
+                            </th>
+                            <th className="text-right py-1.5 pr-1.5">
+                              Evidence
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.cleaners.map((cl) => (
+                            <tr
+                              key={cl.id ?? cl.name}
+                              className="border-t border-border/40"
+                            >
+                              <td className="py-1.5">{cl.name}</td>
+                              <td className="py-1.5 text-right">
+                                {cl.jobs_count}
+                              </td>
+                              <td className="py-1.5 text-right font-medium">
+                                {cl.violations_count}
+                              </td>
+                              <td className="py-1.5 text-right">
+                                <Link
+                                  to={buildHistoryUrl({
+                                    periodFrom: report.period.from,
+                                    periodTo: report.period.to,
+                                    cleanerId: cl.id ?? null,
+                                  })}
+                                  className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                                >
+                                  View jobs →
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* Locations */}
+                  <div className="rounded-xl border border-border bg-card p-4">
+                    <div className="text-sm font-medium mb-1">
+                      Locations with issues
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Where SLA problems appear most often in this period.
+                    </p>
+
+                    {report.locations.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No jobs in this period.
+                      </p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-muted-foreground">
+                            <th className="text-left py-1.5">Location</th>
+                            <th className="text-right py-1.5">Jobs</th>
+                            <th className="text-right py-1.5">
+                              SLA violations
+                            </th>
+                            <th className="text-right py-1.5 pr-1.5">
+                              Evidence
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.locations.map((loc) => (
+                            <tr
+                              key={loc.id ?? loc.name}
+                              className="border-t border-border/40"
+                            >
+                              <td className="py-1.5">{loc.name}</td>
+                              <td className="py-1.5 text-right">
+                                {loc.jobs_count}
+                              </td>
+                              <td className="py-1.5 text-right font-medium">
+                                {loc.violations_count}
+                              </td>
+                              <td className="py-1.5 text-right">
+                                <Link
+                                  to={buildHistoryUrl({
+                                    periodFrom: report.period.from,
+                                    periodTo: report.period.to,
+                                    locationId: loc.id ?? null,
+                                  })}
+                                  className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                                >
+                                  View jobs →
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

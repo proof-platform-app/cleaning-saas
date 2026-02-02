@@ -1,3 +1,4 @@
+# backend/apps/api/utils.py
 from rest_framework.exceptions import PermissionDenied
 
 def enforce_company_is_active(company):
