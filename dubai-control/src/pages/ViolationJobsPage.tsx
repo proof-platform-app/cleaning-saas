@@ -1,6 +1,6 @@
 // dubai-control/src/pages/ViolationJobsPage.tsx
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getViolationJobs,
@@ -25,6 +25,28 @@ export default function ViolationJobsPage() {
   const periodStart = searchParams.get("period_start") || "";
   const periodEnd = searchParams.get("period_end") || "";
 
+  // optional filters: cleaner / location
+  let cleanerId: number | undefined;
+  const cleanerIdRaw = searchParams.get("cleaner_id");
+  if (cleanerIdRaw) {
+    const parsed = Number(cleanerIdRaw);
+    if (!Number.isNaN(parsed)) {
+      cleanerId = parsed;
+    }
+  }
+
+  let locationId: number | undefined;
+  const locationIdRaw = searchParams.get("location_id");
+  if (locationIdRaw) {
+    const parsed = Number(locationIdRaw);
+    if (!Number.isNaN(parsed)) {
+      locationId = parsed;
+    }
+  }
+
+  const hasAnyFilter =
+    Boolean(reason) || Boolean(cleanerId) || Boolean(locationId);
+
   const [data, setData] = useState<ViolationJobsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +54,7 @@ export default function ViolationJobsPage() {
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
 
   useEffect(() => {
-    if (!reason || !periodStart || !periodEnd) {
+    if (!periodStart || !periodEnd || !hasAnyFilter) {
       setError("Missing required parameters.");
       return;
     }
@@ -44,6 +66,8 @@ export default function ViolationJobsPage() {
       reason,
       periodStart,
       periodEnd,
+      cleanerId,
+      locationId,
     })
       .then((res) => setData(res))
       .catch((err: any) => {
@@ -54,7 +78,7 @@ export default function ViolationJobsPage() {
         setError(message);
       })
       .finally(() => setLoading(false));
-  }, [reason, periodStart, periodEnd]);
+  }, [reason, periodStart, periodEnd, cleanerId, locationId, hasAnyFilter]);
 
   const handleBack = () => {
     navigate("/reports");
@@ -115,14 +139,15 @@ export default function ViolationJobsPage() {
     navigate(`/jobs/${jobId}`);
   };
 
-  if (!reason || !periodStart || !periodEnd) {
+  if (!periodStart || !periodEnd || !hasAnyFilter) {
     return (
       <div className="p-6">
         <Button variant="outline" onClick={handleBack}>
           ← Back to reports
         </Button>
         <p className="mt-4 text-red-600">
-          Invalid URL. Required params: reason, period_start, period_end.
+          Invalid URL. Required params: period_start, period_end, and at least
+          one filter.
         </p>
       </div>
     );
@@ -150,29 +175,48 @@ export default function ViolationJobsPage() {
     );
   }
 
-  if (!data) {
-    return null;
+  // аккуратные дефолты вместо условного return с !data
+  const reasonLabel = data?.reason_label ?? "";
+  const period = data?.period ?? {
+    start: periodStart,
+    end: periodEnd,
+  };
+  const jobs: ViolationJob[] = data?.jobs ?? [];
+
+  const jobsCountLabel =
+    jobs.length === 0
+      ? "No jobs"
+      : jobs.length === 1
+      ? "1 job"
+      : `${jobs.length} jobs`;
+
+  // подсказка "Filtered by: ..."
+  const filterChips: string[] = [];
+  if (cleanerId !== undefined && jobs[0]?.cleaner_name) {
+    filterChips.push(jobs[0].cleaner_name);
+  }
+  if (locationId !== undefined && jobs[0]?.location_name) {
+    filterChips.push(jobs[0].location_name);
+  }
+  if (reasonLabel) {
+    filterChips.push(reasonLabel);
   }
 
-  const { reason_label, period, jobs } = data;
-
-  const jobsCountLabel = useMemo(() => {
-    const count = jobs.length;
-    if (count === 0) return "No jobs";
-    if (count === 1) return "1 job";
-    return `${count} jobs`;
-  }, [jobs.length]);
+  const filteredByText =
+    filterChips.length > 0 ? `Filtered by: ${filterChips.join(" / ")}` : "";
 
   const evidenceContext: EvidenceContext = {
     source: "report",
     reasonCode: reason,
-    reasonLabel: reason_label,
+    reasonLabel,
     periodLabel: `${period.start} — ${period.end}`,
   };
 
+  const titleSuffix = reasonLabel ? `: ${reasonLabel}` : "";
+
   return (
     <div className="relative min-h-screen bg-background">
-      <div className="p-6 space-y-4 max-w-5xl mx-auto">
+      <div className="px-8 py-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
@@ -181,15 +225,17 @@ export default function ViolationJobsPage() {
               <span>SLA exceptions</span>
             </div>
             <h1 className="text-xl font-semibold">
-              Jobs with violation: {reason_label}
+              Jobs with violation{titleSuffix}
             </h1>
             <p className="text-sm text-muted-foreground">
-              These jobs did not fully meet your current proof policy
-              for this period.
+              These jobs violated your proof policy for the selected period.
             </p>
             <p className="text-sm text-muted-foreground">
               Period: {period.start} — {period.end} • {jobsCountLabel}
             </p>
+            {filteredByText && (
+              <p className="text-xs text-muted-foreground">{filteredByText}</p>
+            )}
           </div>
           <Button variant="outline" onClick={handleBack}>
             ← Back to reports
@@ -203,8 +249,8 @@ export default function ViolationJobsPage() {
               No jobs with this SLA exception in the selected period
             </h2>
             <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-              Try a different time range in the Reports view
-              or select another SLA reason.
+              Try a different time range in the Reports view or adjust your
+              filters.
             </p>
           </div>
         ) : (
@@ -221,25 +267,44 @@ export default function ViolationJobsPage() {
               </thead>
               <tbody>
                 {jobs.map((job) => (
-                  <tr key={job.id} className="border-t">
+                  <tr
+                    key={job.id}
+                    className="border-t hover:bg-muted/40 cursor-pointer"
+                    onClick={() => handleViewJobInPanel(job)}
+                  >
                     <td className="px-3 py-2">{job.scheduled_date}</td>
                     <td className="px-3 py-2">{job.location_name}</td>
                     <td className="px-3 py-2">{job.cleaner_name}</td>
-                    <td className="px-3 py-2 capitalize">
-                      {job.status.replace("_", " ")}
+                    <td className="px-3 py-2">
+                      <span
+                        className={[
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                          job.status === "completed"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200",
+                        ].join(" ")}
+                      >
+                        {job.status.replace("_", " ")}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right space-x-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleViewJobInPanel(job)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewJobInPanel(job);
+                        }}
                       >
                         Quick view
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
-                        onClick={() => handleOpenFullJobPage(job.id)}
+                        variant="link"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenFullJobPage(job.id);
+                        }}
                       >
                         Open job
                       </Button>

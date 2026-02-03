@@ -27,36 +27,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type ReportMode = "weekly" | "monthly";
 
-type HistoryJumpOptions = {
-  periodFrom: string;
-  periodTo: string;
-  cleanerId?: number | null;
-  locationId?: number | null;
-};
-
-function buildHistoryUrl({
-  periodFrom,
-  periodTo,
-  cleanerId,
-  locationId,
-}: HistoryJumpOptions): string {
-  const params = new URLSearchParams();
-
-  params.set("date_from", periodFrom);
-  params.set("date_to", periodTo);
-  params.set("sla_status", "violated");
-
-  if (cleanerId) {
-    params.set("cleaner_id", String(cleanerId));
-  }
-
-  if (locationId) {
-    params.set("location_id", String(locationId));
-  }
-
-  return `/history?${params.toString()}`;
-}
-
 function formatReasonCode(code: string): string {
   if (!code) return "";
   const pretty = code.replace(/_/g, " ");
@@ -595,8 +565,11 @@ export default function ReportsPage() {
                       {ownerIssueStatus.label}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-amber-900/80">
-                    Share of jobs with incomplete proof in the last 30 days.
+                  <p className="mt-2 text-xs font-medium uppercase tracking-wide text-amber-700/80">
+                    Share of jobs with incomplete proof in the last 30 days
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Higher values mean more SLA risk for owners.
                   </p>
                 </div>
 
@@ -779,8 +752,10 @@ export default function ReportsPage() {
                   <div className="text-sm font-medium mb-1">
                     Top SLA reasons
                   </div>
-                  <p className="text-xs text-muted-foreground mb-4">
+                  <p className="text-xs text-muted-foreground">
                     What causes SLA violations most frequently in this period.
+                  </p>
+                  <p className="mt-1 mb-4 text-xs text-amber-600">
                     Click a reason to view affected jobs.
                   </p>
 
@@ -823,10 +798,12 @@ export default function ReportsPage() {
                                   }`,
                                 );
                               }}
-                              className="w-full rounded-md px-3 py-2 text-left hover:bg-muted transition-colors"
+                              className="w-full rounded-md border border-amber-100 bg-amber-50/40 px-3 py-2 text-left text-sm transition-colors hover:border-amber-300 hover:bg-amber-50 cursor-pointer"
                             >
                               <div className="flex items-center justify-between gap-2">
-                                <span>{formatReasonCode(r.code)}</span>
+                                <span className="font-medium text-foreground">
+                                  {formatReasonCode(r.code)}
+                                </span>
                                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
                                   × {r.count}
                                   {share > 0 && (
@@ -859,8 +836,10 @@ export default function ReportsPage() {
                     <div className="text-sm font-medium mb-1">
                       Cleaners with issues
                     </div>
-                    <p className="text-xs text-muted-foreground mb-4">
+                    <p className="text-sm text-muted-foreground mb-4">
                       Who generates the most SLA violations in this period.
+                      Click &quot;View jobs&quot; to investigate specific
+                      cleaners.
                     </p>
 
                     {cleanersWithIssues.length === 0 ? (
@@ -885,26 +864,34 @@ export default function ReportsPage() {
                           {cleanersWithIssues.map((cl) => (
                             <tr
                               key={cl.id ?? cl.name}
-                              className="border-t border-border/40"
+                              className="border-t border-border/60 transition-colors hover:bg-amber-50/40"
                             >
-                              <td className="py-1.5">{cl.name}</td>
-                              <td className="py-1.5 text-right">
+                              <td className="py-1.5 pr-2 text-sm font-medium text-foreground">
+                                {cl.name}
+                              </td>
+                              <td className="py-1.5 px-2 text-sm text-muted-foreground text-right">
                                 {cl.jobs_count}
                               </td>
-                              <td className="py-1.5 text-right font-medium">
-                                {cl.violations_count}
+                              <td className="py-1.5 px-2 text-right">
+                                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                                  {cl.violations_count} issues
+                                </span>
                               </td>
                               <td className="py-1.5 text-right">
-                                <Link
-                                  to={buildHistoryUrl({
-                                    periodFrom: report.period.from,
-                                    periodTo: report.period.to,
-                                    cleanerId: cl.id ?? null,
-                                  })}
-                                  className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-primary hover:underline"
+                                  onClick={() => {
+                                    if (!report) return;
+                                    navigate(
+                                      `/reports/violations?period_start=${report.period.from}` +
+                                        `&period_end=${report.period.to}` +
+                                        `&cleaner_id=${cl.id}`,
+                                    );
+                                  }}
                                 >
                                   View jobs →
-                                </Link>
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -918,8 +905,9 @@ export default function ReportsPage() {
                     <div className="text-sm font-medium mb-1">
                       Locations with issues
                     </div>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Where SLA problems appear most often in this period.
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Where SLA problems appear most often. Click &quot;View
+                      jobs&quot; to see affected jobs at this location.
                     </p>
 
                     {locationsWithIssues.length === 0 ? (
@@ -944,26 +932,34 @@ export default function ReportsPage() {
                           {locationsWithIssues.map((loc) => (
                             <tr
                               key={loc.id ?? loc.name}
-                              className="border-t border-border/40"
+                              className="border-t border-border/60 transition-colors hover:bg-amber-50/40"
                             >
-                              <td className="py-1.5">{loc.name}</td>
-                              <td className="py-1.5 text-right">
+                              <td className="py-1.5 pr-2 text-sm font-medium text-foreground">
+                                {loc.name}
+                              </td>
+                              <td className="py-1.5 px-2 text-sm text-muted-foreground text-right">
                                 {loc.jobs_count}
                               </td>
-                              <td className="py-1.5 text-right font-medium">
-                                {loc.violations_count}
+                              <td className="py-1.5 px-2 text-right">
+                                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                                  {loc.violations_count} issues
+                                </span>
                               </td>
                               <td className="py-1.5 text-right">
-                                <Link
-                                  to={buildHistoryUrl({
-                                    periodFrom: report.period.from,
-                                    periodTo: report.period.to,
-                                    locationId: loc.id ?? null,
-                                  })}
-                                  className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-primary hover:underline"
+                                  onClick={() => {
+                                    if (!report) return;
+                                    navigate(
+                                      `/reports/violations?period_start=${report.period.from}` +
+                                        `&period_end=${report.period.to}` +
+                                        `&location_id=${loc.id}`,
+                                    );
+                                  }}
                                 >
                                   View jobs →
-                                </Link>
+                                </button>
                               </td>
                             </tr>
                           ))}

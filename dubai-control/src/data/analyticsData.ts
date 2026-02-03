@@ -7,6 +7,8 @@ export interface KPIData {
   changeLabel?: string;
   icon: string;
   variant: "primary" | "success" | "warning" | "danger" | "neutral";
+  // короткое пояснение под KPI (опционально)
+  helper?: string;
 }
 
 export interface TrendDataPoint {
@@ -17,6 +19,9 @@ export interface TrendDataPoint {
   beforePhotoRate: number;
   afterPhotoRate: number;
   checklistRate: number;
+  // тренд по нарушениям SLA — используется для демо/моков
+  jobsWithViolations: number;
+  violationRate: number; // в процентах (0–100)
 }
 
 export interface CleanerPerformance {
@@ -34,7 +39,7 @@ export interface LocationJobsData {
   jobs: number;
 }
 
-// KPI Cards Data
+// KPI Cards Data (demo-only)
 export const kpiData: KPIData[] = [
   {
     label: "Jobs Completed Today",
@@ -43,6 +48,7 @@ export const kpiData: KPIData[] = [
     changeLabel: "vs yesterday",
     icon: "CheckCircle2",
     variant: "primary",
+    helper: "Total jobs completed today",
   },
   {
     label: "On-time Completion",
@@ -51,6 +57,7 @@ export const kpiData: KPIData[] = [
     changeLabel: "vs last week",
     icon: "Clock",
     variant: "success",
+    helper: "Share of jobs completed within SLA time",
   },
   {
     label: "Proof Completion",
@@ -59,6 +66,7 @@ export const kpiData: KPIData[] = [
     changeLabel: "vs last week",
     icon: "Camera",
     variant: "success",
+    helper: "Jobs with both photos and checklist submitted",
   },
   {
     label: "Avg Job Duration",
@@ -67,6 +75,7 @@ export const kpiData: KPIData[] = [
     changeLabel: "vs last week",
     icon: "Timer",
     variant: "neutral",
+    helper: "Average cleaning time per job",
   },
   {
     label: "Issues Detected",
@@ -75,28 +84,169 @@ export const kpiData: KPIData[] = [
     changeLabel: "vs yesterday",
     icon: "AlertTriangle",
     variant: "warning",
+    helper: "Jobs with SLA violations detected",
   },
 ];
 
-// Last 14 days trend data
+// Last 14 days trend data (demo-only, не используется как fallback в проде)
 export const trendData: TrendDataPoint[] = [
-  { date: "2024-01-06", label: "Jan 6", jobsCompleted: 18, avgDuration: 2.6, beforePhotoRate: 95, afterPhotoRate: 92, checklistRate: 88 },
-  { date: "2024-01-07", label: "Jan 7", jobsCompleted: 22, avgDuration: 2.4, beforePhotoRate: 96, afterPhotoRate: 94, checklistRate: 91 },
-  { date: "2024-01-08", label: "Jan 8", jobsCompleted: 20, avgDuration: 2.5, beforePhotoRate: 94, afterPhotoRate: 93, checklistRate: 90 },
-  { date: "2024-01-09", label: "Jan 9", jobsCompleted: 25, avgDuration: 2.3, beforePhotoRate: 97, afterPhotoRate: 95, checklistRate: 93 },
-  { date: "2024-01-10", label: "Jan 10", jobsCompleted: 23, avgDuration: 2.4, beforePhotoRate: 98, afterPhotoRate: 96, checklistRate: 94 },
-  { date: "2024-01-11", label: "Jan 11", jobsCompleted: 19, avgDuration: 2.7, beforePhotoRate: 93, afterPhotoRate: 91, checklistRate: 89 },
-  { date: "2024-01-12", label: "Jan 12", jobsCompleted: 15, avgDuration: 2.8, beforePhotoRate: 92, afterPhotoRate: 90, checklistRate: 87 },
-  { date: "2024-01-13", label: "Jan 13", jobsCompleted: 21, avgDuration: 2.5, beforePhotoRate: 96, afterPhotoRate: 94, checklistRate: 92 },
-  { date: "2024-01-14", label: "Jan 14", jobsCompleted: 24, avgDuration: 2.3, beforePhotoRate: 97, afterPhotoRate: 96, checklistRate: 95 },
-  { date: "2024-01-15", label: "Jan 15", jobsCompleted: 26, avgDuration: 2.2, beforePhotoRate: 98, afterPhotoRate: 97, checklistRate: 96 },
-  { date: "2024-01-16", label: "Jan 16", jobsCompleted: 22, avgDuration: 2.4, beforePhotoRate: 95, afterPhotoRate: 94, checklistRate: 93 },
-  { date: "2024-01-17", label: "Jan 17", jobsCompleted: 28, avgDuration: 2.1, beforePhotoRate: 99, afterPhotoRate: 98, checklistRate: 97 },
-  { date: "2024-01-18", label: "Jan 18", jobsCompleted: 25, avgDuration: 2.3, beforePhotoRate: 97, afterPhotoRate: 96, checklistRate: 95 },
-  { date: "2024-01-19", label: "Jan 19", jobsCompleted: 24, avgDuration: 2.4, beforePhotoRate: 98, afterPhotoRate: 97, checklistRate: 96 },
+  {
+    date: "2024-01-06",
+    label: "Jan 6",
+    jobsCompleted: 18,
+    avgDuration: 2.6,
+    beforePhotoRate: 95,
+    afterPhotoRate: 92,
+    checklistRate: 88,
+    jobsWithViolations: 2,
+    violationRate: 11,
+  },
+  {
+    date: "2024-01-07",
+    label: "Jan 7",
+    jobsCompleted: 22,
+    avgDuration: 2.4,
+    beforePhotoRate: 96,
+    afterPhotoRate: 94,
+    checklistRate: 91,
+    jobsWithViolations: 1,
+    violationRate: 5,
+  },
+  {
+    date: "2024-01-08",
+    label: "Jan 8",
+    jobsCompleted: 20,
+    avgDuration: 2.5,
+    beforePhotoRate: 94,
+    afterPhotoRate: 93,
+    checklistRate: 90,
+    jobsWithViolations: 1,
+    violationRate: 5,
+  },
+  {
+    date: "2024-01-09",
+    label: "Jan 9",
+    jobsCompleted: 25,
+    avgDuration: 2.3,
+    beforePhotoRate: 97,
+    afterPhotoRate: 95,
+    checklistRate: 93,
+    jobsWithViolations: 3,
+    violationRate: 12,
+  },
+  {
+    date: "2024-01-10",
+    label: "Jan 10",
+    jobsCompleted: 23,
+    avgDuration: 2.4,
+    beforePhotoRate: 98,
+    afterPhotoRate: 96,
+    checklistRate: 94,
+    jobsWithViolations: 2,
+    violationRate: 9,
+  },
+  {
+    date: "2024-01-11",
+    label: "Jan 11",
+    jobsCompleted: 19,
+    avgDuration: 2.7,
+    beforePhotoRate: 93,
+    afterPhotoRate: 91,
+    checklistRate: 89,
+    jobsWithViolations: 3,
+    violationRate: 16,
+  },
+  {
+    date: "2024-01-12",
+    label: "Jan 12",
+    jobsCompleted: 15,
+    avgDuration: 2.8,
+    beforePhotoRate: 92,
+    afterPhotoRate: 90,
+    checklistRate: 87,
+    jobsWithViolations: 4,
+    violationRate: 20,
+  },
+  {
+    date: "2024-01-13",
+    label: "Jan 13",
+    jobsCompleted: 21,
+    avgDuration: 2.5,
+    beforePhotoRate: 96,
+    afterPhotoRate: 94,
+    checklistRate: 92,
+    jobsWithViolations: 2,
+    violationRate: 10,
+  },
+  {
+    date: "2024-01-14",
+    label: "Jan 14",
+    jobsCompleted: 24,
+    avgDuration: 2.3,
+    beforePhotoRate: 97,
+    afterPhotoRate: 96,
+    checklistRate: 95,
+    jobsWithViolations: 1,
+    violationRate: 4,
+  },
+  {
+    date: "2024-01-15",
+    label: "Jan 15",
+    jobsCompleted: 26,
+    avgDuration: 2.2,
+    beforePhotoRate: 98,
+    afterPhotoRate: 97,
+    checklistRate: 96,
+    jobsWithViolations: 1,
+    violationRate: 4,
+  },
+  {
+    date: "2024-01-16",
+    label: "Jan 16",
+    jobsCompleted: 22,
+    avgDuration: 2.4,
+    beforePhotoRate: 95,
+    afterPhotoRate: 94,
+    checklistRate: 93,
+    jobsWithViolations: 2,
+    violationRate: 8,
+  },
+  {
+    date: "2024-01-17",
+    label: "Jan 17",
+    jobsCompleted: 28,
+    avgDuration: 2.1,
+    beforePhotoRate: 99,
+    afterPhotoRate: 98,
+    checklistRate: 97,
+    jobsWithViolations: 1,
+    violationRate: 3,
+  },
+  {
+    date: "2024-01-18",
+    label: "Jan 18",
+    jobsCompleted: 25,
+    avgDuration: 2.3,
+    beforePhotoRate: 97,
+    afterPhotoRate: 96,
+    checklistRate: 95,
+    jobsWithViolations: 2,
+    violationRate: 7,
+  },
+  {
+    date: "2024-01-19",
+    label: "Jan 19",
+    jobsCompleted: 24,
+    avgDuration: 2.4,
+    beforePhotoRate: 98,
+    afterPhotoRate: 97,
+    checklistRate: 96,
+    jobsWithViolations: 2,
+    violationRate: 7,
+  },
 ];
 
-// Cleaner performance data
+// Cleaner performance data (demo-only)
 export const cleanerPerformance: CleanerPerformance[] = [
   {
     id: 1,
@@ -154,7 +304,7 @@ export const cleanerPerformance: CleanerPerformance[] = [
   },
 ];
 
-// Weekly job distribution by location
+// Weekly job distribution by location (demo-only)
 export const locationJobsData: LocationJobsData[] = [
   { location: "Dubai Marina", jobs: 85 },
   { location: "Business Bay", jobs: 72 },

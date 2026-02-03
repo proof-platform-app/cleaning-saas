@@ -3,7 +3,7 @@ import { apiClient } from "@/api/client";
 
 export type AnalyticsDateRange = {
   from: string; // YYYY-MM-DD
-  to: string;   // YYYY-MM-DD
+  to: string;   // YYYY-MM-DD 
 };
 
 // вспомогательный хелпер: формируем ?date_from=...&date_to=...
@@ -40,10 +40,24 @@ export type AnalyticsJobsCompletedPoint = {
   jobs_completed: number;
 };
 
+export type AnalyticsViolationsTrendPoint = {
+  date: string;               // YYYY-MM-DD
+  jobs_completed: number;
+  jobs_with_violations: number;
+  violation_rate: number;     // 0–1
+};
+
 export function getAnalyticsJobsCompleted(range: AnalyticsDateRange) {
   const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsJobsCompletedPoint[]>(
     `/api/manager/analytics/jobs-completed/${qs}`,
+  );
+}
+
+export function getAnalyticsViolationsTrend(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
+  return apiClient.get<AnalyticsViolationsTrendPoint[]>(
+    `/api/manager/analytics/violations-trend/${qs}`,
   );
 }
 

@@ -1110,18 +1110,31 @@ export async function getManagerPlanningJobs(
 // ---------- Reports API ----------
 
 export async function getViolationJobs(params: {
-  reason: string;
   periodStart: string;
   periodEnd: string;
+  reason?: string;
+  cleanerId?: number;    // опционально
+  locationId?: number;   // опционально
   page?: number;
 }): Promise<ViolationJobsResponse> {
-  const searchParams = new URLSearchParams({
-    reason: params.reason,
-    period_start: params.periodStart,
-    period_end: params.periodEnd,
-  });
+  const searchParams = new URLSearchParams();
 
-  if (params.page) {
+  // обязательные параметры периода
+  searchParams.set("period_start", params.periodStart);
+  searchParams.set("period_end", params.periodEnd);
+
+  // хотя бы один фильтр (reason / cleaner / location) мы будем передавать снаружи
+  if (params.reason) {
+    searchParams.set("reason", params.reason);
+  }
+  if (typeof params.cleanerId === "number") {
+    searchParams.set("cleaner_id", String(params.cleanerId));
+  }
+  if (typeof params.locationId === "number") {
+    searchParams.set("location_id", String(params.locationId));
+  }
+
+  if (typeof params.page === "number") {
     searchParams.set("page", String(params.page));
   }
 

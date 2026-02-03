@@ -1,7 +1,7 @@
 // dubai-control/src/pages/Analytics.tsx
 
 import { useEffect, useState } from "react";
-// 🔹 NEW: добавили ShieldAlert и AlertTriangle
+import { useNavigate } from "react-router-dom";
 import { CalendarDays, ShieldAlert, AlertTriangle } from "lucide-react";
 
 import { AnalyticsKPICard } from "@/components/analytics/AnalyticsKPICard";
@@ -17,7 +17,6 @@ import {
   getAnalyticsJobDuration,
   getAnalyticsProofCompletion,
   getAnalyticsCleanersPerformance,
-  // 🔹 NEW: импортируем SLA breakdown
   getAnalyticsSlaBreakdown,
   type AnalyticsDateRange,
   type AnalyticsSlaBreakdownResponse,
@@ -41,13 +40,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
+  import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
 type RangePreset = "last7" | "last14" | "last30";
 
-// 🔹 NEW: helper для красивых названий причин
+// человекочитаемые названия причин
 function formatReasonCode(code: string): string {
   const map: Record<string, string> = {
     late_start: "Late start",
@@ -94,11 +93,7 @@ function dateRangeToApiRange(range: DateRange): AnalyticsDateRange | null {
     ),
   );
   const toUtc = new Date(
-    Date.UTC(
-      range.to.getFullYear(),
-      range.to.getMonth(),
-      range.to.getDate(),
-    ),
+    Date.UTC(range.to.getFullYear(), range.to.getMonth(), range.to.getDate()),
   );
 
   return {
@@ -107,8 +102,32 @@ function dateRangeToApiRange(range: DateRange): AnalyticsDateRange | null {
   };
 }
 
+// сборка URL для /reports/violations с нужными фильтрами
+function buildViolationsUrl(opts: {
+  range: AnalyticsDateRange;
+  reason: string;
+  cleanerId?: number | null;
+  locationId?: number | null;
+}): string {
+  const params = new URLSearchParams();
+  params.set("reason", opts.reason);
+  params.set("period_start", opts.range.from);
+  params.set("period_end", opts.range.to);
+
+  if (opts.cleanerId != null) {
+    params.set("cleaner_id", String(opts.cleanerId));
+  }
+  if (opts.locationId != null) {
+    params.set("location_id", String(opts.locationId));
+  }
+
+  const qs = params.toString();
+  return qs ? `/reports/violations?${qs}` : "/reports/violations";
+}
+
 function Analytics() {
-  // стейт с дефолтами из моков
+  const navigate = useNavigate();
+
   const [rangePreset, setRangePreset] = useState<RangePreset>("last14");
   const [range, setRange] = useState<AnalyticsDateRange>(
     getDateRangeFromPreset("last14"),
@@ -116,11 +135,11 @@ function Analytics() {
   const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>();
 
   const [kpiData, setKpiData] = useState<KPIData[]>(staticKpiData);
-  const [trendData, setTrendData] = useState<TrendDataPoint[]>(staticTrendData);
+  const [trendData, setTrendData] =
+    useState<TrendDataPoint[]>(staticTrendData);
   const [cleanerPerformance, setCleanerPerformance] =
     useState<CleanerPerformance[]>(staticCleanerPerformance);
 
-  // 🔹 NEW: SLA breakdown из бэкенда
   const [slaBreakdown, setSlaBreakdown] =
     useState<AnalyticsSlaBreakdownResponse | null>(null);
 
@@ -133,14 +152,12 @@ function Analytics() {
         setLoading(true);
         setError(null);
 
-        // параллельно дергаем все нужные эндпоинты
         const [
           summaryRes,
           cleanersRes,
           jobsCompletedRes,
           jobDurationRes,
           proofRes,
-          // 🔹 NEW: sla-breakdown
           slaRes,
         ] = await Promise.all([
           getAnalyticsSummary(range),
@@ -161,28 +178,43 @@ function Analytics() {
         // --- KPI из summary ---
         setKpiData([
           {
-            ...staticKpiData[0],
+            label: "Jobs completed",
             value: String(summary?.jobs_completed ?? 0),
+            helper: "Total jobs completed in the selected period",
+            icon: "CheckCircle2",
+            variant: "primary",
           },
           {
-            ...staticKpiData[1],
+            label: "On-time completion",
             value: `${Math.round(
               (summary?.on_time_completion_rate ?? 0) * 100,
             )}%`,
+            helper: "Share of jobs completed within SLA time",
+            icon: "Clock",
+            variant: "success",
           },
           {
-            ...staticKpiData[2],
+            label: "Proof completion",
             value: `${Math.round(
               (summary?.proof_completion_rate ?? 0) * 100,
             )}%`,
+            helper: "Jobs with both photos and checklist submitted",
+            icon: "Camera",
+            variant: "success",
           },
           {
-            ...staticKpiData[3],
+            label: "Avg. job duration",
             value: `${(summary?.avg_job_duration_hours ?? 0).toFixed(1)} hrs`,
+            helper: "Average duration from start to finish",
+            icon: "Timer",
+            variant: "neutral",
           },
           {
-            ...staticKpiData[4],
+            label: "Issues detected",
             value: String(summary?.issues_detected ?? 0),
+            helper: "Jobs with at least one SLA or proof issue",
+            icon: "AlertTriangle",
+            variant: "warning",
           },
         ]);
 
@@ -222,6 +254,8 @@ function Analytics() {
             beforePhotoRate: 0,
             afterPhotoRate: 0,
             checklistRate: 0,
+            jobsWithViolations: 0,
+            violationRate: 0,
           };
 
           byDate[date] = base;
@@ -264,22 +298,19 @@ function Analytics() {
           a.date.localeCompare(b.date),
         );
 
-        // если вдруг по данным пусто — оставляем статику
         setTrendData(
           combinedTrend.length > 0 ? combinedTrend : staticTrendData,
         );
 
-        // 🔹 NEW: сохраняем SLA breakdown
+        // SLA breakdown для блока SLA Performance
         setSlaBreakdown(sla);
       } catch (err) {
         console.error("[Analytics] Failed to load analytics", err);
         setError("Failed to load analytics");
 
-        // на ошибке оставляем моки, чтобы экран не распался
         setKpiData(staticKpiData);
         setCleanerPerformance(staticCleanerPerformance);
         setTrendData(staticTrendData);
-        // 🔹 NEW: очищаем SLA блок
         setSlaBreakdown(null);
       } finally {
         setLoading(false);
@@ -289,22 +320,24 @@ function Analytics() {
     fetchAnalytics();
   }, [range.from, range.to]);
 
-  // 🔹 NEW: UI-хелперы для SLA блока
   const violationRatePercent = slaBreakdown
     ? Math.round((slaBreakdown.violation_rate ?? 0) * 100)
     : 0;
 
-  const violationSeverity:
-    | "good"
-    | "warning"
-    | "bad"
-    | "neutral" = !slaBreakdown
-    ? "neutral"
-    : violationRatePercent <= 5
-    ? "good"
-    : violationRatePercent <= 20
-    ? "warning"
-    : "bad";
+  const violationSeverity: "good" | "warning" | "bad" | "neutral" =
+    !slaBreakdown
+      ? "neutral"
+      : violationRatePercent <= 5
+      ? "good"
+      : violationRatePercent <= 20
+      ? "warning"
+      : "bad";
+
+  // дефолтная причина для кликов по hotspots (берём первую из топа)
+  const defaultReasonCode =
+    slaBreakdown && slaBreakdown.reasons.length > 0
+      ? slaBreakdown.reasons[0].code
+      : null;
 
   return (
     <div className="p-8">
@@ -331,7 +364,6 @@ function Analytics() {
                     const preset = e.target.value as RangePreset;
                     setRangePreset(preset);
                     setRange(getDateRangeFromPreset(preset));
-                    // при выборе пресета сбрасываем кастомный диапазон
                     setCustomDateRange(undefined);
                   }}
                 >
@@ -347,7 +379,7 @@ function Analytics() {
                   <Button
                     variant="outline"
                     className={cn(
-                      "h-9 border border-border bg-white px-3 text-xs font-normal text-muted-foreground shadow-sm hover:bg白/80",
+                      "h-9 border border-border bg-white px-3 text-xs font-normal text-muted-foreground shadow-sm hover:bg-muted/80",
                     )}
                   >
                     <CalendarDays className="mr-2 h-4 w-4" />
@@ -432,7 +464,7 @@ function Analytics() {
           </div>
         </section>
 
-        {/* 🔹 NEW: SLA Performance Section */}
+        {/* SLA Performance Section */}
         {slaBreakdown && (
           <section className="mb-10">
             <div className="mb-6">
@@ -504,7 +536,7 @@ function Analytics() {
                 </div>
               </div>
 
-              {/* Reasons */}
+              {/* Violation Reasons */}
               <div className="rounded-xl border border-border bg-card p-6 shadow-card">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
@@ -531,10 +563,20 @@ function Analytics() {
                         (reason.count / totalViolations) * 100,
                       );
 
+                      const handleClick = () => {
+                        const url = buildViolationsUrl({
+                          range,
+                          reason: reason.code,
+                        });
+                        navigate(url);
+                      };
+
                       return (
-                        <div
+                        <button
                           key={reason.code}
-                          className="flex items-center justify-between gap-3 text-sm"
+                          type="button"
+                          onClick={handleClick}
+                          className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
                         >
                           <div className="flex-1">
                             <p className="font-medium text-foreground">
@@ -560,14 +602,14 @@ function Analytics() {
                               </span>
                             </div>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 )}
               </div>
 
-              {/* Hotspots */}
+              {/* SLA Hotspots */}
               <div className="rounded-xl border border-border bg-card p-6 shadow-card">
                 <div className="mb-4">
                   <h3 className="text-sm font-semibold text-foreground">
@@ -589,24 +631,40 @@ function Analytics() {
                       </p>
                     ) : (
                       <ul className="space-y-2">
-                        {slaBreakdown.top_cleaners.slice(0, 3).map((c) => (
-                          <li key={c.cleaner_id ?? c.cleaner_name}>
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                              <div className="flex-1">
-                                <p className="font-medium text-foreground">
-                                  {c.cleaner_name || "Unknown cleaner"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {c.violations_count} violations •{" "}
-                                  {c.jobs_completed} jobs
-                                </p>
-                              </div>
-                              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                {Math.round(c.violation_rate * 100)}%
-                              </span>
-                            </div>
-                          </li>
-                        ))}
+                        {slaBreakdown.top_cleaners.slice(0, 3).map((c) => {
+                          const handleClick = () => {
+                            if (!defaultReasonCode) return;
+                            const url = buildViolationsUrl({
+                              range,
+                              reason: defaultReasonCode,
+                              cleanerId: c.cleaner_id ?? null,
+                            });
+                            navigate(url);
+                          };
+
+                          return (
+                            <li key={c.cleaner_id ?? c.cleaner_name}>
+                              <button
+                                type="button"
+                                onClick={handleClick}
+                                className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                              >
+                                <div className="flex-1">
+                                  <p className="font-medium text-foreground">
+                                    {c.cleaner_name || "Unknown cleaner"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {c.violations_count} violations •{" "}
+                                    {c.jobs_completed} jobs
+                                  </p>
+                                </div>
+                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  {Math.round(c.violation_rate * 100)}%
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
@@ -621,24 +679,40 @@ function Analytics() {
                       </p>
                     ) : (
                       <ul className="space-y-2">
-                        {slaBreakdown.top_locations.slice(0, 3).map((l) => (
-                          <li key={l.location_id ?? l.location_name}>
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                              <div className="flex-1">
-                                <p className="font-medium text-foreground">
-                                  {l.location_name || "Unknown location"}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {l.violations_count} violations •{" "}
-                                  {l.jobs_completed} jobs
-                                </p>
-                              </div>
-                              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                {Math.round(l.violation_rate * 100)}%
-                              </span>
-                            </div>
-                          </li>
-                        ))}
+                        {slaBreakdown.top_locations.slice(0, 3).map((l) => {
+                          const handleClick = () => {
+                            if (!defaultReasonCode) return;
+                            const url = buildViolationsUrl({
+                              range,
+                              reason: defaultReasonCode,
+                              locationId: l.location_id ?? null,
+                            });
+                            navigate(url);
+                          };
+
+                          return (
+                            <li key={l.location_id ?? l.location_name}>
+                              <button
+                                type="button"
+                                onClick={handleClick}
+                                className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                              >
+                                <div className="flex-1">
+                                  <p className="font-medium text-foreground">
+                                    {l.location_name || "Unknown location"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {l.violations_count} violations •{" "}
+                                    {l.jobs_completed} jobs
+                                  </p>
+                                </div>
+                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  {Math.round(l.violation_rate * 100)}%
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>
