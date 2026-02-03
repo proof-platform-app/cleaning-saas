@@ -6,6 +6,16 @@ export type AnalyticsDateRange = {
   to: string;   // YYYY-MM-DD
 };
 
+// вспомогательный хелпер: формируем ?date_from=...&date_to=...
+function buildRangeQuery(range: AnalyticsDateRange): string {
+  const params = new URLSearchParams();
+  params.set("date_from", range.from);
+  params.set("date_to", range.to);
+
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 // 1) Summary — верхние KPI карточки
 // GET /api/manager/analytics/summary/
 export type AnalyticsSummaryResponse = {
@@ -16,10 +26,10 @@ export type AnalyticsSummaryResponse = {
   issues_detected: number;
 };
 
-export function getAnalyticsSummary(params: AnalyticsDateRange) {
+export function getAnalyticsSummary(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsSummaryResponse>(
-    "/api/manager/analytics/summary/",
-    { params },
+    `/api/manager/analytics/summary/${qs}`,
   );
 }
 
@@ -30,10 +40,10 @@ export type AnalyticsJobsCompletedPoint = {
   jobs_completed: number;
 };
 
-export function getAnalyticsJobsCompleted(params: AnalyticsDateRange) {
+export function getAnalyticsJobsCompleted(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsJobsCompletedPoint[]>(
-    "/api/manager/analytics/jobs-completed/",
-    { params },
+    `/api/manager/analytics/jobs-completed/${qs}`,
   );
 }
 
@@ -44,10 +54,10 @@ export type AnalyticsJobDurationPoint = {
   avg_job_duration_hours: number;
 };
 
-export function getAnalyticsJobDuration(params: AnalyticsDateRange) {
+export function getAnalyticsJobDuration(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsJobDurationPoint[]>(
-    "/api/manager/analytics/job-duration/",
-    { params },
+    `/api/manager/analytics/job-duration/${qs}`,
   );
 }
 
@@ -60,10 +70,10 @@ export type AnalyticsProofCompletionPoint = {
   checklist_rate: number;      // 0–1
 };
 
-export function getAnalyticsProofCompletion(params: AnalyticsDateRange) {
+export function getAnalyticsProofCompletion(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsProofCompletionPoint[]>(
-    "/api/manager/analytics/proof-completion/",
-    { params },
+    `/api/manager/analytics/proof-completion/${qs}`,
   );
 }
 
@@ -73,15 +83,50 @@ export type AnalyticsCleanerPerformanceItem = {
   cleaner_id: number;
   cleaner_name: string;
   jobs_completed: number;
-  avg_duration_hours: number;
-  on_time_rate: number;   // 0–1
-  proof_rate: number;     // 0–1
+  avg_job_duration_hours: number; // совпадает с backend
+  on_time_rate: number;           // 0–1
+  proof_rate: number;             // 0–1
   issues: number;
 };
 
-export function getAnalyticsCleanersPerformance(params: AnalyticsDateRange) {
+export function getAnalyticsCleanersPerformance(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
   return apiClient.get<AnalyticsCleanerPerformanceItem[]>(
-    "/api/manager/analytics/cleaners-performance/",
-    { params },
+    `/api/manager/analytics/cleaners-performance/${qs}`,
   );
 }
+
+// 6) SLA Breakdown — причины нарушений и "hotspots"
+// GET /api/manager/analytics/sla-breakdown/
+
+export type AnalyticsSlaReason = {
+  code: string;
+  count: number;
+};
+
+export type AnalyticsSlaActorStats = {
+  cleaner_id?: number | null;
+  cleaner_name?: string;
+  location_id?: number | null;
+  location_name?: string;
+  jobs_completed: number;
+  violations_count: number;
+  violation_rate: number; // 0–1
+};
+
+export type AnalyticsSlaBreakdownResponse = {
+  jobs_completed: number;
+  violations_count: number;
+  violation_rate: number; // 0–1
+  reasons: AnalyticsSlaReason[];
+  top_cleaners: AnalyticsSlaActorStats[];
+  top_locations: AnalyticsSlaActorStats[];
+};
+
+export function getAnalyticsSlaBreakdown(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
+  return apiClient.get<AnalyticsSlaBreakdownResponse>(
+    `/api/manager/analytics/sla-breakdown/${qs}`,
+  );
+}
+

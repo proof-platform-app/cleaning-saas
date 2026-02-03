@@ -5,20 +5,28 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Plus, FileCheck, ArrowRight } from "lucide-react";
-import { fetchManagerJobsSummary } from "@/api/client";
 
 import { cn } from "@/lib/utils";
 import {
-  fetchManagerJobsToday,
-  ManagerJobSummary,
+  fetchManagerJobsSummary,
+  type ManagerJobSummary,
 } from "@/api/client";
 
 type Filter = "today" | "upcoming" | "completed";
 
-function formatTime(iso?: string | null): string {
-  if (!iso) return "--:--";
-  const d = new Date(iso);
+// форматируем и "чистое" время HH:MM(/SS), и ISO-дату
+function formatTime(value?: string | null): string {
+  if (!value) return "--:--";
+
+  // кейс 1: сервер отдал только время "HH:MM" или "HH:MM:SS"
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
+    return value.slice(0, 5); // "HH:MM"
+  }
+
+  // кейс 2: полноценный ISO-формат
+  const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "--:--";
+
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -35,14 +43,21 @@ export default function Jobs() {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchManagerJobsToday();
-        if (!cancelled) setJobs(data);
+
+        // 🔹 Берём не только сегодняшние джобы, а сводку (summary)
+        const data = await fetchManagerJobsSummary();
+
+        if (!cancelled) {
+          setJobs(Array.isArray(data) ? data : []);
+        }
       } catch (e) {
         console.error("[Jobs] Failed to load jobs", e);
-        if (!cancelled)
+        if (!cancelled) {
           setError(
             e instanceof Error ? e.message : "Failed to load jobs",
           );
+          setJobs([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,18 +69,26 @@ export default function Jobs() {
     };
   }, []);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
   const filteredJobs = jobs.filter((job) => {
-    if (activeFilter === "today") {
-      return job.scheduled_date === todayStr;
-    }
-    if (activeFilter === "upcoming") {
-      return job.scheduled_date > todayStr;
-    }
+    // ✅ Completed не завязан на scheduled_date
     if (activeFilter === "completed") {
       return job.status === "completed";
     }
+
+    // Для Today / Upcoming без даты показывать нечего
+    if (!job.scheduled_date) return false;
+
+    if (activeFilter === "today") {
+      return job.scheduled_date === todayStr;
+    }
+
+    if (activeFilter === "upcoming") {
+      // показываем только будущие даты относительно «сегодня»
+      return job.scheduled_date > todayStr;
+    }
+
     return true;
   });
 
@@ -149,14 +172,17 @@ export default function Jobs() {
                 filteredJobs.map((job) => {
                   // пробуем несколько вариантов имён полей на всякий случай
                   const start =
-                    job.scheduled_start ||
+                    (job as any).scheduled_start ||
                     (job as any).scheduled_time_start ||
                     (job as any).scheduled_start_time ||
+                    (job as any).start_time ||
                     null;
+
                   const end =
-                    job.scheduled_end ||
+                    (job as any).scheduled_end ||
                     (job as any).scheduled_time_end ||
                     (job as any).scheduled_end_time ||
+                    (job as any).end_time ||
                     null;
 
                   return (
@@ -176,7 +202,7 @@ export default function Jobs() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-foreground">
-                          {job.cleaner_name || job.cleaner || "—"}
+                          {job.cleaner_name || (job as any).cleaner || "—"}
                         </p>
                       </td>
                       <td className="px-6 py-4">

@@ -53,6 +53,7 @@ export function DurationTrendChart({ data }: DurationTrendChartProps) {
               tick={{ fill: "hsl(215, 16%, 47%)", fontSize: 12 }}
               dx={-10}
               unit="h"
+              tickFormatter={(value: number) => value.toFixed(2)}
             />
 
             <Tooltip
@@ -72,7 +73,10 @@ export function DurationTrendChart({ data }: DurationTrendChartProps) {
                 color: "hsl(215, 16%, 47%)",
                 fontSize: "13px",
               }}
-              formatter={(value: number) => [`${value} hrs`, "Avg duration"]}
+              formatter={(value: number) => [
+                `${value.toFixed(2)} hrs`,
+                "Avg duration",
+              ]}
             />
 
             <Line

@@ -22,7 +22,11 @@ import {
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +62,7 @@ export default function ReportEmailLogsPage() {
   const pagination = (data as any)?.pagination;
   const logs: EmailLog[] = data?.results ?? [];
 
-  // ⚙️ Клиентская фильтрация по диапазону дат (на основе created_at / sent_at)
+  // ⚙️ Клиентская фильтрация по диапазону дат (на основе sent_at)
   const visibleLogs: EmailLog[] = logs.filter((log) => {
     if (!filters.date_from && !filters.date_to) {
       return true;
@@ -68,7 +72,6 @@ export default function ReportEmailLogsPage() {
       return false;
     }
 
-    // sent_at приходит из бэкенда как ISO-строка: "YYYY-MM-DDTHH:MM:SS..."
     const datePart = log.sent_at.split("T")[0]; // "YYYY-MM-DD"
 
     if (filters.date_from && datePart < filters.date_from) {
@@ -151,28 +154,40 @@ export default function ReportEmailLogsPage() {
     }));
   };
 
-  const renderStatusBadge = (status: string) => {
+  const renderStatusBadge = (status: string, errorMessage?: string | null) => {
     const base =
-      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] border";
-    if (status === "sent") {
+      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium";
+    const normalized = status || "unknown";
+
+    if (normalized === "sent") {
       return (
         <span
-          className={`${base} border-emerald-200 bg-emerald-50 text-emerald-800`}
+          className={`${base} bg-emerald-50 text-emerald-700`}
+          title="Email sent"
         >
           Sent
         </span>
       );
     }
-    if (status === "failed") {
+
+    if (normalized === "failed") {
+      const title =
+        errorMessage && errorMessage.trim().length > 0
+          ? `Failed: ${errorMessage}`
+          : "Email failed to send";
       return (
-        <span className={`${base} border-red-200 bg-red-50 text-red-800`}>
+        <span className={`${base} bg-red-50 text-red-700`} title={title}>
           Failed
         </span>
       );
     }
+
     return (
-      <span className={`${base} border-border bg-muted text-muted-foreground`}>
-        {status || "unknown"}
+      <span
+        className={`${base} bg-muted text-muted-foreground`}
+        title={normalized}
+      >
+        {normalized}
       </span>
     );
   };
@@ -237,7 +252,7 @@ export default function ReportEmailLogsPage() {
         </div>
       </div>
 
-      <div className="px-6 py-6 space-y-6">
+      <div className="px-2 md:px-6 lg:px-10 py-6 space-y-6">
         {/* Фильтры */}
         <div className="rounded-2xl border border-border bg-card px-4 py-4">
           <div className="flex flex-wrap gap-4 items-end">
@@ -375,24 +390,24 @@ export default function ReportEmailLogsPage() {
           <p className="text-sm text-muted-foreground">
             {hasActiveFilters
               ? "No report emails match selected filters."
-              : "No report emails have been sent yet."}
+              : "No report emails have been sent yet. Emails will appear here after you send job, weekly, or monthly reports."}
           </p>
         )}
 
         {/* Таблица */}
         {!isLoading && !isError && visibleLogs.length > 0 && (
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-            <table className="w-full text-xs">
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="py-2 px-3 text-left">Date / time</th>
-                  <th className="py-2 px-3 text-left">Kind</th>
+                  <th className="py-2 px-3 text-left">Report type</th>
                   <th className="py-2 px-3 text-left">Job / Period</th>
+                  <th className="py-2 px-3 text-left">Recipient email</th>
+                  <th className="py-2 px-3 text-left">Status</th>
                   <th className="py-2 px-3 text-left">Company</th>
                   <th className="py-2 px-3 text-left">Location</th>
                   <th className="py-2 px-3 text-left">Cleaner</th>
-                  <th className="py-2 px-3 text-left">Target email</th>
-                  <th className="py-2 px-3 text-left">Status</th>
                   <th className="py-2 px-3 text-left">Sent by</th>
                 </tr>
               </thead>
@@ -400,18 +415,35 @@ export default function ReportEmailLogsPage() {
                 {visibleLogs.map((log) => {
                   const dt = log.sent_at ? new Date(log.sent_at) : null;
                   const dateStr = dt ? dt.toLocaleString() : "-";
-
                   const isJob = log.kind === "job_report";
+                  const jobPeriod = (log as any).job_period as
+                    | string
+                    | undefined;
+                  const companyName = (log as any).company_name as
+                    | string
+                    | null;
+                  const locationName = (log as any).location_name as
+                    | string
+                    | null;
+                  const cleanerName = (log as any).cleaner_name as
+                    | string
+                    | null;
+                  const errorMessage = (log as any).error_message as
+                    | string
+                    | null;
 
                   return (
                     <tr
                       key={log.id}
                       className="border-t border-border/60 hover:bg-muted/50"
                     >
-                      <td className="py-2 px-3 whitespace-nowrap">
+                      {/* Date / time */}
+                      <td className="py-2 px-3 whitespace-nowrap text-muted-foreground text-[13px]">
                         {dateStr}
                       </td>
-                      <td className="py-2 px-3">
+
+                      {/* Report type */}
+                      <td className="py-2 px-3 text-muted-foreground text-[13px]">
                         {log.kind === "job_report"
                           ? "Job"
                           : log.kind === "weekly_report"
@@ -420,39 +452,63 @@ export default function ReportEmailLogsPage() {
                           ? "Monthly"
                           : log.kind || "-"}
                       </td>
+
+                      {/* Job / Period */}
                       <td className="py-2 px-3">
                         {isJob && log.job_id ? (
                           <Link
                             to={`/jobs/${log.job_id}`}
-                            className="text-xs text-primary underline-offset-2 hover:underline"
+                            className="text-primary underline-offset-2 hover:underline"
                           >
                             Job #{log.job_id}
                           </Link>
-                        ) : (log as any).job_period ? (
-                          <span>{(log as any).job_period}</span>
+                        ) : jobPeriod ? (
+                          <span className="text-foreground">{jobPeriod}</span>
                         ) : (
-                          "-"
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="py-2 px-3">
-                        {(log as any).company_name ?? "-"}
+
+                      {/* Recipient email */}
+                      <td className="py-2 px-3 whitespace-nowrap font-mono text-[13px]">
+                        <span className="text-foreground">
+                          {log.target_email ?? "-"}
+                        </span>
                       </td>
-                      <td className="py-2 px-3">
-                        {(log as any).location_name ?? "-"}
+
+                      {/* Status */}
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        {renderStatusBadge(log.status, errorMessage)}
                       </td>
+
+                      {/* Company (secondary) */}
                       <td className="py-2 px-3">
-                        {(log as any).cleaner_name ?? "-"}
+                        <span className="text-muted-foreground">
+                          {companyName ?? "-"}
+                        </span>
                       </td>
+
+                      {/* Location (secondary) */}
                       <td className="py-2 px-3">
-                        {log.target_email ?? "-"}
+                        <span className="text-muted-foreground">
+                          {locationName ?? "-"}
+                        </span>
                       </td>
+
+                      {/* Cleaner (secondary) */}
                       <td className="py-2 px-3">
-                        {renderStatusBadge(log.status)}
+                        <span className="text-muted-foreground">
+                          {cleanerName ?? "-"}
+                        </span>
                       </td>
+
+                      {/* Sent by (secondary) */}
                       <td className="py-2 px-3">
-                        {typeof log.sent_by === "string"
-                          ? log.sent_by
-                          : (log.sent_by as any)?.full_name ?? "-"}
+                        <span className="text-muted-foreground">
+                          {typeof log.sent_by === "string"
+                            ? log.sent_by
+                            : (log.sent_by as any)?.full_name ?? "-"}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -467,7 +523,7 @@ export default function ReportEmailLogsPage() {
           !isError &&
           pagination &&
           pagination.total_pages > 1 && (
-            <div className="flex items-center justify_between text-xs text-muted-foreground">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <div>
                 Page {pagination.page} of {pagination.total_pages}
               </div>

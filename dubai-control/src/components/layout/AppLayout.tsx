@@ -30,8 +30,11 @@ export function AppLayout() {
       >
         <div
           className={cn(
-            "min-h-screen px-6 py-8 mx-auto",
-            collapsed ? "max-w-[1440px]" : "max-w-6xl",
+            // убрали mx-auto, чтобы не центрировать, и поставили mr-auto,
+            // чтобы контент «прилипал» к левому краю рядом с меню
+            "min-h-screen px-6 py-8 mr-auto",
+            // при раскрытом сайдбаре даём чуть больше ширины
+            collapsed ? "max-w-[1440px]" : "max-w-7xl",
           )}
         >
           <Outlet />

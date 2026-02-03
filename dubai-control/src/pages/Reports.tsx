@@ -109,6 +109,32 @@ function buildNarrativeSummary(report: ManagerReport): string {
   return sentences.join(" ");
 }
 
+function getIssueRateStatus(rateFraction: number) {
+  const pct = rateFraction * 100;
+
+  if (pct < 5) {
+    return {
+      label: "Healthy",
+      className:
+        "inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 text-[11px]",
+    };
+  }
+
+  if (pct < 20) {
+    return {
+      label: "Needs attention",
+      className:
+        "inline-flex items-center rounded-full bg-amber-50 text-amber-800 border border-amber-100 px-2 py-0.5 text-[11px]",
+    };
+  }
+
+  return {
+    label: "At risk",
+    className:
+      "inline-flex items-center rounded-full bg-red-50 text-red-700 border border-red-100 px-2 py-0.5 text-[11px]",
+  };
+}
+
 export default function ReportsPage() {
   const location = useLocation();
   const isEmailHistory = location.pathname.startsWith("/reports/email-logs");
@@ -189,6 +215,21 @@ export default function ReportsPage() {
   const title = mode === "weekly" ? "Weekly summary" : "Monthly summary";
   const narrative =
     !loading && !error && report ? buildNarrativeSummary(report) : "";
+
+  // сумма всех нарушений из top_reasons — для прогресс-баров
+  const reasonsTotal =
+    report?.top_reasons?.reduce((sum, r) => sum + r.count, 0) ?? 0;
+
+  // Owner KPI helpers
+  const ownerIssueRate = ownerOverview?.summary.issue_rate ?? 0;
+  const ownerIssueStatus = getIssueRateStatus(ownerIssueRate);
+
+  // Только проблемные сущности для менеджера
+  const cleanersWithIssues =
+    report?.cleaners?.filter((cl) => cl.violations_count > 0) ?? [];
+
+  const locationsWithIssues =
+    report?.locations?.filter((loc) => loc.violations_count > 0) ?? [];
 
   const handleDownloadReportPdf = async () => {
     if (!report) return;
@@ -478,7 +519,7 @@ export default function ReportsPage() {
       </Dialog>
 
       {/* Content */}
-      <div className="px-6 py-6 space-y-6">
+      <div className="px-2 md:px-6 lg:px-10 py-6 space-y-6">
         {/* 🔀 Переключатель Owner / Manager view */}
         <div className="mb-4 flex items-center gap-2">
           <button
@@ -520,7 +561,7 @@ export default function ReportsPage() {
               </h2>
               {ownerOverview && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Last 30 days · {ownerOverview.period.from} –{" "}
+                  Last 30 days (rolling window) · {ownerOverview.period.from} –{" "}
                   {ownerOverview.period.to}
                 </p>
               )}
@@ -546,9 +587,14 @@ export default function ReportsPage() {
                   <p className="text-xs font-medium text-amber-900">
                     Issue rate
                   </p>
-                  <p className="mt-1 text-2xl font-semibold text-amber-900">
-                    {(ownerOverview.summary.issue_rate * 100).toFixed(1)}%
-                  </p>
+                  <div className="mt-1 flex items-baseline gap-2">
+                    <p className="text-2xl font-semibold text-amber-900">
+                      {(ownerIssueRate * 100).toFixed(1)}%
+                    </p>
+                    <span className={ownerIssueStatus.className}>
+                      {ownerIssueStatus.label}
+                    </span>
+                  </div>
                   <p className="mt-1 text-[11px] text-amber-900/80">
                     Share of jobs with incomplete proof in the last 30 days.
                   </p>
@@ -574,6 +620,11 @@ export default function ReportsPage() {
                   </p>
                 </div>
               </div>
+
+              <p className="mb-4 text-[11px] text-muted-foreground">
+                This is a high-level overview. Detailed SLA breakdown is
+                available for managers.
+              </p>
 
               {/* Top locations & cleaners */}
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -730,6 +781,7 @@ export default function ReportsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mb-4">
                     What causes SLA violations most frequently in this period.
+                    Click a reason to view affected jobs.
                   </p>
 
                   {report.top_reasons.length === 0 ? (
@@ -738,27 +790,64 @@ export default function ReportsPage() {
                     </p>
                   ) : (
                     <div className="space-y-1 text-sm">
-                      {report.top_reasons.map((r) => (
-                        <button
-                          key={r.code}
-                          type="button"
-                          onClick={() => {
-                            navigate(
-                              `/reports/violations?reason=${encodeURIComponent(
-                                r.code,
-                              )}&period_start=${report.period.from}&period_end=${
-                                report.period.to
-                              }`,
-                            );
-                          }}
-                          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-muted"
-                        >
-                          <span>{formatReasonCode(r.code)}</span>
-                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
-                            × {r.count}
-                          </span>
-                        </button>
-                      ))}
+                      {(() => {
+                        const maxCount =
+                          report.top_reasons.length > 0
+                            ? Math.max(
+                                ...report.top_reasons.map((x) => x.count),
+                              )
+                            : 0;
+
+                        return report.top_reasons.map((r) => {
+                          const share =
+                            reasonsTotal > 0
+                              ? Math.round((r.count / reasonsTotal) * 100)
+                              : 0;
+                          const isTop =
+                            maxCount > 0 && r.count === maxCount;
+                          const barClass = isTop
+                            ? "bg-amber-500"
+                            : "bg-amber-300";
+
+                          return (
+                            <button
+                              key={r.code}
+                              type="button"
+                              title="View jobs with this SLA violation"
+                              onClick={() => {
+                                navigate(
+                                  `/reports/violations?reason=${encodeURIComponent(
+                                    r.code,
+                                  )}&period_start=${report.period.from}&period_end=${
+                                    report.period.to
+                                  }`,
+                                );
+                              }}
+                              className="w-full rounded-md px-3 py-2 text-left hover:bg-muted transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span>{formatReasonCode(r.code)}</span>
+                                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900">
+                                  × {r.count}
+                                  {share > 0 && (
+                                    <span className="ml-1 text-[10px] opacity-80">
+                                      · {share}%
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              {share > 0 && (
+                                <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${barClass}`}
+                                    style={{ width: `${share}%` }}
+                                  />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                 </div>
@@ -774,9 +863,9 @@ export default function ReportsPage() {
                       Who generates the most SLA violations in this period.
                     </p>
 
-                    {report.cleaners.length === 0 ? (
+                    {cleanersWithIssues.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        No jobs in this period.
+                        No cleaners with SLA violations in this period.
                       </p>
                     ) : (
                       <table className="w-full text-sm">
@@ -793,7 +882,7 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {report.cleaners.map((cl) => (
+                          {cleanersWithIssues.map((cl) => (
                             <tr
                               key={cl.id ?? cl.name}
                               className="border-t border-border/40"
@@ -833,9 +922,9 @@ export default function ReportsPage() {
                       Where SLA problems appear most often in this period.
                     </p>
 
-                    {report.locations.length === 0 ? (
+                    {locationsWithIssues.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        No jobs in this period.
+                        No locations with SLA violations in this period.
                       </p>
                     ) : (
                       <table className="w-full text-sm">
@@ -852,7 +941,7 @@ export default function ReportsPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {report.locations.map((loc) => (
+                          {locationsWithIssues.map((loc) => (
                             <tr
                               key={loc.id ?? loc.name}
                               className="border-t border-border/40"

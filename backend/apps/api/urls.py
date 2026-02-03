@@ -1,57 +1,19 @@
 # backend/apps/api/urls.py
 from django.urls import path
+from django.http import JsonResponse
+
 from apps.marketing.views import DemoRequestCreateView, ContactMessageCreateView
 from . import analytics_views
 
-from apps.api.views import (
-    # Auth
-    LoginView,
-    CleanerPinLoginView,
-    ManagerLoginView,
-    ManagerSignupView,
-    # Cleaner jobs
-    TodayJobsView,
-    JobDetailView,
-    JobCheckInView,
-    JobCheckOutView,
-    # Checklist
-    ChecklistBulkUpdateView,
-    ChecklistItemToggleView,
-    # Photos
-    JobPhotosView,
-    JobPhotoDeleteView,
-    # PDF
-    JobPdfReportView,
-    ManagerJobPdfEmailView,
-    ManagerJobReportEmailLogListView,
-    # Manager jobs
-    ManagerJobsTodayView,
-    ManagerJobDetailView,
-    ManagerPlanningJobsView,
-    ManagerJobsHistoryView,
-    ManagerJobForceCompleteView,
-    ManagerPerformanceView,
-    # Create Job
-    ManagerMetaView,
-    ManagerJobsCreateView,
-    # Company & Cleaners
-    ManagerCompanyView,
-    ManagerCompanyLogoUploadView,
-    ManagerCleanersListCreateView,
-    ManagerCleanerDetailView,
-    ManagerCleanerResetPinView,
-    # Reports
-    ManagerWeeklyReportView,
-    ManagerMonthlyReportView,
-    ManagerWeeklyReportPdfView,
-    ManagerMonthlyReportPdfView,
-    WeeklyReportEmailView,
-    MonthlyReportEmailView,
-    ManagerViolationJobsView,
-    ManagerReportEmailLogListView,
-    # Owner
-    OwnerOverviewView,
-)
+# NOTE:
+# apps.api.views is a thin entry point that re-exports public API views
+# from split modules:
+# - views_auth.py
+# - views_cleaner.py
+# - views_manager_company.py
+# - views_manager_jobs.py
+# - views_reports.py
+from apps.api import views as api_views
 
 # 👉 ВАЖНО: импортируем из apps.locations.app.views, а НЕ из apps.locations.api.views
 from apps.locations.app.views import (
@@ -59,78 +21,106 @@ from apps.locations.app.views import (
     ManagerLocationDetailView,
 )
 
+
+def health_view(request):
+  return JsonResponse({"status": "ok"})
+
+
 urlpatterns = [
+    # =====================
+    # Health
+    # =====================
+    path("api/health/", health_view),
+
     # =====================
     # Auth
     # =====================
-    path("auth/login/", LoginView.as_view(), name="api-login"),
+    path(
+        "auth/login/",
+        api_views.LoginView.as_view(),
+        name="api-login",
+    ),
     path(
         "auth/cleaner-login/",
-        CleanerPinLoginView.as_view(),
+        api_views.CleanerPinLoginView.as_view(),
         name="api-cleaner-login",
     ),
     path(
         "manager/auth/login/",
-        ManagerLoginView.as_view(),
+        api_views.ManagerLoginView.as_view(),
         name="api-manager-login",
     ),
     path(
         "auth/signup/",
-        ManagerSignupView.as_view(),
+        api_views.ManagerSignupView.as_view(),
         name="api-auth-signup",
     ),
+
     # =====================
     # Cleaner jobs
     # =====================
-    path("jobs/today/", TodayJobsView.as_view(), name="jobs-today"),
-    path("jobs/<int:pk>/", JobDetailView.as_view(), name="job-detail"),
+    path(
+        "jobs/today/",
+        api_views.TodayJobsView.as_view(),
+        name="jobs-today",
+    ),
+    path(
+        "jobs/<int:pk>/",
+        api_views.JobDetailView.as_view(),
+        name="job-detail",
+    ),
     # Check-in / check-out
     path(
         "jobs/<int:pk>/check-in/",
-        JobCheckInView.as_view(),
+        api_views.JobCheckInView.as_view(),
         name="job-check-in",
     ),
     path(
         "jobs/<int:pk>/check-out/",
-        JobCheckOutView.as_view(),
+        api_views.JobCheckOutView.as_view(),
         name="job-check-out",
     ),
     # Checklist
     path(
         "jobs/<int:job_id>/checklist/bulk-update/",
-        ChecklistBulkUpdateView.as_view(),
+        api_views.ChecklistBulkUpdateView.as_view(),
         name="job-checklist-bulk-update",
     ),
     path(
         "jobs/<int:job_id>/checklist/<int:item_id>/toggle/",
-        ChecklistItemToggleView.as_view(),
+        api_views.ChecklistItemToggleView.as_view(),
         name="job-checklist-toggle",
     ),
     # Photos
-    path("jobs/<int:pk>/photos/", JobPhotosView.as_view(), name="job-photos"),
+    path(
+        "jobs/<int:pk>/photos/",
+        api_views.JobPhotosView.as_view(),
+        name="job-photos",
+    ),
     path(
         "jobs/<int:pk>/photos/<str:photo_type>/",
-        JobPhotoDeleteView.as_view(),
+        api_views.JobPhotoDeleteView.as_view(),
         name="job-photo-delete",
     ),
     # PDF report
     path(
         "jobs/<int:pk>/report/pdf/",
-        JobPdfReportView.as_view(),
+        api_views.JobPdfReportView.as_view(),
         name="job-pdf-report",
     ),
     # Manager: email PDF
     path(
         "manager/jobs/<int:pk>/report/email/",
-        ManagerJobPdfEmailView.as_view(),
+        api_views.ManagerJobPdfEmailView.as_view(),
         name="manager-job-report-email",
     ),
     # Manager: email history for Job PDF
     path(
         "manager/jobs/<int:pk>/report/emails/",
-        ManagerJobReportEmailLogListView.as_view(),
+        api_views.ManagerJobReportEmailLogListView.as_view(),
         name="manager-job-report-email-log-list",
     ),
+
     # =====================
     # Marketing
     # =====================
@@ -144,77 +134,88 @@ urlpatterns = [
         ContactMessageCreateView.as_view(),
         name="public-contact-message-create",
     ),
+
     # =====================
     # Manager
     # =====================
     # Company profile & logo
     path(
         "manager/company/",
-        ManagerCompanyView.as_view(),
+        api_views.ManagerCompanyView.as_view(),
         name="manager-company",
     ),
     path(
         "manager/company/logo/",
-        ManagerCompanyLogoUploadView.as_view(),
+        api_views.ManagerCompanyLogoUploadView.as_view(),
         name="manager-company-logo",
     ),
     # Team / Cleaners
     path(
         "manager/cleaners/",
-        ManagerCleanersListCreateView.as_view(),
+        api_views.ManagerCleanersListCreateView.as_view(),
         name="manager-cleaners",
     ),
     path(
         "manager/cleaners/<int:pk>/",
-        ManagerCleanerDetailView.as_view(),
+        api_views.ManagerCleanerDetailView.as_view(),
         name="manager-cleaner-detail",
     ),
     path(
         "manager/cleaners/<int:pk>/reset-pin/",
-        ManagerCleanerResetPinView.as_view(),
+        api_views.ManagerCleanerResetPinView.as_view(),
         name="manager-cleaner-reset-pin",
     ),
     # Meta for Create Job Drawer
-    path("manager/meta/", ManagerMetaView.as_view(), name="manager-meta"),
+    path(
+        "manager/meta/",
+        api_views.ManagerMetaView.as_view(),
+        name="manager-meta",
+    ),
     # Create job
     path(
         "manager/jobs/",
-        ManagerJobsCreateView.as_view(),
+        api_views.ManagerJobsCreateView.as_view(),
         name="manager-jobs-create",
     ),
     path(
         "manager/jobs/today/",
-        ManagerJobsTodayView.as_view(),
+        api_views.ManagerJobsTodayView.as_view(),
         name="manager-jobs-today",
     ),
     path(
+        "manager/jobs/active/",
+        api_views.ManagerJobsActiveView.as_view(),
+        name="manager-jobs-active",
+    ),
+    path(
         "manager/jobs/<int:pk>/",
-        ManagerJobDetailView.as_view(),
+        api_views.ManagerJobDetailView.as_view(),
         name="manager-job-detail",
     ),
     path(
         "manager/jobs/<int:pk>/force-complete/",
-        ManagerJobForceCompleteView.as_view(),
+        api_views.ManagerJobForceCompleteView.as_view(),
         name="manager-job-force-complete",
     ),
     # Jobs history
     path(
         "manager/jobs/history/",
-        ManagerJobsHistoryView.as_view(),
+        api_views.ManagerJobsHistoryView.as_view(),
         name="manager-jobs-history",
     ),
     # Manager performance
     path(
         "manager/performance/",
-        ManagerPerformanceView.as_view(),
+        api_views.ManagerPerformanceView.as_view(),
         name="manager-performance",
     ),
     # Jobs planning
     path(
         "manager/jobs/planning/",
-        ManagerPlanningJobsView.as_view(),
+        api_views.ManagerPlanningJobsView.as_view(),
         name="manager-jobs-planning",
     ),
+
     # =====================
     # Locations
     # =====================
@@ -228,45 +229,48 @@ urlpatterns = [
         ManagerLocationDetailView.as_view(),
         name="manager-location-detail",
     ),
+
     # =====================
     # Reports
     # =====================
     path(
         "manager/reports/weekly/",
-        ManagerWeeklyReportView.as_view(),
+        api_views.ManagerWeeklyReportView.as_view(),
         name="manager-reports-weekly",
     ),
     path(
         "manager/reports/monthly/",
-        ManagerMonthlyReportView.as_view(),
+        api_views.ManagerMonthlyReportView.as_view(),
         name="manager-reports-monthly",
     ),
     path(
         "manager/reports/weekly/pdf/",
-        ManagerWeeklyReportPdfView.as_view(),
+        api_views.ManagerWeeklyReportPdfView.as_view(),
         name="manager-reports-weekly-pdf",
     ),
     path(
         "manager/reports/monthly/pdf/",
-        ManagerMonthlyReportPdfView.as_view(),
+        api_views.ManagerMonthlyReportPdfView.as_view(),
         name="manager-reports-monthly-pdf",
     ),
     path(
         "manager/reports/weekly/email/",
-        WeeklyReportEmailView.as_view(),
+        api_views.WeeklyReportEmailView.as_view(),
+        name="manager-reports-weekly-email",
     ),
     path(
         "manager/reports/monthly/email/",
-        MonthlyReportEmailView.as_view(),
+        api_views.MonthlyReportEmailView.as_view(),
+        name="manager-reports-monthly-email",
     ),
     path(
         "manager/reports/violations/jobs/",
-        ManagerViolationJobsView.as_view(),
+        api_views.ManagerViolationJobsView.as_view(),
         name="manager-violations-jobs",
     ),
     path(
         "manager/report-emails/",
-        ManagerReportEmailLogListView.as_view(),
+        api_views.ManagerReportEmailLogListView.as_view(),
         name="manager-report-email-logs",
     ),
 
@@ -323,13 +327,23 @@ urlpatterns = [
         analytics_views.analytics_cleaners_performance,
         name="manager-analytics-cleaners-performance-noslash",
     ),
+    path(
+        "manager/analytics/sla-breakdown/",
+        analytics_views.analytics_sla_breakdown,
+        name="manager-analytics-sla-breakdown",
+    ),
+    path(
+        "manager/analytics/sla-breakdown",
+        analytics_views.analytics_sla_breakdown,
+        name="manager-analytics-sla-breakdown-noslash",
+    ),
 
     # =====================
     # Owner
     # =====================
     path(
         "owner/overview/",
-        OwnerOverviewView.as_view(),
+        api_views.OwnerOverviewView.as_view(),
         name="owner-overview",
     ),
 ]

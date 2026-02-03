@@ -18,6 +18,11 @@ type ApiJob = {
   status: "scheduled" | "in_progress" | "completed" | string;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
+  scheduled_date?: string | null;
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   location: string;
   cleaner: string;
 };
@@ -40,6 +45,27 @@ type UsageSummary = {
   days_left?: number | null;
 };
 
+// Нормализуем время: поддерживаем ISO и просто "HH:MM(:SS)"
+function normalizeTime(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // Формат "HH:MM" или "HH:MM:SS"
+  const pureMatch = trimmed.match(/^(\d{2}:\d{2})(:\d{2})?$/);
+  if (pureMatch) {
+    return pureMatch[1]; // берём только HH:MM
+  }
+
+  // Пробуем распарсить как ISO
+  const d = new Date(trimmed);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  return null;
+}
+
 function mapApiJobToUi(job: ApiJob): UiJob {
   let uiStatus: UiJobStatus;
 
@@ -51,12 +77,29 @@ function mapApiJobToUi(job: ApiJob): UiJob {
     uiStatus = "issue";
   }
 
-  const start = job.scheduled_start || "";
-  const end = job.scheduled_end || "";
-  const date = start ? start.slice(0, 10) : "";
+  // стараемся поймать время из всех возможных полей
+  const rawStart =
+    job.scheduled_start ||
+    job.scheduled_start_time ||
+    job.start_time ||
+    null;
 
-  const startTime = start ? start.slice(11, 16) : "--:--";
-  const endTime = end ? end.slice(11, 16) : "--:--";
+  const rawEnd =
+    job.scheduled_end ||
+    job.scheduled_end_time ||
+    job.end_time ||
+    null;
+
+  const startTime = normalizeTime(rawStart) ?? "--:--";
+  const endTime = normalizeTime(rawEnd) ?? "--:--";
+
+  // дата — либо отдельное поле, либо берём из scheduled_start, если там ISO
+  let date = "";
+  if (job.scheduled_date) {
+    date = job.scheduled_date;
+  } else if (job.scheduled_start) {
+    date = job.scheduled_start.slice(0, 10);
+  }
 
   return {
     id: job.id,

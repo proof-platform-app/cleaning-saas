@@ -2623,8 +2623,396 @@ force_completed_by.
 1. укладываться в контракты, зафиксированные здесь, либо
 2. сначала обновить этот файл (`API_CONTRACT.md`) с чётким описанием изменений и только потом реализовывать их в коде.
 
-```
-::contentReference[oaicite:0]{index=0}
-```
 
 
+### 📊 Analytics API — v1 (Manager)
+
+Analytics API предоставляет **операционную аналитику** для менеджеров и не является отчётным или PDF-слоем.
+
+Все эндпоинты:
+
+* read-only
+* работают **только для Manager**
+* принимают единый период через `date_from / date_to`
+* используют completed jobs как источник данных
+
+#### Общие параметры
+
+```text
+date_from=YYYY-MM-DD
+date_to=YYYY-MM-DD
+```
+
+Период включителен.
+Агрегация основана на `actual_end_time`.
+
+---
+
+#### GET /api/manager/analytics/summary/
+
+**Назначение:**
+Ключевые KPI за период.
+
+**Ответ:**
+
+```json
+{
+  "jobs_completed": 4,
+  "on_time_completion_rate": 0.25,
+  "proof_completion_rate": 0.5,
+  "avg_job_duration_hours": 0.22,
+  "issues_detected": 2
+}
+```
+
+**Семантика:**
+
+* `on_time_completion_rate` — доля jobs, завершённых до планового времени
+* `proof_completion_rate` — доля jobs с полным proof (before + after + checklist)
+* `issues_detected` — количество jobs с SLA violations
+
+---
+
+#### GET /api/manager/analytics/cleaners-performance/
+
+**Назначение:**
+Сравнение клинеров за период.
+
+**Ответ:**
+
+```json
+[
+  {
+    "cleaner_id": 17,
+    "cleaner_name": "Aisha Muxamed",
+    "jobs_completed": 3,
+    "avg_job_duration_hours": 0.33,
+    "on_time_rate": 0.0,
+    "proof_rate": 0.33,
+    "issues": 2
+  }
+]
+```
+
+---
+
+#### GET /api/manager/analytics/jobs-completed/
+
+**Назначение:**
+Тренд количества завершённых jobs по дням.
+
+**Ответ:**
+
+```json
+[
+  { "date": "2026-02-01", "jobs_completed": 1 },
+  { "date": "2026-02-02", "jobs_completed": 3 }
+]
+```
+
+---
+
+#### GET /api/manager/analytics/job-duration/
+
+**Назначение:**
+Средняя фактическая длительность jobs по дням.
+
+**Ответ:**
+
+```json
+[
+  { "date": "2026-02-01", "avg_job_duration_hours": 0.47 }
+]
+```
+
+---
+
+#### GET /api/manager/analytics/proof-completion/
+
+**Назначение:**
+Тренд completeness proof по дням.
+
+**Ответ:**
+
+```json
+[
+  {
+    "date": "2026-02-01",
+    "before_photo_rate": 1.0,
+    "after_photo_rate": 1.0,
+    "checklist_rate": 1.0
+  }
+]
+
+### SLA Breakdown — Analytics v2
+
+SLA-анализ по причинам нарушений за выбранный период.
+
+`GET /api/manager/analytics/sla-breakdown/`
+
+#### Query params
+
+- `date_from` — начало периода, `YYYY-MM-DD` (обязательный)
+- `date_to` — конец периода, включительно, `YYYY-MM-DD` (обязательный)
+
+Период считается по дате **фактического завершения job** (`actual_end_time`).
+
+#### Пример
+
+```http
+GET /api/manager/analytics/sla-breakdown/?date_from=2026-01-01&date_to=2026-02-02
+````
+
+#### Response
+
+```json
+{
+  "jobs_completed": 10,
+  "violations_count": 4,
+  "violation_rate": 0.4,
+  "reasons": [
+    { "code": "late_start", "count": 2 },
+    { "code": "checklist_not_completed", "count": 1 },
+    { "code": "proof_missing", "count": 1 }
+  ],
+  "top_cleaners": [
+    {
+      "cleaner_id": 3,
+      "cleaner_name": "Ahmed Hassan",
+      "jobs_completed": 5,
+      "violations_count": 2,
+      "violation_rate": 0.4
+    }
+  ],
+  "top_locations": [
+    {
+      "location_id": 7,
+      "location_name": "Dubai Marina",
+      "jobs_completed": 4,
+      "violations_count": 2,
+      "violation_rate": 0.5
+    }
+  ]
+}
+```
+
+#### Семантика
+
+* `jobs_completed` — количество jobs в статусе `completed` за период
+  (по `actual_end_time`).
+
+* `violations_count` — сколько из этих jobs имеют `sla_status = "violated"`
+  по результату `compute_sla_status_and_reasons_for_job(job)`.
+
+* `violation_rate` — доля нарушенных jobs:
+
+  * `violations_count / jobs_completed` (0–1).
+
+* `reasons` — разбивка по причинам нарушений:
+
+  * `code` — строковый код причины (например, `late_start`, `early_leave`,
+    `checklist_not_completed`, `proof_missing`, …);
+  * `count` — сколько раз эта причина встретилась в периоде.
+
+* `top_cleaners` — агрегаты по клинерам:
+
+  * `jobs_completed` — jobs за период;
+  * `violations_count` — сколько из них нарушили SLA;
+  * `violation_rate` — доля нарушений по этому клинеру (0–1).
+
+* `top_locations` — агрегаты по локациям:
+
+  * та же семантика, что и для клинеров.
+
+**Source of truth:**
+
+* фильтрация: `Job.status = completed`, `actual_end_time` внутри периода;
+* статус и причины нарушений: `compute_sla_status_and_reasons_for_job(job)`;
+* если reasons — строка, она приводится к `[reason]`;
+* если reasons — список, внутри используются строковые коды.
+
+Status: `IMPLEMENTED (Analytics SLA v2, backend-only UI)`
+UI-представления (отдельные графики / табы) могут развиваться независимо от этого контракта.
+
+## 6. SLA Breakdown — нарушения по типам, клинерам и локациям
+
+Эндпоинт для аналитики по SLA-нарушениям за период.
+
+### Endpoint
+
+`GET /api/manager/analytics/sla-breakdown/`
+
+### Query params
+
+* `date_from` — дата начала периода, `YYYY-MM-DD` (обязательный)
+* `date_to` — дата конца периода, включительно, `YYYY-MM-DD` (обязательный)
+
+Пример:
+
+```http
+GET /api/manager/analytics/sla-breakdown/?date_from=2026-01-01&date_to=2026-02-02
+````
+
+### Response
+
+```json
+{
+  "jobs_completed": 4,
+  "violations_count": 2,
+  "violation_rate": 0.5,
+  "reasons": [
+    { "code": "missing_after_photo", "count": 2 },
+    { "code": "checklist_not_completed", "count": 2 },
+    { "code": "missing_before_photo", "count": 1 }
+  ],
+  "top_cleaners": [
+    {
+      "cleaner_id": 17,
+      "cleaner_name": "Aisha Muxamed",
+      "jobs_completed": 4,
+      "violations_count": 2,
+      "violation_rate": 0.5
+    }
+  ],
+  "top_locations": [
+    {
+      "location_id": 10,
+      "location_name": "Marina Tower Residence LLS",
+      "jobs_completed": 4,
+      "violations_count": 2,
+      "violation_rate": 0.5
+    }
+  ]
+}
+```
+
+### Семантика полей
+
+* **jobs_completed** — количество job в статусе `completed` за указанный период
+  (по `actual_end_time`).
+
+* **violations_count** — сколько из этих job имеют статус `sla_status = violated`
+  (по результату `compute_sla_status_and_reasons_for_job`).
+
+* **violation_rate** — доля нарушенных job:
+  `violations_count / jobs_completed` (0–1).
+
+* **reasons** — список причин нарушений за период:
+
+  * `code` — машинное имя причины SLA:
+
+    * `late_start`
+    * `early_leave`
+    * `missing_before_photo`
+    * `missing_after_photo`
+    * `checklist_not_completed`
+    * и другие коды, возвращаемые SLA-движком;
+  * `count` — количество job, в которых эта причина присутствует
+    (одна job может иметь несколько причин, каждая причина считается отдельно).
+
+* **top_cleaners** — агрегаты по клинерам:
+
+  * `cleaner_id` / `cleaner_name`
+  * `jobs_completed` — всего job за период;
+  * `violations_count` — job с нарушением SLA;
+  * `violation_rate` — доля job с нарушением (0–1).
+
+* **top_locations** — агрегаты по локациям, с теми же полями, что для клинеров.
+
+> **Источник истины по SLA-нарушениям** — helper
+> `compute_sla_status_and_reasons_for_job(job)` и связанные с ним правила.
+> UI и отчёты не пересчитывают SLA самостоятельно.
+
+---
+
+> **SLA Engine v2 & Analytics**
+>
+> * Введён единый helper `compute_sla_status_and_reasons_for_job(job)` и набор стандартных кодов нарушений: `missing_before_photo`, `missing_after_photo`, `checklist_not_completed`, `missing_check_in`, `missing_check_out`.
+> * На его основе реализованы:
+>
+>   * агрегирующий SLA-отчёт `_get_company_report()` (используется в weekly/monthly JSON, PDF и e-mail-ендпоинтах);
+>   * `GET /api/owner/overview/` — summary + top cleaners/locations/reasons;
+>   * `GET /api/manager/performance/` — SLA-метрики по клинерам и локациям за произвольный период;
+>   * `GET /api/manager/reports/violations/jobs/` — список jobs с конкретным типом нарушения.
+> * Force-complete job (`POST /api/manager/jobs/<id>/force-complete/`) пишет причины нарушения в `job.sla_reasons` и автоматически попадает во все SLA-отчёты и аналитику.
+
+### Implementation modules (backend)
+
+The REST API described in this document is implemented in the following Django view modules:
+
+- `backend/apps/api/views.py`  
+  Thin entry point that re-exports all API views and contains:
+  - default checklist templates for new companies,
+  - `ManagerMetaView` used by the dashboard bootstrap (`/api/manager/meta/`).
+
+- `backend/apps/api/views_auth.py`  
+  Auth endpoints:
+  - `/api/login/` (cleaner / generic login)  
+  - `/api/cleaner/login-pin/`  
+  - `/api/manager/login/`  
+  - `/api/manager/signup/`
+
+- `backend/apps/api/views_cleaner.py`  
+  Cleaner-facing endpoints:
+  - `/api/jobs/today/`, `/api/jobs/<id>/`  
+  - `/api/jobs/<id>/check-in/`, `/api/jobs/<id>/check-out/`  
+  - checklist toggle / bulk update  
+  - job photos upload/delete  
+  - job PDF report download for cleaners.
+
+- `backend/apps/api/views_manager_company.py`  
+  Manager company & cleaners management:
+  - `/api/manager/company/` (GET / PATCH)  
+  - `/api/manager/company/logo/`  
+  - `/api/manager/cleaners/` (list/create)  
+  - `/api/manager/cleaners/<id>/` (update)  
+  - `/api/manager/cleaners/<id>/reset-pin/`.
+
+- `backend/apps/api/views_manager_jobs.py`  
+  Manager job planning & SLA views:
+  - job create, today list, planning list, history list  
+  - job details for manager  
+  - SLA helpers and force-complete (`/api/manager/jobs/<id>/force-complete/`)  
+  - performance summary & violation jobs reports.
+
+- `backend/apps/api/views_reports.py`  
+  Reporting & email:
+  - job report email endpoints  
+  - weekly / monthly SLA reports (JSON + PDF)  
+  - owner overview  
+  - global report email log table  
+  - weekly / monthly report email send endpoints.
+
+This split is purely internal to the backend; the external API contracts (URLs, methods, payloads) remain exactly as described below.
+
+**Reports & Owner overview — contract guarantees**
+
+Reports API is designed as a read-only summary layer.
+Owner overview endpoints (`/api/owner/overview/`) return aggregated, non-drillable data intended for high-level business monitoring only. No job-level navigation or filtering is exposed for owners by design.
+
+Manager reports endpoints (`/api/manager/reports/*`) are the single source of truth for:
+
+* UI reports
+* PDF generation
+* Email reports
+
+All SLA-related metrics (issue rate, top reasons, violations count) must be calculated consistently across UI, PDF and email outputs. Percentages for SLA reasons are always calculated **relative to total SLA violations**, not total jobs.
+
+---
+Окей, давай добьём документацию. Ниже — по одному абзацу на каждый файл, заточенные под прямую вставку.
+
+---
+## Reports & SLA
+
+Owner и Manager отчёты зафиксированы как разные уровни доступа.
+GET /api/owner/overview/ возвращает read-only high-level summary за rolling-период (30 дней): issue_rate, jobs_count, violations_count, топ-локации и клинеры.
+Manager использует GET /api/manager/reports/weekly|monthly/ для детальных SLA-отчётов с разбивкой по причинам, клинерам и локациям.
+История отправок отчётов доступна через GET /api/manager/report-emails/ и используется как единый источник правды для UI / PDF / email.
+
+## Analytics & SLA breakdown
+
+GET /api/manager/analytics/sla-breakdown/ — основной источник SLA-аналитики: считает violations, а не jobs, и возвращает breakdown по причинам, топ-клинерам и локациям. Используется в Manager Reports и Analytics.
+
+Health check
+
+Добавлен GET /api/health/ → { "status": "ok" } как стандартный liveness-endpoint для web и mobile-клиентов.

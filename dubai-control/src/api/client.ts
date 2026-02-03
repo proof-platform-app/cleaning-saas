@@ -642,9 +642,12 @@ export async function getManagerTodayJobs(): Promise<ManagerJobSummary[]> {
   return raw.map((item) => normalizeJob(item));
 }
 
-// Общий список для Jobs.tsx (сейчас просто today)
+// Общий список для Jobs.tsx: активные + недавние completed
 export async function fetchManagerJobsSummary(): Promise<ManagerJobSummary[]> {
-  return getManagerTodayJobs();
+  await loginManager();
+
+  const raw = await apiFetch<any[]>("/api/manager/jobs/active/");
+  return raw.map((item) => normalizeJob(item));
 }
 
 // ---------- Job details ----------

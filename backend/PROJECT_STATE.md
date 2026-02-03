@@ -1,9 +1,10 @@
 # Cleaning SaaS — FACTUAL PROJECT STATE (v6.1)
 
-Формат:
+**Формат статусов:**
 ✅ сделано 🟡 частично / в процессе ⛔ не делали
 
-Документ фиксирует **только фактическое состояние проекта на сегодня**, без планов, гипотез и дорожных карт.
+Документ фиксирует **исключительно текущее фактическое состояние проекта**,
+без планов, гипотез, предположений и дорожных карт.
 
 ---
 
@@ -11,487 +12,513 @@
 
 ### Backend (Django, API-first)
 
-**Core execution**
+#### Core execution (Jobs)
 
-* Jobs (модель, связи, бизнес-логика) ✅
-* Status flow: `scheduled → in_progress → completed` ✅
-* Check-in / Check-out
+* Jobs: модель, связи, бизнес-логика ✅
+* Статусный флоу: `scheduled → in_progress → completed` ✅
 
-  * GPS
-  * distance validation ✅
-* Checklist
+**Check-in / Check-out**
 
-  * JobChecklistItem
-  * required items
-  * toggle / bulk update ✅
-* Photos before / after
+* GPS check-in/out
+* distance validation ✅
 
-  * EXIF extraction
-  * distance validation
-  * normalization to JPEG
-  * storage + File model
-  * связь с Job ✅
-* Audit trail (JobCheckEvent) ✅
-* PDF report
+**Checklist**
 
-  * реальная генерация бинарного PDF
-  * эндпоинт `/api/jobs/<id>/report/pdf/`
-  * используется теми же данными, что UI ✅
+* JobChecklistItem
+* required items
+* toggle / bulk update ✅
 
-👉 **Backend-ядро для job execution полностью закрыто.**
+**Photos before / after**
+
+* EXIF extraction
+* distance validation
+* normalization to JPEG
+* storage + File model
+* связь с Job ✅
+
+**Audit**
+
+* JobCheckEvent (полный audit trail) ✅
+
+**Job PDF**
+
+* реальная генерация бинарного PDF
+* endpoint `/api/jobs/<id>/report/pdf/`
+* используется теми же данными, что UI (single source of truth) ✅
+
+👉 Backend-ядро job execution **полностью закрыто**.
 
 ---
 
 ### Backend — Trial & Usage Layer
 
-*(без изменений, состояние подтверждено)*
+*(состояние подтверждено, без изменений)*
 
-👉 Trial / usage-слой — **backend source of truth + реальное enforcement по лимитам trial.**
+👉 Trial / usage слой — **backend source of truth**
+с реальным enforcement лимитов trial.
 
 ---
 
-### Manager Portal (Web)
+## Manager Portal (Web)
 
-#### Jobs / Execution
+### Jobs / Execution
 
-* Today Jobs (страница Jobs, данные с API) ✅
+* Today Jobs (API-driven) ✅
 * Job Details (manager view) ✅
 
-  * таймлайн из `check_events`, фото и чеклиста ✅
-  * фото before / after из JobPhoto ✅
-  * чеклист read-only + статус в таймлайне ✅
-  * GPS check-in/out + “Open in Maps” ✅
-  * Generate PDF — реальный PDF с backend ✅
-  * Download PDF — без повторной генерации ✅
-  * Email PDF — **реальная отправка PDF на email** ✅
+**Job Details включает:**
 
-    * endpoint: `POST /api/manager/jobs/<id>/report/email/`
-    * PDF генерируется тем же backend-кодом, что и Download PDF (single source of truth)
-    * поддержка выбора email:
+* timeline из `check_events`
+* фото before / after
+* чеклист (read-only)
+* GPS check-in/out + Open in Maps
+* Generate PDF (реальный backend PDF)
+* Download PDF (без повторной генерации)
 
-      * по умолчанию — `request.user.email`
-      * кастомный email передаётся в теле запроса `{ "email": "..." }` ✅
-    * UI: модалка выбора получателя (self / custom email) ✅
-    * подтверждение / ошибка отображаются inline (без alert-ов) ✅
-    * каждая попытка отправки логируется (см. ниже) ✅
+**Email Job PDF**
+
+* endpoint: `POST /api/manager/jobs/<id>/report/email/`
+* используется тот же PDF-код, что и Download
+* email:
+
+  * по умолчанию `request.user.email`
+  * кастомный email через `{ "email": "..." }`
+* UI:
+
+  * модалка выбора получателя
+  * inline success / error
+* каждая отправка логируется в БД ✅
 
 ---
 
 ### Job Planning
 
-*(без изменений, состояние подтверждено)*
+*(состояние подтверждено)*
 
-👉 Job Planning работает **end-to-end**: API → UI → Create Job → refetch списка.
+👉 Работает end-to-end: API → UI → Create Job → refetch.
 
 ---
 
 ### Job History
 
-*(без изменений, состояние подтверждено)*
+*(состояние подтверждено)*
 
 ---
 
-### Performance Layer (SLA aggregation v1.5 → Reports v2)
+## Performance Layer (SLA aggregation v1.5 → Reports v2)
 
-**Backend**
+### Backend
 
 * `/api/manager/performance/?date_from=&date_to=` ✅
-* SLA aggregation endpoints:
 
-  * `/api/manager/reports/weekly/` ✅
-  * `/api/manager/reports/monthly/` ✅
-* Reports PDF export:
+**SLA aggregation**
 
-  * `/api/manager/reports/weekly/pdf/` ✅
-  * `/api/manager/reports/monthly/pdf/` ✅
-* Reports email:
+* `/api/manager/reports/weekly/` ✅
+* `/api/manager/reports/monthly/` ✅
 
-  * `/api/manager/reports/weekly/email/` ✅
-  * `/api/manager/reports/monthly/email/` ✅
-  * принимают JSON с опциональным полем `email`
-  * если email не передан — используется `request.user.email`
-  * формируют тот же PDF, что и `/pdf/`
-  * **реальная отправка через Django Email backend** (SMTP / dev backend) ✅
-  * **каждая отправка логируется в БД** ✅
+**PDF**
 
-#### ReportEmailLog (NEW — Reports v2)
+* `/api/manager/reports/weekly/pdf/` ✅
+* `/api/manager/reports/monthly/pdf/` ✅
 
-* модель `ReportEmailLog` ✅
+**Email**
 
-  * `company`
-  * `user` (инициатор)
-  * `kind`: `job_report / weekly_report / monthly_report`
-  * `job` (для job reports)
-  * `period_from / period_to` (для weekly/monthly)
-  * `to_email`
-  * `subject`
-  * `status`: `sent / failed`
-  * `error_message`
-  * `created_at`
-* логирование:
-
-  * Job PDF email ✅
-  * Weekly report email ✅
-  * Monthly report email ✅
-* доступно в Django Admin (фильтры, поиск, хронология) ✅
+* `/api/manager/reports/weekly/email/` ✅
+* `/api/manager/reports/monthly/email/` ✅
+* принимают optional `email`
+* fallback → `request.user.email`
+* формируют тот же PDF, что `/pdf/`
+* реальная отправка через Django Email backend
+* каждая отправка логируется в БД ✅
 
 ---
 
-**Frontend**
+### ReportEmailLog (Reports v2)
+
+**Модель**
+
+* company
+* user (инициатор)
+* kind: `job_report / weekly_report / monthly_report`
+* job (для job-level)
+* period_from / period_to
+* to_email
+* subject
+* status: `sent / failed`
+* error_message
+* created_at
+
+**Логируются**
+
+* Job PDF email
+* Weekly report email
+* Monthly report email
+
+Доступно в Django Admin (фильтры, поиск, хронология) ✅
+
+---
+
+### Frontend (Performance & Reports)
 
 * `/performance` ✅
 * `/reports` ✅
 
-  * переключение Weekly / Monthly (frontend state only) ✅
-  * summary-блок, таблицы, top reasons ✅
-  * навигация “View jobs” → Job History с предустановленными фильтрами ✅
-* Reports PDF:
+**Reports UI**
 
-  * кнопка **Download PDF** подключена к backend ✅
-* Reports email (Reports v2):
+* переключение Weekly / Monthly (frontend state)
+* summary, таблицы, top reasons
+* View jobs → Job History с фильтрами
+* Download PDF (backend)
+* Email report:
 
-  * кнопка **Email report** ✅
-  * модалка выбора получателя:
+  * выбор email
+  * loading / success / error
+  * отправка на любой email (SMTP-зависимо)
 
-    * “Send to my email”
-    * “Send to another email” + input ✅
-  * корректный UI feedback (loading / success / error) ✅
-  * отправка на любой email, введённый менеджером (SMTP-зависимо) ✅
-
-👉 Performance Layer замкнут end-to-end:
-**Execution → SLA → Reports → PDF → Email → Audit log**
+👉 Performance Layer полностью замкнут:
+Execution → SLA → Reports → PDF → Email → Audit log
 
 ---
 
-### Trial UX (Manager Dashboard & Settings)
+## Trial UX (Manager Dashboard & Settings)
 
-*(без изменений, состояние подтверждено)*
+*(состояние подтверждено)*
 
-👉 Trial UX — **информационный слой, синхронизированный с реальными ограничениями backend.**
+👉 Информационный слой, синхронизированный
+с реальными backend-ограничениями.
 
 ---
 
-### Commercial enforcement & read-only mode (Manager Portal)
+## Commercial enforcement & Read-only mode
 
-**Backend**
+### Backend
 
-* Добавлено управление активностью компании (`Company.is_active`, `suspended_at`, `suspended_reason`) ✅
-* Backend-permissions запрещают mutating-действия для suspended компаний (`company_blocked`) ✅
-* API возвращает структурированные коды ошибок:
+* `Company.is_active`, `suspended_at`, `suspended_reason` ✅
+* backend-permissions для suspended компаний (`company_blocked`) ✅
+* error codes:
 
-  * `company_blocked` — компания в read-only режиме
-  * `trial_expired` — trial завершён
+  * `company_blocked`
+  * `trial_expired`
 
-👉 Backend остаётся **единственным источником истины** для коммерческих ограничений.
+Backend остаётся **единственным источником истины**.
 
-**Frontend (Manager Portal)**
+### Frontend
 
 * Create Job:
 
-  * при `company_blocked`:
-    * создание job запрещено backend’ом (403)
-    * UI показывает **read-only warning** (⚠️ Account suspended)
-    * данные (jobs, reports) остаются доступными
-    * кнопка Create Job дизейблится и меняет текст ✅
-  * при `trial_expired`:
-    * отображается информирующее сообщение о необходимости апгрейда ✅
-* Ошибки обрабатываются по **machine-readable `code`**, без парсинга текста ✅
+  * read-only warning при `company_blocked`
+  * кнопка дизейблится
+  * данные остаются доступными
+* `trial_expired` → upgrade message
+* обработка ошибок по machine-readable `code`
 
-👉 Реализован полноценный **read-only режим для suspended компаний**:
-данные доступны, создание новых сущностей запрещено, UX не выглядит как ошибка.
-
-### 🔍 Reports → Evidence (SLA drill-down, v1)
-
-**Backend**
-
-* Endpoint для перехода от агрегатов к конкретным job’ам по SLA-reason ✅
-
-  * `GET /api/manager/reports/violations/jobs/` ✅
-  * query params:
-
-    * `reason`
-    * `period_start`
-    * `period_end`
-  * возвращает:
-
-    * `reason`, `reason_label`
-    * `period`
-    * пагинацию
-    * список `jobs` с:
-
-      * id
-      * scheduled_date
-      * cleaner
-      * location
-      * SLA status / reasons ✅
-* Использует **ту же SLA-логику**, что Performance / Reports (single source of truth) ✅
-* Read-only, не влияет на execution или статус job’ов ✅
-
-**Frontend**
-
-* Добавлен маршрут `/reports/violations` ✅
-* Экран `ViolationJobsPage` (drill-down уровень) ✅
-
-  * читает query params (`reason`, `period_start`, `period_end`)
-  * запрашивает backend endpoint
-  * отображает список job’ов с выбранным SLA-нарушением
-  * переход **View job** → существующий `/jobs/:id` ✅
-* Экран **не отображается в навигации** и доступен только через прямой переход (intentional UX) ✅
-
-**Product behavior**
-
-* Reports → Evidence слой реализован как **условный экран**:
-
-  * появляется только при наличии конкретного SLA-контекста
-  * не создаёт UI-шума
-* В текущем mobile-UX:
-
-  * job не может быть завершён без обязательных фото / чеклиста
-  * поэтому `missing_*` SLA-reasons в прод-флоу встречаются редко или отсутствуют
-* SLA-reasons по proof зафиксированы как **доменный задел**:
-
-  * для future overrides (manager force complete)
-  * для изменений политики (photo optional)
-  * для мигрированных / legacy данных ✅
-
-👉 **Reports → Evidence слой закрыт технически и архитектурно**:
-агрегат → reason → конкретные job’ы → job details, без дублирования логики и без влияния на execution.
-
----
-## Reports & PDF generation are complete and stable.
-
-- Weekly and monthly SLA PDF reports are available via manager actions.
-- PDFs include owner-level aggregates and narrative summary.
-- Owner overview is implemented as an in-app dashboard using the same data.
-- No separate owner-specific PDF exists by design.
-
-This behavior is intentional and aligned with the current product scope.
-
----
-## Checklist Templates
-
-ChecklistTemplate / ChecklistTemplateItem — реализованы и используются ✅
-Автоматическая инициализация дефолтных чек-листов для компании — реализована ✅
-Проверка валидности шаблонов по наличию items — реализована ✅
-Интеграция с Create Job (Manager Meta API) — реализована ✅
-Фронтенд получает стабильный список чек-листов без fallback-логики — реализовано ✅
-Блок чек-листов считается завершённым в рамках MVP.
-
-## Checklist templates & job checklist — status
-
-✅ Реализовано:
-
-дефолтные checklist templates создаются автоматически для компании;
-выбор checklist template при создании job;
-автоматическое создание чеклиста job из шаблона;
-отображение чеклиста и его пунктов в JobSidePanel;
-корректное различие состояний Pending vs Not completed;
-учёт чеклиста в SLA и violation logic;
-визуальная связка Planning → Job → Checklist → SLA.
-
-🔒 Логика стабильна, обратная совместимость сохранена. Блок чеклистов можно считать закрытым и готовым к использованию в проде.
-
-#### Job Planning — checklist templates (meta + UI)
-
-✅ Backend:
-* реализован хелпер `create_default_checklist_templates_for_company(company)` — лениво создаёт 4 базовых чеклист-шаблона для компании, если нет ни одного шаблона с пунктами;
-* `GET /api/manager/meta/` гарантирует наличие валидных шаблонов и возвращает их в поле `checklist_templates` с полями `id`, `name`, `description`, `items_preview`, `items_count`.
-
-✅ Frontend:
-* `fetchPlanningMeta()` типизирован под новый формат `PlanningMeta.checklist_templates`;
-* в `CreateJobDrawer`:
-  * селект чеклистов показывает название + превью первых пунктов;
-  * ниже рендерится блок “CHECKLIST DETAILS” с кратким описанием и разворачиваемым списком всех пунктов (`+ N more items` → раскрытие).
-
-🟡 Следующий слой (позже):
-* подсветка выбранного чеклист-шаблона и его статуса (completed/pending) в job-картах и отчётах (PDF/History).
-
----
-## Cleaner authentication
-
-Phone + PIN login — 
-Manager creates cleaner accounts — ✅
-PIN reset by manager only — ✅
-Secure PIN visibility (shown once on create/reset) — ✅
-No self-service recovery for cleaners (by design) — ✅
----
-👉 **Статус слоя 0: DONE ✅**
-
-
-## Job PDF (v1) ✅
-Реализован Job PDF с полной доказательной структурой: summary, notes, photos (before/after), checklist, audit events и SLA & Proof.
-SLA-блок в PDF использует единый backend source of truth и корректно отражает статус ok / violated.
-Mobile enforcement исключает SLA-нарушения в стандартном флоу, что считается осознанным архитектурным решением.
-Weekly / Monthly SLA reports не затронуты.
-
-## Job PDF Email (v1) ✅
-Реализована отправка Job PDF по email с бизнес-ориентированным текстом письма.
-Каждая отправка логируется и может быть использована для аудита и поддержки.
-Email содержит контекст job, SLA статус и описание включённых доказательств.
-
-## PDF Reports & Email Logging
-
-✅ Реализовано:
-генерация PDF job report;
-скачивание PDF;
-отправка PDF по email;
-логирование email-отправок (job-level);
-отображение истории email-отправок в Job Details UI.
-
-🟡 Не реализовано (осознанно):
-агрегированный отчёт по email-отправкам;
-фильтрация по периоду / календарю;
-отдельная страница или вкладка в Reports для email-proof.
-
-⏭ Следующий логичный шаг:
-Создание отдельной вкладки в Reports с календарём и таблицей email-отправок (кто, когда, по каким job / cleaners отправлял или не отправлял отчёты).
-
-## Email history — implementation status
-
-✅ Завершён блок Email history в разделе Reports. Реализована единая история отправки email-отчётов (job, weekly, monthly) с рабочими фильтрами, календарём диапазона дат, статусами доставки и серверной пагинацией. Фронт и бэк синхронизированы по API-контракту. Исправлены ошибки фильтрации по датам (используется created_at). Раздел стабилен и готов к использованию как управленческий и аудиторский инструмент.
-
-Job Timeline & SLA — current state ✅
-
-Job Timeline shows full execution flow.
-“Violations-only” filter is implemented as an audit tool.
-Cleaner-side execution prevents incomplete jobs by design.
-Empty violations timeline correctly represents a fully compliant job.
-
-UI behavior confirmed for both:
-jobs with full proof,
-jobs with missing/exceptional events.
-
-This logic is considered final for V1/V1.5 and forms the basis for upcoming features:
-Force complete / override flow
-Enterprise SLA audit extensions
+👉 Реализован полноценный read-only режим.
 
 ---
 
-### SLA & Force-complete (фактическое состояние)
+## Reports → Evidence (SLA drill-down, v1)
 
-✅ Backend:
-- Добавлен эндпоинт `POST /api/manager/jobs/{id}/force-complete/`:
-  - доступен только менеджерам (manager-auth);
-  - если job ещё не `completed`, переводит в `status=completed`;
-  - выставляет `sla_status=violated` и апдейтит `sla_reasons` выбранным кодом;
-  - сохраняет `force_completed`, `force_completed_at`, `force_completed_by`.
-- Job detail API возвращает поля:
-  - `sla_status: "ok" | "violated"`
-  - `sla_reasons: string[]`
-  - `force_completed: bool`
-  - `force_completed_at: datetime | null`
-  - `force_completed_by: { id, full_name } | null`.
+### Backend
 
-✅ Frontend (JobDetails):
-- Правый блок **SLA & Proof**:
-  - показывает `SLA OK` или `SLA violated` на основе `sla_status`;
-  - выводит список причин по `sla_reasons` с человеко-понятными label’ами.
-- В сайдбаре добавлена кнопка **Force complete job**:
-  - открывает модалку с выбором причины (missing before/after photo, checklist not completed, check-in/out missing, other) и комментарием;
-  - отправляет запрос на `POST /api/manager/jobs/{id}/force-complete/`;
-  - после успешного ответа обновляет Job details и SLA блок.
+* `GET /api/manager/reports/violations/jobs/`
+* фильтры: reason, period_start, period_end
+* возвращает jobs с SLA reason
+* использует ту же SLA-логику (single source of truth)
+* read-only
 
-🟡 На будущее:
-- скрывать/дизейблить кнопку Force complete для уже force-completed джобов;
-- добавить лёгкую визуальную подсветку «Completed with SLA issues» в статусе джоба.
+### Frontend
 
-## Analytics Page**
+* маршрут `/reports/violations`
+* экран доступен только по прямому переходу
+* View job → `/jobs/:id`
 
-Статус: ✅ **Готово (UI + API контракт)**
-
-Что сделано:
-
-* Добавлена страница `/analytics` в Manager Portal.
-* Реализованы KPI, графики, таблицы и comparison chart.
-* Исправлены layout-ограничения при свёрнутом sidebar.
-* Зафиксирован API-контракт аналитики.
-* Страница стабильно отображается и работает на мок-данных.
-
-Что дальше (не реализовано):
-
-* Подключение live-данных из backend (замена моков).
-* Кэширование / агрегация (при росте данных).
-* Связь Analytics ↔ Performance ↔ SLA Engine.
-
-### Manager Analytics
-
-- **KPI summary (backend + frontend)** — ✅  
-  `GET /api/manager/analytics/summary/` подключён к странице `/analytics`, верхние KPI-карточки показывают реальные данные по джобам за период.
-
-- **Cleaner performance (backend + frontend)** — ✅  
-  `GET /api/manager/analytics/cleaners-performance/` используется в таблице и графике «Cleaner Performance», данные полностью берутся из backend.
-
-- **Trends + date range** — 🟡 planned  
-  Графики в блоке **Trends** пока используют статические данные. Следующий шаг — добавить контрол выбора периода на фронте и перевести графики (jobs completed, average duration, proof trend) на реальные аналитические эндпоинты.
----
-
-## 📱 СЛОЙ 1 — ИСПОЛНЕНИЕ (Mobile Cleaner App)
-
-*(без изменений)*
-
-👉 **Статус слоя 1:** рабочий MVP 🟡
+👉 Evidence слой архитектурно закрыт и не влияет на execution.
 
 ---
 
-## 🧑‍💼 СЛОЙ 2 — УПРАВЛЕНИЕ
+## Reports & PDF — подтверждённое поведение
 
-*(без изменений, состояние подтверждено)*
-
----
-
-## 💳 СЛОЙ 3 — КОММЕРЦИЯ
-
-*(без изменений)*
+* Weekly / Monthly SLA PDF доступны
+* Owner overview реализован в UI
+* Отдельного owner-PDF нет — **осознанно**
 
 ---
 
-## 🌍 СЛОЙ 4 — МАРКЕТИНГ
+## Checklist Templates & Job Checklist
 
-*(без изменений)*
+### Backend
+
+* ChecklistTemplate / ChecklistTemplateItem ✅
+* автоинициализация дефолтных шаблонов ✅
+* валидация шаблонов ✅
+* интеграция с Create Job Meta API ✅
+
+### Frontend
+
+* стабильный список шаблонов
+* preview + details в Create Job Drawer
+
+👉 Блок чеклистов **закрыт и прод-готов**.
 
 ---
 
-## 📊 СЛОЙ 5 — МАСШТАБ
+## Cleaner Authentication
 
-* Performance aggregation (SLA-based) ✅
-* Performance reports (UI + PDF + Email + audit log) ✅
-* Аналитика ⛔
+* Phone + PIN login
+* Cleaner accounts создаёт manager
+* PIN reset — только manager
+* PIN показывается один раз
+* self-service recovery отсутствует (by design) ✅
+
+---
+
+## Job PDF (v1)
+
+* полный evidence PDF:
+
+  * summary
+  * notes
+  * photos
+  * checklist
+  * audit
+  * SLA & proof
+* SLA — backend source of truth
+* mobile enforcement снижает нарушения
+* reports не затронуты
+
+---
+
+## Job PDF Email (v1)
+
+* бизнес-ориентированный email
+* SLA статус и контекст job
+* каждая отправка логируется
+
+---
+
+## Email History (Reports)
+
+✅ Реализована единая история email-отправок:
+
+* job / weekly / monthly
+* фильтры, календарь
+* статусы доставки
+* серверная пагинация
+
+Раздел стабилен и готов для аудита.
+
+---
+
+## Job Timeline & SLA — текущее состояние
+
+* полный execution flow
+* violations-only filter как audit-инструмент
+* empty violations = fully compliant job
+* логика финальная для v1 / v1.5
+
+---
+
+## SLA & Force-complete (фактическое состояние)
+
+### Backend
+
+* `POST /api/manager/jobs/{id}/force-complete/`
+* manager-only
+* переводит job в completed
+* SLA = violated
+* сохраняет:
+
+  * force_completed
+  * force_completed_at
+  * force_completed_by
+
+### Frontend
+
+* SLA & Proof блок
+* Force complete modal
+* выбор причины + комментарий
+* автообновление Job details
+
+### ⚙️ SLA Engine
+
+SLA Engine v1 — ядро ✅
+- compute_sla_status_and_reasons_for_job(job) — единый helper для оценки SLA.
+- Используется в:
+  - Analytics summary (`issues_detected`);
+  - Cleaner performance (`issues`);
+  - Weekly/Monthly reports (violations, top_reasons).
+
+SLA Analytics v2 — причинный разбор нарушений ✅
+- Реализован эндпоинт:
+  - `GET /api/manager/analytics/sla-breakdown/`
+- Даёт:
+  - общее количество нарушений и долю (`violation_rate`);
+  - разбивку по причинам (`reasons`);
+  - топ клинеров по нарушениям (`top_cleaners`);
+  - топ локаций по нарушениям (`top_locations`).
+
+Ограничения текущей версии:
+- нет real-time алертов и конфигурируемых порогов;
+- нет отдельного UI-таба “SLA Performance” (используется Analytics page);
+- нет клиент-специфичных SLA-профилей (всё считается по общим правилам).
+
+---
+
+## Analytics
+
+### Analytics — v1 (Manager) ✅
+
+* KPI summary — live data
+* Cleaner performance — live data
+* Trends (jobs, duration, proof) — live data
+* Unified date range (date_from / date_to)
+* UI подключён к backend без моков
+
+Ограничения v1:
+* без SLA breakdown по причинам
+* без алертов и скоринга
+```
+👉 Важно: **убираем противоречие** — сейчас Analytics реально работает.
+
+## Analytics / SLA
+
+* SLA-движок (расчёт `sla_status` + `sla_reasons` для Job) — ✅ реализован.
+* `GET /api/manager/analytics/sla-breakdown/` — ✅ реализован, подключён к Analytics UI
+  (блок SLA Performance: overview, violation reasons, hotspots по клинерам и локациям).
+* Reports (weekly / monthly) пока считают SLA отдельно — 🟡 потенциальная зона
+  для выравнивания с Analytics v1/v2.
+
+
+### Статус
+
+* UI + API контракт — ✅
+* Live data — ⛔ (кроме summary и cleaners)
+
+### Реализовано
+
+* `/analytics`
+* KPI summary (backend)
+* Cleaner performance (backend)
+* layout fixes
+
+### Не реализовано
+
+* trends с live data
+* кеширование
+* связка с SLA Engine
+
+### Design decision: Jobs vs Job History separation
+
+**Jobs** and **Job History** are intentionally separated by purpose.
+
+- **Jobs** is an operational view for day-to-day management:
+  - Today — jobs scheduled for the current date.
+  - Upcoming — jobs scheduled for future dates.
+  - Completed — only recently completed jobs (last 30 days by default).
+
+- **Job History** is the full historical archive:
+  - supports arbitrary date ranges,
+  - filtering and analysis,
+  - used for audits, reporting, and long-term review.
+
+This decision prevents the Jobs page from becoming overloaded over time,
+keeps the UI performant, and clearly separates operational workflows
+from historical analysis.
+
+---
+**Design decision: Reports vs Analytics separation**
+
+Reports and Analytics are intentionally separated at both UX and conceptual levels.
+
+* **Reports** answer *“what is happening and who is accountable”*.
+* **Analytics** answer *“how metrics evolve over time and why”*.
+
+Design rules:
+
+* Reports are narrative and summary-driven.
+* Reports use the same data source as PDFs and emails.
+* Owner access is summary-only, manager access is actionable.
+* No drill-down from owner view is allowed.
+
+** Design decision: Layout widening**
+
+Main application layout was adjusted to reduce excessive horizontal whitespace.
+Content containers now align closer to the sidebar, improving readability of tables and reports without changing navigation or sidebar behavior.
+
+Design decisions
+
+Reports ≠ Analytics ≠ Job History — слои сознательно разведены.
+Owner view зафиксирован как read-only summary без drill-down.
+SLA-метрики считаются от violations, а не от jobs.
+
+Current state
+
+Исправлены и стабилизированы Analytics и SLA breakdown (/manager/analytics/sla-breakdown/).
+Добавлен /api/health/ для web/mobile liveness-check.
+Reports и Email history приведены к единой логике и визуальной иерархии.
+
+Mobile Cleaner App успешно работает с тем же backend, что и web (единый API_BASE_URL).
+---
+
+
+
+## 📱 СЛОЙ 1 — Mobile Cleaner App
+
+Статус: 🟡 рабочий MVP
+
+---
+
+## 🧑‍💼 СЛОЙ 2 — Управление
+
+*(состояние подтверждено)*
+
+---
+
+## 💳 СЛОЙ 3 — Коммерция
+
+*(без биллинга)*
+
+---
+
+## 🌍 СЛОЙ 4 — Маркетинг
+
+*(базовые заготовки)*
+
+---
+
+## 📊 СЛОЙ 5 — Масштаб
+
+* Performance aggregation ✅
+* Reports (UI + PDF + Email + audit) ✅
+* Analytics ✅
 * Multi-company roles ⛔
 * Audit exports ⛔
 
 ---
 
-## ⚠️ Known limitations (as of today)
+## Known limitations
 
-* Нет реального биллинга и платных планов.
-* Trial-лимиты действуют только на jobs и cleaners.
-* Mobile camera UX требует стабилизации.
-* Locations без продвинутых фич.
-* **Email-доставка зависит от настроек SMTP (`EMAIL_BACKEND`)**:
-
-  * логика и UX реализованы полностью
-  * фактическая доставляемость определяется инфраструктурой
+* Нет биллинга
+* Trial ограничен jobs / cleaners
+* Mobile camera UX нестабилен
+* Locations без advanced-фич
+* Email-доставка зависит от SMTP
 
 ---
 
-## Итог — коротко и честно
+## Итог
 
-* Reports v2 **реализован полностью**:
+* Reports v2 реализован полностью
+* Архитектура чистая, без костылей
+* Проект — **операционный SaaS без биллинга**,
+  с реальной управленческой ценностью и контролем качества
 
-  * выбор email
-  * реальная отправка
-  * аудит всех отправок
-* Архитектура отчётов закрыта без костылей.
-* Проект находится в состоянии **готового операционного SaaS без биллинга**, но с реальной управленческой ценностью.
+**Статусы:**
 
----
+* Слой 0 — DONE ✅
+* Слой 1 — MVP 🟡
+* Слой 2 — стабилен ✅
+* Слой 3 — готов к биллингу
+* Слои 4–5 — заделы
 
-## Итог — коротко и честно
-
-* Слой 0 — полностью закрыт ✅
-* Слой 1 — рабочий MVP 🟡
-* Слой 2 — менеджерский уровень стабилен ✅
-* Слой 3 — готов к биллингу, но без платежей
-* Слои 4–5 — базовые заготовки, но Performance / Reports уже дают управленческую ценность ✅
-
-👉 **Проект — устойчивый операционный продукт с реальным контролем качества (micro-SLA v1 + reason codes), trial-онбордингом и self-serve signup, но без биллинга.**
+👉 Устойчивый продукт с micro-SLA, audit trail, trial-onboarding и self-serve signup.

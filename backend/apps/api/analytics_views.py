@@ -1,417 +1,696 @@
-# apps/api/analytics_views.py
-
+# backend/apps/api/analytics_views.py
 from datetime import datetime, timedelta
-from collections import defaultdict
+from collections import Counter
 
 from django.utils import timezone
-from django.db.models import Count
-from django.db.models.functions import TruncDate
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.jobs.models import Job, JobPhoto, JobChecklistItem
+from apps.jobs.models import Job, JobPhoto
 
 from .permissions import IsManagerUser as IsManager
-from .views import compute_sla_status_and_reasons_for_job
+from .views_reports import compute_sla_status_and_reasons_for_job
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])
 def analytics_summary(request):
-  """
-  GET /api/manager/analytics/summary/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    """
+    GET /api/manager/analytics/summary/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
 
-  Метрики:
-  - jobs_completed: количество завершённых джобов за период
-  - on_time_completion_rate: доля completed jobs, завершённых до planned end
-  - proof_completion_rate: доля completed jobs с полным proof
-  - avg_job_duration_hours: средняя длительность (по факту)
-  - issues_detected: количество jobs с SLA-нарушениями
-  """
-  user = request.user
-  company = getattr(user, "company", None)
+    Метрики:
+    - jobs_completed: количество завершённых джобов за период
+    - on_time_completion_rate: доля completed jobs, завершённых до planned end
+    - proof_completion_rate: доля completed jobs с полным proof
+    - avg_job_duration_hours: средняя длительность (по факту)
+    - issues_detected: количество jobs с SLA-нарушениями
+    """
+    user = request.user
+    company = getattr(user, "company", None)
 
-  if not company:
-    return Response(
-      {"detail": "Manager has no company."},
-      status=status.HTTP_400_BAD_REQUEST,
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --- разбор диапазона дат ---
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
+
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # --- выборка completed jobs компании за период по actual_end_time ---
+    qs = (
+        Job.objects.filter(
+            company=company,
+            status=Job.STATUS_COMPLETED,
+            actual_end_time__isnull=False,
+            actual_end_time__date__gte=date_from,
+            actual_end_time__date__lte=date_to,
+        )
+        .select_related("cleaner", "location")
+        .prefetch_related("photos", "checklist_items")
     )
 
-  # --- разбор диапазона дат ---
-  date_from_str = (request.query_params.get("date_from") or "").strip()
-  date_to_str = (request.query_params.get("date_to") or "").strip()
+    jobs_completed = qs.count()
 
-  if not date_from_str or not date_to_str:
-    return Response(
-      {
-        "detail": "date_from and date_to query params are required: YYYY-MM-DD"
-      },
-      status=status.HTTP_400_BAD_REQUEST,
+    on_time_numerator = 0
+    on_time_denominator = 0
+    proof_ok_count = 0
+    duration_sum_hours = 0.0
+    duration_count = 0
+    issues_detected = 0
+
+    tz = timezone.get_current_timezone()
+
+    for job in qs:
+        # --- фактическая длительность job ---
+        if job.actual_start_time and job.actual_end_time:
+            delta = job.actual_end_time - job.actual_start_time
+            duration_hours = delta.total_seconds() / 3600.0
+            duration_sum_hours += duration_hours
+            duration_count += 1
+
+        # --- on-time: сравнение actual_end_time с planned end (scheduled_date + scheduled_end_time) ---
+        if job.actual_end_time and job.scheduled_date and job.scheduled_end_time is not None:
+            planned_end_naive = datetime.combine(job.scheduled_date, job.scheduled_end_time)
+            if timezone.is_naive(planned_end_naive):
+                planned_end = timezone.make_aware(planned_end_naive, tz)
+            else:
+                planned_end = planned_end_naive
+
+            on_time_denominator += 1
+            if job.actual_end_time <= planned_end:
+                on_time_numerator += 1
+
+        # --- proof flags: before/after + checklist ---
+        photos = list(job.photos.all())
+        before_uploaded = any(p.photo_type == JobPhoto.TYPE_BEFORE for p in photos)
+        after_uploaded = any(p.photo_type == JobPhoto.TYPE_AFTER for p in photos)
+
+        checklist_items = list(job.checklist_items.all())
+        if checklist_items:
+            # required: is_required=True, если нет ни одного required — считаем все обязательными
+            required_items = [
+                it for it in checklist_items if getattr(it, "is_required", True)
+            ]
+            if not required_items:
+                required_items = checklist_items
+            checklist_completed = all(
+                bool(getattr(it, "is_completed", False)) for it in required_items
+            )
+        else:
+            # если вообще нет чек-листа — считаем, что по чек-листу ok
+            checklist_completed = True
+
+        if before_uploaded and after_uploaded and checklist_completed:
+            proof_ok_count += 1
+
+        # --- SLA issues через существующий helper ---
+        sla_status, _reasons = compute_sla_status_and_reasons_for_job(job)
+        if sla_status == "violated":
+            issues_detected += 1
+
+    on_time_completion_rate = (
+        float(on_time_numerator) / float(on_time_denominator)
+        if on_time_denominator
+        else 0.0
+    )
+    proof_completion_rate = (
+        float(proof_ok_count) / float(jobs_completed)
+        if jobs_completed
+        else 0.0
+    )
+    avg_job_duration_hours = (
+        float(duration_sum_hours) / float(duration_count)
+        if duration_count
+        else 0.0
     )
 
-  try:
-    date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
-    date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
-  except ValueError:
-    return Response(
-      {"detail": "Invalid date format. Use YYYY-MM-DD."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
-
-  if date_from > date_to:
-    return Response(
-      {"detail": "date_from cannot be greater than date_to."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
-
-  # --- выборка completed jobs компании за период по actual_end_time ---
-  qs = (
-    Job.objects.filter(
-      company=company,
-      status=Job.STATUS_COMPLETED,
-      actual_end_time__isnull=False,
-      actual_end_time__date__gte=date_from,
-      actual_end_time__date__lte=date_to,
-    )
-    .select_related("cleaner", "location")
-    .prefetch_related("photos", "checklist_items")
-  )
-
-  jobs_completed = qs.count()
-
-  on_time_numerator = 0
-  on_time_denominator = 0
-  proof_ok_count = 0
-  duration_sum_hours = 0.0
-  duration_count = 0
-  issues_detected = 0
-
-  tz = timezone.get_current_timezone()
-
-  for job in qs:
-    # --- фактическая длительность job ---
-    if job.actual_start_time and job.actual_end_time:
-      delta = job.actual_end_time - job.actual_start_time
-      duration_hours = delta.total_seconds() / 3600.0
-      duration_sum_hours += duration_hours
-      duration_count += 1
-
-    # --- on-time: сравнение actual_end_time с planned end (scheduled_date + scheduled_end_time) ---
-    if job.actual_end_time and job.scheduled_date and job.scheduled_end_time is not None:
-      planned_end_naive = datetime.combine(job.scheduled_date, job.scheduled_end_time)
-      if timezone.is_naive(planned_end_naive):
-        planned_end = timezone.make_aware(planned_end_naive, tz)
-      else:
-        planned_end = planned_end_naive
-
-      on_time_denominator += 1
-      if job.actual_end_time <= planned_end:
-        on_time_numerator += 1
-
-    # --- proof flags: before/after + checklist ---
-    photos = list(job.photos.all())
-    before_uploaded = any(p.photo_type == JobPhoto.TYPE_BEFORE for p in photos)
-    after_uploaded = any(p.photo_type == JobPhoto.TYPE_AFTER for p in photos)
-
-    checklist_items = list(job.checklist_items.all())
-    if checklist_items:
-      # required: is_required=True, если нет ни одного required — считаем все обязательными
-      required_items = [
-        it for it in checklist_items if getattr(it, "is_required", True)
-      ]
-      if not required_items:
-        required_items = checklist_items
-      checklist_completed = all(
-        bool(getattr(it, "is_completed", False)) for it in required_items
-      )
-    else:
-      # если вообще нет чек-листа — считаем, что по чек-листу ok
-      checklist_completed = True
-
-    if before_uploaded and after_uploaded and checklist_completed:
-      proof_ok_count += 1
-
-    # --- SLA issues через существующий helper ---
-    sla_status, _reasons = compute_sla_status_and_reasons_for_job(job)
-    if sla_status == "violated":
-      issues_detected += 1
-
-  on_time_completion_rate = (
-    float(on_time_numerator) / float(on_time_denominator)
-    if on_time_denominator
-    else 0.0
-  )
-  proof_completion_rate = (
-    float(proof_ok_count) / float(jobs_completed)
-    if jobs_completed
-    else 0.0
-  )
-  avg_job_duration_hours = (
-    float(duration_sum_hours) / float(duration_count)
-    if duration_count
-    else 0.0
-  )
-
-  data = {
-    "jobs_completed": jobs_completed,
-    "on_time_completion_rate": on_time_completion_rate,
-    "proof_completion_rate": proof_completion_rate,
-    "avg_job_duration_hours": avg_job_duration_hours,
-    "issues_detected": issues_detected,
-  }
-  return Response(data, status=status.HTTP_200_OK)
+    data = {
+        "jobs_completed": jobs_completed,
+        "on_time_completion_rate": on_time_completion_rate,
+        "proof_completion_rate": proof_completion_rate,
+        "avg_job_duration_hours": avg_job_duration_hours,
+        "issues_detected": issues_detected,
+    }
+    return Response(data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])
 def analytics_jobs_completed(request):
-  # TODO: реальный расчёт
-  return Response([])
+    """
+    GET /api/manager/analytics/jobs-completed/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+    Тренд по количеству завершённых jobs за период:
+
+    [
+      { "date": "2026-01-01", "jobs_completed": 0 },
+      ...
+    ]
+    """
+    user = request.user
+    company = getattr(user, "company", None)
+
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
+
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # только completed jobs по дате фактического завершения
+    qs = Job.objects.filter(
+        company=company,
+        status=Job.STATUS_COMPLETED,
+        actual_end_time__isnull=False,
+        actual_end_time__date__gte=date_from,
+        actual_end_time__date__lte=date_to,
+    )
+
+    # агрегируем по дате
+    by_day: dict = {}
+
+    for job in qs:
+        day = job.actual_end_time.date()
+        by_day[day] = by_day.get(day, 0) + 1
+
+    data = []
+    current = date_from
+    while current <= date_to:
+        data.append(
+            {
+                "date": current.isoformat(),
+                "jobs_completed": by_day.get(current, 0),
+            }
+        )
+        current += timedelta(days=1)
+
+    return Response(data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])
 def analytics_job_duration(request):
-  """
-  GET /api/manager/analytics/job-duration/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    """
+    GET /api/manager/analytics/job-duration/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
 
-  Возвращает массив точек по дням:
-  [
-    { "date": "2026-01-20", "avg_job_duration_hours": 1.75 },
-    ...
-  ]
+    Возвращает массив точек по дням:
+    [
+      { "date": "2026-01-20", "avg_job_duration_hours": 1.75 },
+      ...
+    ]
 
-  Основано на дате фактического завершения job (actual_end_time).
-  В расчёт попадают только jobs, у которых есть и actual_start_time, и actual_end_time.
-  """
-  user = request.user
-  company = getattr(user, "company", None)
+    Основано на дате фактического завершения job (actual_end_time).
+    В расчёт попадают только jobs, у которых есть и actual_start_time, и actual_end_time.
+    """
+    user = request.user
+    company = getattr(user, "company", None)
 
-  if not company:
-    return Response(
-      {"detail": "Manager has no company."},
-      status=status.HTTP_400_BAD_REQUEST,
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
+
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # только completed jobs с валидным интервалом времени
+    qs = (
+        Job.objects.filter(
+            company=company,
+            status=Job.STATUS_COMPLETED,
+            actual_start_time__isnull=False,
+            actual_end_time__isnull=False,
+            actual_end_time__date__gte=date_from,
+            actual_end_time__date__lte=date_to,
+        )
+        .only("id", "actual_start_time", "actual_end_time")
     )
 
-  date_from_str = (request.query_params.get("date_from") or "").strip()
-  date_to_str = (request.query_params.get("date_to") or "").strip()
+    # Собираем суммы длительности и количество по дням
+    by_day: dict = {}
 
-  if not date_from_str or not date_to_str:
-    return Response(
-      {
-        "detail": "date_from and date_to query params are required: YYYY-MM-DD"
-      },
-      status=status.HTTP_400_BAD_REQUEST,
-    )
+    for job in qs:
+        day = job.actual_end_time.date()
+        delta = job.actual_end_time - job.actual_start_time
+        duration_hours = delta.total_seconds() / 3600.0
 
-  try:
-    date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
-    date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
-  except ValueError:
-    return Response(
-      {"detail": "Invalid date format. Use YYYY-MM-DD."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
+        if day not in by_day:
+            by_day[day] = {"sum_hours": 0.0, "count": 0}
 
-  if date_from > date_to:
-    return Response(
-      {"detail": "date_from cannot be greater than date_to."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
+        by_day[day]["sum_hours"] += duration_hours
+        by_day[day]["count"] += 1
 
-  # только completed jobs с валидным интервалом времени
-  qs = (
-    Job.objects.filter(
-      company=company,
-      status=Job.STATUS_COMPLETED,
-      actual_start_time__isnull=False,
-      actual_end_time__isnull=False,
-      actual_end_time__date__gte=date_from,
-      actual_end_time__date__lte=date_to,
-    )
-    .only("id", "actual_start_time", "actual_end_time")
-  )
+    # Формируем ответ, без дыр по датам
+    data = []
+    current = date_from
+    while current <= date_to:
+        bucket = by_day.get(current)
+        if bucket and bucket["count"] > 0:
+            avg_hours = float(bucket["sum_hours"]) / float(bucket["count"])
+        else:
+            avg_hours = 0.0
 
-  # Собираем суммы длительности и количество по дням
-  by_day: dict = {}
+        data.append(
+            {
+                "date": current.isoformat(),
+                "avg_job_duration_hours": avg_hours,
+            }
+        )
+        current += timedelta(days=1)
 
-  for job in qs:
-    day = job.actual_end_time.date()
-    delta = job.actual_end_time - job.actual_start_time
-    duration_hours = delta.total_seconds() / 3600.0
-
-    if day not in by_day:
-      by_day[day] = {"sum_hours": 0.0, "count": 0}
-
-    by_day[day]["sum_hours"] += duration_hours
-    by_day[day]["count"] += 1
-
-  # Формируем ответ, без дыр по датам
-  data = []
-  current = date_from
-  while current <= date_to:
-    bucket = by_day.get(current)
-    if bucket and bucket["count"] > 0:
-      avg_hours = float(bucket["sum_hours"]) / float(bucket["count"])
-    else:
-      avg_hours = 0.0
-
-    data.append(
-      {
-        "date": current.isoformat(),
-        "avg_job_duration_hours": avg_hours,
-      }
-    )
-    current += timedelta(days=1)
-
-  return Response(data, status=status.HTTP_200_OK)
+    return Response(data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])
 def analytics_proof_completion(request):
-  """
-  GET /api/manager/analytics/proof-completion/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+    """
+    GET /api/manager/analytics/proof-completion/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
 
-  Тренд по proof:
+    Тренд по proof:
 
-  [
-    {
-      "date": "2026-01-20",
-      "before_photo_rate": 0.95,
-      "after_photo_rate": 0.92,
-      "checklist_rate": 0.88
-    },
-    ...
-  ]
-
-  Основано на дате фактического завершения job (actual_end_time).
-  В расчёт попадают только completed jobs.
-  """
-  user = request.user
-  company = getattr(user, "company", None)
-
-  if not company:
-    return Response(
-      {"detail": "Manager has no company."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
-
-  date_from_str = (request.query_params.get("date_from") or "").strip()
-  date_to_str = (request.query_params.get("date_to") or "").strip()
-
-  if not date_from_str or not date_to_str:
-    return Response(
+    [
       {
-        "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+        "date": "2026-01-20",
+        "before_photo_rate": 0.95,
+        "after_photo_rate": 0.92,
+        "checklist_rate": 0.88
       },
-      status=status.HTTP_400_BAD_REQUEST,
+      ...
+    ]
+
+    Основано на дате фактического завершения job (actual_end_time).
+    В расчёт попадают только completed jobs.
+    """
+    user = request.user
+    company = getattr(user, "company", None)
+
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
+
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # только completed jobs с реальным actual_end_time в диапазоне
+    qs = (
+        Job.objects.filter(
+            company=company,
+            status=Job.STATUS_COMPLETED,
+            actual_end_time__isnull=False,
+            actual_end_time__date__gte=date_from,
+            actual_end_time__date__lte=date_to,
+        )
+        .prefetch_related("photos", "checklist_items")
     )
 
-  try:
-    date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
-    date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
-  except ValueError:
-    return Response(
-      {"detail": "Invalid date format. Use YYYY-MM-DD."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
+    # агрегаты по дням
+    by_day: dict = {}
 
-  if date_from > date_to:
-    return Response(
-      {"detail": "date_from cannot be greater than date_to."},
-      status=status.HTTP_400_BAD_REQUEST,
-    )
+    for job in qs:
+        day = job.actual_end_time.date()
 
-  # только completed jobs с реальным actual_end_time в диапазоне
-  qs = (
-    Job.objects.filter(
-      company=company,
-      status=Job.STATUS_COMPLETED,
-      actual_end_time__isnull=False,
-      actual_end_time__date__gte=date_from,
-      actual_end_time__date__lte=date_to,
-    )
-    .prefetch_related("photos", "checklist_items")
-  )
+        bucket = by_day.get(day)
+        if bucket is None:
+            bucket = {
+                "total": 0,
+                "with_before": 0,
+                "with_after": 0,
+                "checklist_ok": 0,
+            }
+            by_day[day] = bucket
 
-  # агрегаты по дням
-  by_day: dict = {}
+        bucket["total"] += 1
 
-  for job in qs:
-    day = job.actual_end_time.date()
+        # --- proof: before / after ---
+        photos = list(job.photos.all())
+        before_uploaded = any(p.photo_type == JobPhoto.TYPE_BEFORE for p in photos)
+        after_uploaded = any(p.photo_type == JobPhoto.TYPE_AFTER for p in photos)
 
-    bucket = by_day.get(day)
-    if bucket is None:
-      bucket = {
-        "total": 0,
-        "with_before": 0,
-        "with_after": 0,
-        "checklist_ok": 0,
-      }
-      by_day[day] = bucket
+        if before_uploaded:
+            bucket["with_before"] += 1
+        if after_uploaded:
+            bucket["with_after"] += 1
 
-    bucket["total"] += 1
+        # --- proof: checklist ---
+        checklist_items = list(job.checklist_items.all())
+        if checklist_items:
+            required_items = [
+                it for it in checklist_items if getattr(it, "is_required", True)
+            ]
+            if not required_items:
+                required_items = checklist_items
+            checklist_completed = all(
+                bool(getattr(it, "is_completed", False)) for it in required_items
+            )
+        else:
+            # Нет чек-листа вообще — считаем, что по чек-листу ok
+            checklist_completed = True
 
-    # --- proof: before / after ---
-    photos = list(job.photos.all())
-    before_uploaded = any(p.photo_type == JobPhoto.TYPE_BEFORE for p in photos)
-    after_uploaded = any(p.photo_type == JobPhoto.TYPE_AFTER for p in photos)
+        if checklist_completed:
+            bucket["checklist_ok"] += 1
 
-    if before_uploaded:
-      bucket["with_before"] += 1
-    if after_uploaded:
-      bucket["with_after"] += 1
+    # формируем ответ, без дыр по датам
+    data = []
+    current = date_from
+    while current <= date_to:
+        bucket = by_day.get(current)
 
-    # --- proof: checklist ---
-    checklist_items = list(job.checklist_items.all())
-    if checklist_items:
-      required_items = [
-        it for it in checklist_items if getattr(it, "is_required", True)
+        if bucket and bucket["total"] > 0:
+            total = float(bucket["total"])
+            before_rate = float(bucket["with_before"]) / total
+            after_rate = float(bucket["with_after"]) / total
+            checklist_rate = float(bucket["checklist_ok"]) / total
+        else:
+            before_rate = 0.0
+            after_rate = 0.0
+            checklist_rate = 0.0
+
+        data.append(
+            {
+                "date": current.isoformat(),
+                "before_photo_rate": before_rate,
+                "after_photo_rate": after_rate,
+                "checklist_rate": checklist_rate,
+            }
+        )
+
+        current += timedelta(days=1)
+
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsManager])
+def analytics_sla_breakdown(request):
+    """
+    GET /api/manager/analytics/sla-breakdown/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+    SLA breakdown по периоду:
+
+    {
+      "jobs_completed": 10,
+      "violations_count": 4,
+      "violation_rate": 0.4,
+      "reasons": [
+        { "code": "late_start", "count": 2 },
+        { "code": "checklist_not_completed", "count": 1 },
+        { "code": "proof_missing", "count": 1 }
+      ],
+      "top_cleaners": [
+        {
+          "cleaner_id": 3,
+          "cleaner_name": "Ahmed Hassan",
+          "jobs_completed": 5,
+          "violations_count": 2,
+          "violation_rate": 0.4
+        }
+      ],
+      "top_locations": [
+        {
+          "location_id": 7,
+          "location_name": "Dubai Marina",
+          "jobs_completed": 4,
+          "violations_count": 2,
+          "violation_rate": 0.5
+        }
       ]
-      if not required_items:
-        required_items = checklist_items
-      checklist_completed = all(
-        bool(getattr(it, "is_completed", False)) for it in required_items
-      )
-    else:
-      # Нет чек-листа вообще — считаем, что по чек-листу ok
-      checklist_completed = True
+    }
 
-    if checklist_completed:
-      bucket["checklist_ok"] += 1
+    Основано на completed jobs с actual_end_time в диапазоне.
+    Причины берутся из compute_sla_status_and_reasons_for_job(job).
+    """
+    user = request.user
+    company = getattr(user, "company", None)
 
-  # формируем ответ, без дыр по датам
-  data = []
-  current = date_from
-  while current <= date_to:
-    bucket = by_day.get(current)
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    if bucket and bucket["total"] > 0:
-      total = float(bucket["total"])
-      before_rate = float(bucket["with_before"]) / total
-      after_rate = float(bucket["with_after"]) / total
-      checklist_rate = float(bucket["checklist_ok"]) / total
-    else:
-      before_rate = 0.0
-      after_rate = 0.0
-      checklist_rate = 0.0
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
 
-    data.append(
-      {
-        "date": current.isoformat(),
-        "before_photo_rate": before_rate,
-        "after_photo_rate": after_rate,
-        "checklist_rate": checklist_rate,
-      }
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    qs = (
+        Job.objects.filter(
+            company=company,
+            status=Job.STATUS_COMPLETED,
+            actual_end_time__isnull=False,
+            actual_end_time__date__gte=date_from,
+            actual_end_time__date__lte=date_to,
+        )
+        .select_related("cleaner", "location")
     )
 
-    current += timedelta(days=1)
+    jobs_completed = qs.count()
+    violations_count = 0
 
-  return Response(data, status=status.HTTP_200_OK)
+    reasons_counter: Counter[str] = Counter()
+    cleaners_stats: dict[object, dict] = {}
+    locations_stats: dict[object, dict] = {}
+
+    for job in qs:
+        sla_status, reasons = compute_sla_status_and_reasons_for_job(job)
+
+        # нормализуем reasons к списку строк
+        if isinstance(reasons, str):
+            reasons_list = [reasons]
+        elif isinstance(reasons, (list, tuple)):
+            reasons_list = [str(r) for r in reasons]
+        else:
+            reasons_list = []
+
+        violated = sla_status == "violated"
+
+        # --- cleaner bucket ---
+        cleaner = getattr(job, "cleaner", None)
+        cleaner_id = getattr(cleaner, "id", None)
+
+        if cleaner_id not in cleaners_stats:
+            cleaners_stats[cleaner_id] = {
+                "cleaner_id": cleaner_id,
+                "cleaner_name": (
+                    getattr(cleaner, "full_name", None)
+                    or getattr(cleaner, "email", None)
+                    or "—"
+                ),
+                "jobs_completed": 0,
+                "violations_count": 0,
+            }
+
+        c_stats = cleaners_stats[cleaner_id]
+        c_stats["jobs_completed"] += 1
+
+        # --- location bucket ---
+        location = getattr(job, "location", None)
+        location_id = getattr(location, "id", None)
+
+        if location_id not in locations_stats:
+            locations_stats[location_id] = {
+                "location_id": location_id,
+                "location_name": getattr(location, "name", None) or "—",
+                "jobs_completed": 0,
+                "violations_count": 0,
+            }
+
+        l_stats = locations_stats[location_id]
+        l_stats["jobs_completed"] += 1
+
+        if not violated:
+            continue
+
+        violations_count += 1
+        c_stats["violations_count"] += 1
+        l_stats["violations_count"] += 1
+
+        for code in reasons_list:
+            if code:
+                reasons_counter[code] += 1
+
+    violation_rate = (
+        float(violations_count) / float(jobs_completed)
+        if jobs_completed
+        else 0.0
+    )
+
+    reasons = [
+        {"code": code, "count": count}
+        for code, count in reasons_counter.most_common()
+    ]
+
+    top_cleaners = []
+    for stats in cleaners_stats.values():
+        jobs = stats["jobs_completed"] or 0
+        violations = stats["violations_count"] or 0
+        rate = float(violations) / float(jobs) if jobs else 0.0
+        top_cleaners.append(
+            {
+                "cleaner_id": stats["cleaner_id"],
+                "cleaner_name": stats["cleaner_name"],
+                "jobs_completed": jobs,
+                "violations_count": violations,
+                "violation_rate": rate,
+            }
+        )
+
+    top_locations = []
+    for stats in locations_stats.values():
+        jobs = stats["jobs_completed"] or 0
+        violations = stats["violations_count"] or 0
+        rate = float(violations) / float(jobs) if jobs else 0.0
+        top_locations.append(
+            {
+                "location_id": stats["location_id"],
+                "location_name": stats["location_name"],
+                "jobs_completed": jobs,
+                "violations_count": violations,
+                "violation_rate": rate,
+            }
+        )
+
+    # сортируем: по числу нарушений, затем по количеству jobs
+    top_cleaners.sort(
+        key=lambda x: (-x["violations_count"], -x["jobs_completed"], x["cleaner_name"])
+    )
+    top_locations.sort(
+        key=lambda x: (-x["violations_count"], -x["jobs_completed"], x["location_name"])
+    )
+
+    data = {
+        "jobs_completed": jobs_completed,
+        "violations_count": violations_count,
+        "violation_rate": violation_rate,
+        "reasons": reasons,
+        "top_cleaners": top_cleaners,
+        "top_locations": top_locations,
+    }
+    return Response(data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
