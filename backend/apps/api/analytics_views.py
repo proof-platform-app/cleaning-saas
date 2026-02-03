@@ -239,6 +239,119 @@ def analytics_jobs_completed(request):
 
     return Response(data, status=status.HTTP_200_OK)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsManager])
+def analytics_violations_trend(request):
+    """
+    GET /api/manager/analytics/violations-trend/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+    Тренд SLA-нарушений по дням.
+
+    Формат ответа:
+
+    [
+      {
+        "date": "2026-01-20",
+        "jobs_completed": 5,
+        "jobs_with_violations": 2,
+        "violation_rate": 0.4
+      },
+      ...
+    ]
+
+    Основано на completed jobs компании, завершённых в диапазоне (actual_end_time.date).
+    SLA-статус и причины берутся из compute_sla_status_and_reasons_for_job(job).
+    """
+    user = request.user
+    company = getattr(user, "company", None)
+
+    if not company:
+        return Response(
+            {"detail": "Manager has no company."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    date_from_str = (request.query_params.get("date_from") or "").strip()
+    date_to_str = (request.query_params.get("date_to") or "").strip()
+
+    if not date_from_str or not date_to_str:
+        return Response(
+            {
+                "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+        date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"detail": "Invalid date format. Use YYYY-MM-DD."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if date_from > date_to:
+        return Response(
+            {"detail": "date_from cannot be greater than date_to."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # completed jobs компании по дате фактического завершения
+    qs = (
+        Job.objects.filter(
+            company=company,
+            status=Job.STATUS_COMPLETED,
+            actual_end_time__isnull=False,
+            actual_end_time__date__gte=date_from,
+            actual_end_time__date__lte=date_to,
+        )
+        .prefetch_related("photos", "checklist_items")
+    )
+
+    # агрегаты по дням
+    by_day: dict = {}
+
+    for job in qs:
+        day = job.actual_end_time.date()
+
+        bucket = by_day.get(day)
+        if bucket is None:
+            bucket = {"jobs_completed": 0, "jobs_with_violations": 0}
+            by_day[day] = bucket
+
+        bucket["jobs_completed"] += 1
+
+        sla_status, _reasons = compute_sla_status_and_reasons_for_job(job)
+        if sla_status == "violated":
+            bucket["jobs_with_violations"] += 1
+
+    # формируем ответ без дыр по датам
+    data = []
+    current = date_from
+    while current <= date_to:
+        bucket = by_day.get(current, {"jobs_completed": 0, "jobs_with_violations": 0})
+        jobs_completed = bucket["jobs_completed"]
+        jobs_with_violations = bucket["jobs_with_violations"]
+
+        violation_rate = (
+            float(jobs_with_violations) / float(jobs_completed)
+            if jobs_completed
+            else 0.0
+        )
+
+        data.append(
+            {
+                "date": current.isoformat(),
+                "jobs_completed": jobs_completed,
+                "jobs_with_violations": jobs_with_violations,
+                "violation_rate": violation_rate,
+            }
+        )
+        current += timedelta(days=1)
+
+    return Response(data, status=status.HTTP_200_OK)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])

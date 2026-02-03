@@ -456,6 +456,7 @@ class ManagerViolationJobsView(APIView):
     """
     GET /api/manager/reports/violations/jobs/
     ?reason=...&period_start=YYYY-MM-DD&period_end=YYYY-MM-DD
+    &cleaner_id=...&location_id=...
     """
 
     authentication_classes = [TokenAuthentication]
@@ -474,6 +475,8 @@ class ManagerViolationJobsView(APIView):
         reason = (request.query_params.get("reason") or "").strip()
         period_start_str = (request.query_params.get("period_start") or "").strip()
         period_end_str = (request.query_params.get("period_end") or "").strip()
+        cleaner_id_str = (request.query_params.get("cleaner_id") or "").strip()
+        location_id_str = (request.query_params.get("location_id") or "").strip()
 
         VALID_SLA_REASONS = {
             "missing_before_photo",
@@ -483,9 +486,22 @@ class ManagerViolationJobsView(APIView):
             "missing_check_out",
         }
 
-        if not reason or reason not in VALID_SLA_REASONS:
+        # reason теперь опциональный, но если он есть — должен быть валидным
+        if reason and reason not in VALID_SLA_REASONS:
             return Response(
-                {"detail": "Invalid or missing 'reason' parameter."},
+                {"detail": "Invalid 'reason' parameter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # хотя бы один фильтр: reason / cleaner_id / location_id
+        if not (reason or cleaner_id_str or location_id_str):
+            return Response(
+                {
+                    "detail": (
+                        "At least one of 'reason', 'cleaner_id' or "
+                        "'location_id' must be provided."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -510,6 +526,27 @@ class ManagerViolationJobsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # парсим cleaner_id / location_id, если есть
+        cleaner_id = None
+        if cleaner_id_str:
+            try:
+                cleaner_id = int(cleaner_id_str)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid 'cleaner_id' parameter. Must be integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        location_id = None
+        if location_id_str:
+            try:
+                location_id = int(location_id_str)
+            except ValueError:
+                return Response(
+                    {"detail": "Invalid 'location_id' parameter. Must be integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         qs = (
             Job.objects.filter(
                 company=company,
@@ -527,8 +564,19 @@ class ManagerViolationJobsView(APIView):
             sla_status, reasons = compute_sla_status_and_reasons_for_job(job)
             reasons = reasons or []
 
-            if reason not in reasons:
+            # фильтрация по reason, если он задан
+            if reason and reason not in reasons:
                 continue
+
+            # фильтрация по cleaner_id, если задан
+            if cleaner_id is not None:
+                if not job.cleaner or job.cleaner.id != cleaner_id:
+                    continue
+
+            # фильтрация по location_id, если задан
+            if location_id is not None:
+                if not job.location or job.location.id != location_id:
+                    continue
 
             jobs_payload.append(
                 {
@@ -559,9 +607,12 @@ class ManagerViolationJobsView(APIView):
             "missing_check_out": "Missing check-out",
         }
 
+        # reason может быть пустым → аккуратно берём label
+        reason_label = reason_labels.get(reason, reason or "")
+
         payload = {
             "reason": reason,
-            "reason_label": reason_labels[reason],
+            "reason_label": reason_label,
             "period": {
                 "start": period_start_str,
                 "end": period_end_str,
@@ -576,7 +627,6 @@ class ManagerViolationJobsView(APIView):
         }
 
         return Response(payload, status=status.HTTP_200_OK)
-
 
 class ManagerReportEmailLogListView(APIView):
     """

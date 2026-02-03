@@ -337,7 +337,13 @@ urlpatterns = [
         analytics_views.analytics_sla_breakdown,
         name="manager-analytics-sla-breakdown-noslash",
     ),
+    path(
+        "manager/analytics/violations-trend/", 
+        analytics_views.analytics_violations_trend, 
+        name="manager-analytics-violations-trend"
+     ),
 
+     
     # =====================
     # Owner
     # =====================

@@ -2081,5 +2081,35 @@ Mobile / API base
 Web и Mobile обязаны использовать один и тот же API_BASE_URL.
 Для проверки сети используется /api/health/. Несовпадение base URL приводит к Network request failed и ошибкам логина/Analytics.
 ---
+### ## SLA Reports → Violations Drill-down
+
+Реализован сценарий перехода от агрегированных SLA-метрик к списку конкретных задач с нарушениями.
+
+На странице Reports кликабельными entry-point’ами являются:
+
+* элементы блока **Top SLA reasons**
+* строки в блоке **Cleaners with issues**
+* строки в блоке **Locations with issues**
+
+Каждый entry-point формирует переход на `ViolationJobsPage` с передачей:
+
+* `period_start`
+* `period_end`
+* одного фильтра: `reason`, `cleaner_id` или `location_id`
+
+### ## ViolationJobsPage
+
+Страница:
+
+* валидирует входные query-параметры
+* вызывает `getViolationJobs`
+* отображает таблицу job’ов с нарушениями SLA
+* использует `JobSidePanel` для быстрого просмотра (Quick view)
+* маппит данные reports-эндпоинта в минимальный `PlanningJob` без дополнительных backend-запросов
+
+Логика страницы строго read-only, без побочных эффектов.
+
+---
+
 
 # END OF DEV_BRIEF.md
