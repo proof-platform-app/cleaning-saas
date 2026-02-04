@@ -1,16 +1,41 @@
-// Mock analytics data for the UAE cleaning services dashboard
+// dubai-control/src/data/analyticsData.ts
+
+// Типы KPI живут здесь и используются и страницей, и компонентом карточки
+
+export type KPITrend = "positive" | "negative" | "neutral";
+// Варианты оформления KPI-карточек
+export type KPIVariant =
+  | "primary"   // нежно-синяя, как на Dashboard
+  | "success"   // зелёная, когда всё отлично
+  | "grey"   // серый / обычная
+  | "warning"   // жёлтая, предупреждение
+  | "danger";   // красная, всё плохо
 
 export interface KPIData {
-  label: string;
-  value: string | number;
+  id: string;
+  icon: string; // строковый ключ для iconMap в карточке
+  label: string; // короткое имя KPI (Jobs completed, Issues detected и т.п.)
+  value: string; // отображаемое значение
+
+  // старые демо-поля (используются для % и стрелок)
   change?: number;
   changeLabel?: string;
-  icon: string;
-  variant: "primary" | "success" | "warning" | "danger" | "neutral";
-  // короткое пояснение под KPI (опционально)
-  helper?: string;
+  trend?: KPITrend;
+  variant?: KPIVariant;
+
+  // новые поля, которые может задать страница Analytics
+  title?: string; // основной заголовок (override label при необходимости)
+  description?: string; // маленькое описание под заголовком
+  delta?: number; // alias для change (страница может использовать одно из полей)
+  deltaLabel?: string; // alias для changeLabel
+  tooltip?: string;
+  onClick?: () => void;
 }
 
+// Чтобы при необходимости импортировать типы из data:
+export type { KPIData as TKPIData, KPITrend as TKPITrend, KPIVariant as TKPIVariant };
+
+// Точки тренда по дням
 export interface TrendDataPoint {
   date: string;
   label: string;
@@ -24,6 +49,7 @@ export interface TrendDataPoint {
   violationRate: number; // в процентах (0–100)
 }
 
+// Производительность клинеров
 export interface CleanerPerformance {
   id: number;
   name: string;
@@ -34,59 +60,76 @@ export interface CleanerPerformance {
   issuesCount: number;
 }
 
+// Распределение задач по локациям
 export interface LocationJobsData {
   location: string;
   jobs: number;
 }
 
-// KPI Cards Data (demo-only)
-export const kpiData: KPIData[] = [
+/**
+ * Базовые (статические) настройки KPI-карточек.
+ * Значения (value) подменяются данными из backend в Analytics.tsx.
+ * Здесь живут:
+ * – id / icon / label
+ * – change / changeLabel
+ * – trend
+ * – variant
+ */
+export const staticKpiData: KPIData[] = [
   {
-    label: "Jobs Completed Today",
-    value: 24,
+    id: "jobs_completed",
+    icon: "CheckCircle2",
+    label: "Jobs completed",
+    value: "24",
     change: 12,
     changeLabel: "vs yesterday",
-    icon: "CheckCircle2",
-    variant: "primary",
-    helper: "Total jobs completed today",
+    trend: "positive",
+    variant: "success",
   },
   {
-    label: "On-time Completion",
+    id: "on_time",
+    icon: "Clock",
+    label: "On-time completion",
     value: "94%",
     change: 3,
     changeLabel: "vs last week",
-    icon: "Clock",
+    trend: "positive",
     variant: "success",
-    helper: "Share of jobs completed within SLA time",
   },
   {
-    label: "Proof Completion",
+    id: "proof",
+    icon: "Camera",
+    label: "Proof completion",
     value: "98%",
     change: 1,
     changeLabel: "vs last week",
-    icon: "Camera",
+    trend: "positive",
     variant: "success",
-    helper: "Jobs with both photos and checklist submitted",
   },
   {
-    label: "Avg Job Duration",
+    id: "duration",
+    icon: "Timer",
+    label: "Avg job duration",
     value: "2.4 hrs",
     change: -5,
     changeLabel: "vs last week",
-    icon: "Timer",
+    trend: "negative",
     variant: "neutral",
-    helper: "Average cleaning time per job",
   },
   {
-    label: "Issues Detected",
-    value: 3,
+    id: "issues",
+    icon: "AlertTriangle",
+    label: "Issues detected",
+    value: "3",
     change: -2,
     changeLabel: "vs yesterday",
-    icon: "AlertTriangle",
+    trend: "negative",
     variant: "warning",
-    helper: "Jobs with SLA violations detected",
   },
 ];
+
+// Для обратной совместимости: старый экспорт kpiData
+export const kpiData = staticKpiData;
 
 // Last 14 days trend data (demo-only, не используется как fallback в проде)
 export const trendData: TrendDataPoint[] = [

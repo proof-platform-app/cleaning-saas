@@ -3058,3 +3058,5 @@ Health check
 Эндпоинт используется исключительно в контексте Reports.
 
 ---
+## Analytics & SLA APIs (implemented)
+Реализован полный набор API для аналитики и SLA-метрик менеджера. Добавлены endpoints для summary-метрик (jobs completed, on-time rate, proof completion, average job duration, issues detected) с расчётом дельт относительно предыдущего периода. Реализованы временные тренды по завершённым job’ам, длительности, proof-completion (before/after/checklist), SLA-нарушениям, а также breakdown SLA с причинами, топ-клинерами и локациями. Все расчёты основаны исключительно на completed jobs и используют actual timestamps как source of truth. API гарантирует отсутствие “дыр” в датах и всегда возвращает валидные значения (0 вместо null/NaN).

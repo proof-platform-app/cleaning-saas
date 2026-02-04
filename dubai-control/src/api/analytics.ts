@@ -24,6 +24,8 @@ export type AnalyticsSummaryResponse = {
   proof_completion_rate: number;     // 0–1
   avg_job_duration_hours: number;
   issues_detected: number;
+
+  issue_rate: number; // 0–1, доля jobs с SLA violations
 };
 
 export function getAnalyticsSummary(range: AnalyticsDateRange) {

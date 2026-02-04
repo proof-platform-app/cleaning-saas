@@ -12,6 +12,17 @@ import { CleanerPerformanceTable } from "@/components/analytics/CleanerPerforman
 import { CleanerComparisonChart } from "@/components/analytics/CleanerComparisonChart";
 
 import {
+  staticKpiData,
+  trendData as staticTrendData,
+  cleanerPerformance as staticCleanerPerformance,
+  type TrendDataPoint,
+  type CleanerPerformance,
+  type KPIData,
+  type KPITrend,
+  type KPIVariant,
+} from "@/data/analyticsData";
+
+import {
   getAnalyticsSummary,
   getAnalyticsJobsCompleted,
   getAnalyticsJobDuration,
@@ -23,24 +34,12 @@ import {
 } from "@/api/analytics";
 
 import {
-  kpiData as staticKpiData,
-  trendData as staticTrendData,
-  cleanerPerformance as staticCleanerPerformance,
-} from "@/data/analyticsData";
-
-import type {
-  KPIData,
-  TrendDataPoint,
-  CleanerPerformance,
-} from "@/data/analyticsData";
-
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-  import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
@@ -102,6 +101,27 @@ function dateRangeToApiRange(range: DateRange): AnalyticsDateRange | null {
   };
 }
 
+// ---------- KPI helpers ----------
+
+// Пороговые по количеству задач с нарушениями (issues_detected)
+function getIssuesVariant(count: number): KPIVariant {
+  if (count === 0) return "success"; // ни одной проблемы — зелёная
+  if (count <= 2) return "warning"; // немного, но уже глаз держим
+  return "danger"; // много — красим
+}
+
+// Для issues тренд инвертируем: меньше — это хорошо
+function getIssuesTrend(delta?: number | null): KPITrend {
+  if (delta === undefined || delta === null) return "neutral";
+  return delta < 0 ? "positive" : delta > 0 ? "negative" : "neutral";
+}
+
+// Для длительности: меньше — тоже хорошо
+function getDurationTrend(delta?: number | null): KPITrend {
+  if (delta === undefined || delta === null) return "neutral";
+  return delta < 0 ? "positive" : delta > 0 ? "negative" : "neutral";
+}
+
 // сборка URL для /reports/violations с нужными фильтрами
 function buildViolationsUrl(opts: {
   range: AnalyticsDateRange;
@@ -132,7 +152,8 @@ function Analytics() {
   const [range, setRange] = useState<AnalyticsDateRange>(
     getDateRangeFromPreset("last14"),
   );
-  const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>();
+  const [customDateRange, setCustomDateRange] =
+    useState<DateRange | undefined>();
 
   const [kpiData, setKpiData] = useState<KPIData[]>(staticKpiData);
   const [trendData, setTrendData] =
@@ -143,6 +164,7 @@ function Analytics() {
   const [slaBreakdown, setSlaBreakdown] =
     useState<AnalyticsSlaBreakdownResponse | null>(null);
 
+  const [hasAnyCompletedJobs, setHasAnyCompletedJobs] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -175,46 +197,116 @@ function Analytics() {
         const proofTrend = proofRes.data;
         const sla = slaRes.data as AnalyticsSlaBreakdownResponse;
 
+        // дефолтная причина для клика по общей карточке Issues:
+        // берем первую из reasons, а если вдруг их нет — фиксированный код
+        const defaultIssuesReason =
+          sla && Array.isArray(sla.reasons) && sla.reasons.length > 0
+            ? sla.reasons[0].code
+            : "checklist_not_completed";
+
+        // simple flag по summary, чтобы знать, есть ли вообще выполненные задачи
+        setHasAnyCompletedJobs((summary?.jobs_completed ?? 0) > 0);
+
         // --- KPI из summary ---
+        const jobsCompletedValue = summary?.jobs_completed ?? 0;
+        const issuesCount = summary?.issues_detected ?? 0;
+
+        // реальные дельты (если бэк их ещё не отдаёт — будет 0%)
+        const jobsDelta =
+          typeof (summary as any)?.jobs_delta === "number"
+            ? (summary as any).jobs_delta
+            : 0;
+
+        const onTimeDelta =
+          typeof (summary as any)?.on_time_delta === "number"
+            ? (summary as any).on_time_delta
+            : 0;
+
+        const proofDelta =
+          typeof (summary as any)?.proof_delta === "number"
+            ? (summary as any).proof_delta
+            : 0;
+
+        const issuesDelta =
+          typeof (summary as any)?.issues_delta === "number"
+            ? (summary as any).issues_delta
+            : 0;
+
+        const durationDelta =
+          typeof (summary as any)?.duration_delta === "number"
+            ? (summary as any).duration_delta
+            : 0;
+
+        // --- KPI cards: комбинируем реальные value + дельты из summary ---
         setKpiData([
+          // 1. Jobs completed
           {
-            label: "Jobs completed",
-            value: String(summary?.jobs_completed ?? 0),
-            helper: "Total jobs completed in the selected period",
-            icon: "CheckCircle2",
-            variant: "primary",
+            ...staticKpiData[0],
+            id: "jobs_completed",
+            title: "Jobs completed",
+            value: String(jobsCompletedValue),
+            description: "Successfully completed jobs in this period",
+            variant: "primary", // основная метрика выделена отдельным variant
+            delta: jobsDelta,
+            deltaLabel: "vs yesterday",
           },
+          // 2. On-time completion
           {
-            label: "On-time completion",
+            ...staticKpiData[1],
+            title: "On-time completion",
             value: `${Math.round(
               (summary?.on_time_completion_rate ?? 0) * 100,
             )}%`,
-            helper: "Share of jobs completed within SLA time",
-            icon: "Clock",
             variant: "success",
+            description: "Jobs completed within scheduled time window",
+            delta: onTimeDelta,
+            deltaLabel: "vs last week",
           },
+          // 3. Proof completion
           {
-            label: "Proof completion",
+            ...staticKpiData[2],
+            title: "Proof completion",
             value: `${Math.round(
               (summary?.proof_completion_rate ?? 0) * 100,
             )}%`,
-            helper: "Jobs with both photos and checklist submitted",
-            icon: "Camera",
-            variant: "success",
+            description:
+              "Jobs with required photos and completed checklist",
+            delta: proofDelta,
+            deltaLabel: "vs last week",
           },
+          // 4. Avg job duration — тут реальные дельты
           {
-            label: "Avg. job duration",
-            value: `${(summary?.avg_job_duration_hours ?? 0).toFixed(1)} hrs`,
-            helper: "Average duration from start to finish",
-            icon: "Timer",
+            ...staticKpiData[3],
+            title: "Avg job duration",
+            value: `${(summary?.avg_job_duration_hours ?? 0).toFixed(
+              1,
+            )} hrs`,
+            description: "Actual time between check-in and check-out",
+            delta: durationDelta,
+            deltaLabel: "vs last week",
+            trend: getDurationTrend(durationDelta),
             variant: "neutral",
           },
+          // 5. Issues detected — реальное количество и реальная (или 0) дельта
           {
-            label: "Issues detected",
-            value: String(summary?.issues_detected ?? 0),
-            helper: "Jobs with at least one SLA or proof issue",
-            icon: "AlertTriangle",
-            variant: "warning",
+            ...staticKpiData[4],
+            title: "Issues detected",
+            value: String(issuesCount),
+            description: "Jobs with at least one SLA violation",
+            // показываем 0%, если дельты нет
+            delta: typeof issuesDelta === "number" ? issuesDelta : 0,
+            deltaLabel: "vs yesterday",
+            trend: getIssuesTrend(issuesDelta),
+            variant: getIssuesVariant(issuesCount),
+            tooltip:
+              "Includes missing before/after photos, incomplete checklist, and missing check-in/out.",
+            onClick: () => {
+              const url = buildViolationsUrl({
+                range,
+                reason: defaultIssuesReason,
+              });
+              navigate(url);
+            },
           },
         ]);
 
@@ -312,13 +404,14 @@ function Analytics() {
         setCleanerPerformance(staticCleanerPerformance);
         setTrendData(staticTrendData);
         setSlaBreakdown(null);
+        setHasAnyCompletedJobs(false);
       } finally {
         setLoading(false);
       }
     };
 
     fetchAnalytics();
-  }, [range.from, range.to]);
+  }, [range.from, range.to, navigate]);
 
   const violationRatePercent = slaBreakdown
     ? Math.round((slaBreakdown.violation_rate ?? 0) * 100)
@@ -332,6 +425,11 @@ function Analytics() {
       : violationRatePercent <= 20
       ? "warning"
       : "bad";
+
+  // simple flag для cleaner performance
+  const hasAnyCleanerMetrics =
+    Array.isArray(cleanerPerformance) &&
+    cleanerPerformance.some((c) => (c.jobsCompleted ?? 0) > 0);
 
   // дефолтная причина для кликов по hotspots (берём первую из топа)
   const defaultReasonCode =
@@ -429,6 +527,14 @@ function Analytics() {
           </div>
         </div>
 
+        {/* Banner when there are no completed jobs at all in this period */}
+        {!hasAnyCompletedJobs && (
+          <div className="mt-4 mb-6 max-w-xl rounded-lg border border-dashed border-border/70 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            No completed jobs in the selected period yet. Analytics will appear
+            here once cleaners finish at least one job.
+          </div>
+        )}
+
         {/* KPI Cards */}
         <section className="mb-10">
           {error && (
@@ -452,16 +558,33 @@ function Analytics() {
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-foreground">Trends</h2>
             <p className="text-sm text-muted-foreground">
-              Job completion and performance over time
+              Job completion and proof quality over time
             </p>
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <JobsTrendChart data={trendData} />
-            <DurationTrendChart data={trendData} />
-          </div>
-          <div className="mt-6">
-            <ProofCompletionChart data={trendData} />
-          </div>
+
+          {!hasAnyCompletedJobs ? (
+            <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-card px-6 py-8 text-center text-sm text-muted-foreground">
+              No completed jobs in this period yet. Adjust the date range above
+              to see trends for jobs, duration and proof completion.
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <JobsTrendChart data={trendData} />
+                <DurationTrendChart data={trendData} />
+              </div>
+              <div className="mt-6">
+                <ProofCompletionChart data={trendData} />
+              </div>
+
+              {/* small legend for what user sees */}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Trends are calculated from completed jobs only. Duration shows
+                actual time between check-in and check-out. Proof rates show the
+                share of jobs with both photos and a completed checklist.
+              </p>
+            </>
+          )}
         </section>
 
         {/* SLA Performance Section */}
@@ -729,15 +852,32 @@ function Analytics() {
               Performance Breakdown
             </h2>
             <p className="text-sm text-muted-foreground">
-              Cleaner metrics and comparison
+              Cleaner metrics and comparison for the selected period
             </p>
           </div>
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <CleanerPerformanceTable data={cleanerPerformance} />
+
+          {!hasAnyCleanerMetrics ? (
+            <div className="rounded-xl border border-dashed border-border/70 bg-card px-6 py-8 text-center text-sm text-muted-foreground">
+              No cleaner performance data for this period. Once jobs are
+              completed and closed, cleaner metrics will appear here.
             </div>
-            <CleanerComparisonChart data={cleanerPerformance} />
-          </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <CleanerPerformanceTable data={cleanerPerformance} />
+              </div>
+              <div className="space-y-2">
+                <CleanerComparisonChart data={cleanerPerformance} />
+                {/* небольшая легенда по смыслу графика */}
+                <p className="text-xs text-muted-foreground">
+                  Use this view to compare cleaners by completed jobs, average
+                  duration, on-time completion and proof quality. Higher
+                  violation counts indicate where coaching or extra checks are
+                  needed.
+                </p>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Footer note */}
