@@ -1,30 +1,73 @@
-## Layer 5 — Scale & Enterprise Readiness (Direction Only)
+# Layer 5 — Scale & Enterprise Readiness (Direction Only)
 
-This layer defines **meaningful scale improvements**, not feature expansion for its own sake.  
-The goal is to reduce operational friction, human overhead, and risk as customer volume grows.
+⚠️ **Direction-only document**
 
-Layer 5 is intentionally **not part of the MVP** and does not represent current product state.  
-It exists to define a clean, logical path to higher-value customers and pricing tiers.
+This document is **not** a roadmap, PRD, or implementation plan.
+
+Layer 5 defines:
+- strategic direction for scale,
+- value boundaries for Pro / Enterprise tiers,
+- and principles for enterprise readiness.
+
+Nothing in this document represents:
+- current product state,
+- committed scope,
+- delivery timelines,
+- or guaranteed features.
 
 ---
 
-## 0. Trial, Usage & Pre-Billing Architecture (Foundation for Scale)
+## Purpose of Layer 5
 
-Before introducing enterprise features, CleanProof establishes a **clear separation between operational truth and commercial logic**.
+Layer 5 describes **meaningful scale capabilities**, not feature expansion for its own sake.
+
+Its goal is to reduce:
+- operational friction,
+- human overhead,
+- risk and ambiguity,
+
+as customer volume, team size, and contractual expectations grow.
+
+Layer 5 is intentionally **not part of the MVP**.  
+It exists to define a **clean, logical path** from an operational product
+to higher-value customers and pricing tiers.
+
+---
+
+## When to use this document
+
+Refer to this document when:
+
+- evaluating whether a new idea fits the long-term product direction;
+- deciding if a capability belongs to Standard, Pro, or Enterprise tiers;
+- explaining CleanProof value to larger customers or partners;
+- preventing scope creep disguised as “enterprise needs”;
+- aligning product capabilities with pricing and positioning.
+
+Do **not** use this document for:
+- sprint planning,
+- task definition,
+- API or UX specifications,
+- implementation decisions.
+
+---
+
+## 0. Trial, Usage & Pre-Billing Architecture  
+### Foundation for Scale
+
+Before introducing enterprise capabilities, CleanProof establishes a **strict separation between operational truth and commercial logic**.
 
 ### Source of truth
 
-- Trial state, expiration, and usage metrics are calculated **only on the backend**
+- Trial state, expiration, and usage metrics are calculated **only on the backend**.
 - Frontend consumes a single aggregated endpoint:
   - `GET /api/cleanproof/usage-summary/`
-- UI never infers trial state locally
+- UI never infers trial or plan state locally.
 
 ### What exists today
 
 - Trial lifecycle:
-  - start
-  - active
-  - expired
+  - start → active → expired
 - Usage visibility:
   - jobs created today
   - active cleaners
@@ -32,16 +75,16 @@ Before introducing enterprise features, CleanProof establishes a **clear separat
 - UX enforcement:
   - informational banners
   - upgrade CTAs
-  - limited hard-blocking (job creation after trial expiry)
+  - limited hard-blocking (e.g. job creation after trial expiry)
 
 ### Why this matters for scale
 
-This architecture allows CleanProof to:
+This foundation allows CleanProof to:
 
-- Add billing (Stripe / Paddle) **without rewriting business logic**
-- Introduce plan enforcement gradually
-- Support multiple pricing tiers cleanly
-- Avoid hidden coupling between UI and billing rules
+- add billing (Stripe / Paddle) **without rewriting business logic**;
+- introduce enforcement gradually;
+- support multiple pricing tiers cleanly;
+- avoid hidden coupling between UI and billing rules.
 
 Layer 5 builds **on top of this foundation**, not around it.
 
@@ -49,12 +92,12 @@ Layer 5 builds **on top of this foundation**, not around it.
 
 ## 1. Operational Analytics (Decision-Oriented)
 
-Analytics must answer concrete operational questions, not provide vanity dashboards.
+Analytics must answer **concrete operational questions**, not provide vanity dashboards.
 
-### Core metrics
+### Core metric categories
 
-- Job completion rate without issues  
-- Proof compliance rate (before / checklist / after)  
+- Job completion without issues  
+- Proof compliance (before / checklist / after)  
 - Planned vs actual job duration  
 - Cleaner reliability indicators (derived from behavior, not manual scoring)  
 - Locations with repeated issues  
@@ -65,11 +108,13 @@ Analytics must answer concrete operational questions, not provide vanity dashboa
 - Justify product value  
 - Tie CleanProof to measurable business outcomes  
 
+Analytics at scale exists to **support decisions**, not to impress.
+
 ---
 
 ## 2. SLA & Exception Management
 
-Introduce automatic exception detection to reduce manual investigations.
+Introduce structured exception detection to reduce manual investigations.
 
 ### Examples
 
@@ -77,7 +122,7 @@ Introduce automatic exception detection to reduce manual investigations.
 - Missing or invalid proof  
 - Incomplete checklist  
 
-Jobs may be flagged as:
+Jobs may be classified as:
 
 - OK  
 - At Risk  
@@ -90,19 +135,23 @@ Jobs may be flagged as:
 - Make issues visible before clients complain  
 
 ---
-### micro-SLA v2 — Time-Based Rules & Repeated Violations (Future Extension)
 
-micro-SLA v2 extends basic SLA flags by adding **temporal context and behavioral patterns**.  
-This layer does not introduce contractual enforcement.  
-It exists to support **operational coaching, quality management, and escalation logic** at scale.
+### micro-SLA v2 — Time-Based Context & Repeated Violations  
+*(Future extension, not MVP)*
 
-micro-SLA v2 is intentionally **not part of the MVP**.
+micro-SLA v2 extends basic SLA flags with **temporal context and behavioral patterns**.
+
+This layer:
+- does **not** introduce contractual enforcement;
+- exists to support coaching, quality management, and escalation logic.
+
+micro-SLA v2 is intentionally **out of scope for MVP**.
 
 ---
 
-#### Time-based rules (contextual violations)
+#### Time-based context
 
-Instead of binary states (OK / Violated), SLA violations gain **time deltas**:
+SLA violations gain **time deltas**, not just binary states.
 
 Examples:
 
@@ -110,100 +159,74 @@ Examples:
 - Job completed after scheduled end time  
 - After photo uploaded X minutes after check-out  
 
-This allows managers to distinguish between:
+This enables distinction between:
+- minor delays,
+- systematic timing issues,
+- critical breaches.
 
-- Minor delays  
-- Systematic timing issues  
-- Critical breaches  
-
-Time deltas are calculated **only on the backend** using recorded timestamps.
-
-Frontend displays them as read-only context.
+All calculations are backend-only.  
+Frontend displays read-only context.
 
 ---
 
 #### Repeated violations (pattern detection)
 
-micro-SLA v2 introduces **rolling window aggregation**:
+Introduce rolling-window aggregation:
 
-Examples:
-
-- Cleaner has 3 SLA violations in last 7 days  
-- 2 consecutive jobs missing after photo  
-- 5 of last 10 jobs violated SLA  
+- Cleaner has N violations in last X days  
+- Consecutive jobs missing proof  
+- Repeated violations by location  
 
 This transforms SLA from single-job auditing into **behavioral insight**.
 
-No new actions are triggered automatically.
-
-The system only exposes:
-
-- counts  
-- frequency  
-- recent patterns  
-
+No automatic actions are triggered.  
 Decision-making remains human.
 
 ---
 
-#### Scope & Constraints
+#### Explicit constraints
 
-Explicitly excluded from micro-SLA v2:
+micro-SLA v2 **does not include**:
 
-- Automatic penalties  
-- Job blocking  
-- Score systems  
-- AI-based judgment  
+- automatic penalties;
+- job blocking;
+- scoring systems;
+- AI-based judgment.
 
 The goal is **visibility and clarity**, not automation.
 
 ---
 
-#### Why micro-SLA v2 exists
-
-micro-SLA v2 enables:
-
-- Cleaner coaching instead of punishment  
-- Early detection of reliability issues  
-- Better escalation conversations  
-- Stronger Pro / Enterprise value proposition  
-
-It supports growth without increasing operational friction.
-
----
-
 #### Pricing alignment
 
-micro-SLA v2 capabilities are aligned with higher tiers:
+- **Standard** — micro-SLA v1 (status + reasons)  
+- **Pro** — time-based context + repeated violations  
+- **Enterprise** — configurable rules and reporting windows  
 
-- **Standard**: micro-SLA v1 (status + reasons)  
-- **Pro**: time-based context + repeated violations  
-- **Enterprise**: configurable rules and reporting windows  
-
-This ensures SLA sophistication scales with customer maturity.
+SLA sophistication scales with customer maturity.
 
 ---
 
 ## 3. Performance Reports (Management-Level)
 
-Reports are designed for stakeholders who may not use the product daily.
+Reports serve stakeholders who may not use the product daily.
 
 ### Examples
 
-- Weekly summary (jobs completed, issues, exceptions)  
-- Monthly performance overview  
-- Cleaner and location performance snapshots  
+- Weekly summaries  
+- Monthly performance overviews  
+- Cleaner and location snapshots  
 
 ### Delivery formats
 
 - PDF  
-- Email summary  
+- Email  
 
 ### Purpose
 
 - Keep leadership informed  
 - Increase perceived product value  
-- Reduce manual reporting  
+- Reduce manual reporting overhead  
 
 ---
 
@@ -215,7 +238,7 @@ Support formal audit and compliance scenarios.
 
 - Full job proof export (PDF / ZIP)  
 - Audit trail export (CSV / PDF)  
-- Timestamped and immutable proof artifacts  
+- Timestamped, immutable proof artifacts  
 
 ### Purpose
 
@@ -227,7 +250,7 @@ Support formal audit and compliance scenarios.
 
 ## 5. Hierarchy & Role Expansion
 
-Support growth beyond a single manager role.
+Support organizational growth beyond a single manager.
 
 ### Examples
 
@@ -257,7 +280,7 @@ Focus on outbound integrations only.
 
 ### Purpose
 
-- Allow clients to integrate CleanProof into existing systems  
+- Allow integration with existing systems  
 - Avoid tight coupling with third-party platforms  
 
 ---
@@ -277,8 +300,9 @@ Layer 5 exists to **protect scalability**, not to increase complexity.
 
 ## Layer 5 × Pricing Alignment
 
-Layer 5 capabilities are not baseline features.  
-They represent **enterprise readiness** and are intentionally tied to higher pricing tiers.
+Layer 5 capabilities are **not baseline features**.
+
+They represent enterprise readiness and are intentionally tied to higher pricing tiers.
 
 ---
 
@@ -286,26 +310,15 @@ They represent **enterprise readiness** and are intentionally tied to higher pri
 
 ### Target customer
 
-- Small to mid-size cleaning teams  
+- Small to mid-size teams  
 - Owner-managed or single-manager operations  
 
-### Included
+### Focus
 
-- Full proof flow (GPS check-in/out, photos, checklist, PDF)  
-- Job Planning (daily / date-based)  
-- Basic filtering (date, cleaner, location)  
-- Manual issue review  
-- Trial with enforced limits  
+- Proof of work  
+- Operational correctness  
 
-### Excluded by design
-
-- Advanced analytics  
-- SLA flags and exception tracking  
-- Performance reports  
-- Audit exports  
-- Role hierarchy  
-
-Standard focuses on **proof of work**, not optimization.
+Advanced optimization is intentionally excluded.
 
 ---
 
@@ -314,29 +327,16 @@ Standard focuses on **proof of work**, not optimization.
 ### Target customer
 
 - Growing teams  
-- Companies managing multiple cleaners and locations  
-- Managers responsible for quality and accountability  
+- Multi-cleaner, multi-location operations  
 
-### Includes everything in Standard, plus
-
-Layer 5 features enabled:
-
-- Operational analytics (compliance, reliability, duration)  
-- SLA & exception flags (late check-in, missing proof)  
-- Performance reports (weekly / monthly summaries)  
-- Audit-ready exports (PDF / CSV / ZIP)  
-- Expanded filters and visibility  
-- Priority support / escalation  
-
-Pro is positioned as:
+### Value proposition
 
 > “Not just proof — control and insight.”
 
-This tier directly reduces:
-
-- Manual investigations  
-- Internal escalations  
-- Reporting overhead  
+Pro reduces:
+- investigations,
+- escalations,
+- reporting overhead.
 
 ---
 
@@ -345,44 +345,20 @@ This tier directly reduces:
 ### Target customer
 
 - Large operators  
-- Multi-branch organizations  
-- Compliance-driven contracts  
+- Compliance-driven organizations  
 
-### Planned capabilities
+### Directional capabilities
 
-- Role hierarchy (owner / regional / site)  
+- Role hierarchy  
 - Branch-level access control  
-- Webhooks & outbound integrations  
+- Integrations  
 - Custom audit formats  
 - SLA configuration per location  
-- Dedicated onboarding and support  
 
 Enterprise pricing is:
-
-- Custom  
-- Contract-based  
-- Value-driven (not seat-driven)  
-
----
-
-## Trial Alignment
-
-### Trial behavior
-
-- 7 days  
-- Full proof flow enabled  
-- Enforced operational limits (e.g. cleaners, jobs)  
-
-### Purpose
-
-- Allow realistic evaluation  
-- Prevent misuse  
-- Preserve product value perception  
-
-Trial always maps to:
-
-- Standard → upgrade to Pro  
-- No direct Enterprise trial  
+- custom,
+- contract-based,
+- value-driven.
 
 ---
 
@@ -390,21 +366,22 @@ Trial always maps to:
 
 - Proof of work is baseline  
 - Insight, control, and risk reduction are premium  
-- Layer 5 features justify higher ARPU, not feature count  
-
-Pricing increases over time are explained by:
-
-- Expanded visibility  
-- Reduced operational cost  
-- Enterprise readiness  
+- Price increases are justified by:
+  - expanded visibility,
+  - reduced operational cost,
+  - enterprise readiness.
 
 ---
 
 ## Why This Matters
 
-This structure ensures:
+Layer 5 ensures:
 
-- Clean upgrade path  
-- Clear value separation  
-- No need to invent features to raise price  
-- Confidence when selling to larger clients  
+- clean upgrade paths;
+- clear value separation;
+- no need to invent features to raise price;
+- confidence when selling to larger customers.
+
+It protects CleanProof from becoming
+“feature-rich but direction-poor”
+as the product scales.
