@@ -1,6 +1,10 @@
 cat > backend/DEV_QUICKSTART.md <<'MD'
 # Backend DEV Quickstart (Cleaning SaaS)
 
+> ⚠️ DEV ONLY
+> This document is intended for local development only.
+> Credentials and endpoints listed here MUST NOT be used in production.
+
 ## Run
 From `backend/`:
 - Run server:

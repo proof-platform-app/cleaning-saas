@@ -1,5 +1,11 @@
 # CleanProof — Demo Call Script (v1)
 
+**Status:** v1  
+**Audience:** Founder / Sales  
+**Scope:** Demo & qualification only  
+**Not a marketing document**
+    
+
 **Duration:** ~15 minutes
 **Format:** Live guided demo (screen share)
 **Goal:** Not to sell. To establish a single source of truth.
