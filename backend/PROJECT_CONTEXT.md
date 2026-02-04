@@ -5,24 +5,31 @@
 **Architecture, Context & Implementation History**
 
 > ⚠️ **Important**
-> This document provides architectural context, implementation details, and historical notes.
+> This document provides **architectural context, design rationale, and implementation history**.
+>
 > It is **NOT** the source of truth for the current project status.
 >
-> The authoritative snapshot of what is implemented *right now* lives in `PROJECT_STATE_v3.md`.
+> The authoritative snapshot of what is implemented *right now* lives in:
+> **`PROJECT_STATE.md`**
+>
+> This document changes **rarely** and should only be updated when
+> architectural principles, constraints, or core assumptions change.
 
 ---
 
 ## Project Overview
 
-CleanProof is a **backend-first Cleaning SaaS** built for operational control and proof of work in the UAE market.
+CleanProof is a **backend-first Cleaning SaaS** built for operational control
+and proof of work in the UAE market.
 
 The product solves:
 
 * verification that work was actually performed,
 * quality control,
-* dispute resolution through hard evidence (GPS, photos, audit trail, PDF reports).
+* dispute resolution through hard evidence
+  (GPS, photos, audit trail, PDF reports).
 
-The system is designed around **proof, not task management**.
+The system is designed around **proof**, not task management.
 
 ---
 
@@ -30,11 +37,12 @@ The system is designed around **proof, not task management**.
 
 The project consists of three integrated but clearly separated parts:
 
-* **Django Backend (API-first)** — execution and proof core
+* **Django Backend (API-first)** — execution, proof, and enforcement core
 * **Manager Portal (Web)** — planning, control, verification
 * **Mobile Cleaner App (Expo / React Native)** — on-site execution
 
-Each component is independently testable but bound by strict API contracts.
+Each component is independently testable and deployable,
+but bound by strict API contracts.
 
 ---
 
@@ -92,37 +100,32 @@ Each component is independently testable but bound by strict API contracts.
 * pdf
 * manager endpoints (planning, meta, create job)
 
-Architecture is intentionally **API-first** and shared across web and mobile.
+Architecture is intentionally **API-first**
+and shared across web and mobile clients.
 
 ---
 
 ## Layered Architecture (Conceptual)
 
-> These layers describe structure, not progress.
-> Actual implementation status is tracked in `PROJECT_STATE_v3.md`.
+> These layers describe **structure and intent**, not progress.
+> Actual implementation status is tracked in `PROJECT_STATE.md`.
 
 ### Layer 0 — Core Execution
-
 Backend + Manager Portal
 
 ### Layer 1 — Execution
-
 Mobile Cleaner App
 
 ### Layer 2 — Management
-
 Admin / Manager extensions
 
 ### Layer 3 — Commerce
-
 Plans, trial, billing
 
 ### Layer 4 — Marketing
-
 Landing, pricing, demo, updates
 
 ### Layer 5 — Scale
-
 Analytics, SLA, exports, enterprise features
 
 ---
@@ -151,9 +154,10 @@ If proof is missing — the step is invalid.
 
 ## Checklist Snapshot Logic
 
-* ChecklistTemplate is copied into JobChecklistItem at job creation.
+* `ChecklistTemplate` is copied into `JobChecklistItem` at job creation.
 * Templates are immutable during execution.
-* Snapshot ensures historical integrity even if templates change later.
+* Snapshot guarantees historical integrity
+  even if templates change later.
 
 ---
 
@@ -173,21 +177,20 @@ Location coordinates are treated as **source of truth**, not addresses.
 * Exactly one `before` and one `after` photo per job.
 * `after` is forbidden without `before`.
 * Images normalized to JPEG for consistency.
-* Stored deterministically per company/job/type.
+* Stored deterministically per company / job / type.
 
 ---
 
 ## PDF Reports
 
 * Generated on demand via backend.
-* Uses the same data as UI (no duplication).
+* Uses the same data as UI (single source of truth).
 * Includes:
-
   * job summary,
   * timestamps,
   * checklist,
   * audit trail.
-* Photo embedding planned for next iteration.
+* Photo embedding planned for a future iteration.
 
 ---
 
@@ -195,7 +198,7 @@ Location coordinates are treated as **source of truth**, not addresses.
 
 ### Execution Flow
 
-Login → Today Jobs → Job Details →
+Login → Today Jobs → Job Details →  
 Check-in → Photos → Checklist → Check-out → PDF
 
 ### Guard Rails
@@ -210,23 +213,24 @@ Check-in → Photos → Checklist → Check-out → PDF
 * Dedicated GPS wrapper (`utils/gps.ts`)
 * DEV vs PROD behavior separated
 * Permissions handled explicitly
-* Backend distance validation authoritative
+* Backend distance validation is authoritative
 
 ---
 
 ## Known Constraints (Intentional)
 
+The following limitations are **conscious scope decisions**, not omissions:
+
 * No S3 / object storage (local `MEDIA_ROOT`)
 * No background jobs (sync operations)
 * No offline-first behavior (architecture prepared)
 * No admin UI for:
-
   * locations,
   * checklist templates,
   * job history,
   * recurring jobs.
 
-These are **conscious scope decisions**, not omissions.
+These constraints protect execution stability and clarity.
 
 ---
 
@@ -251,26 +255,29 @@ They are informational only:
 ## Historical Notes
 
 * Job Planning significantly extended the original MVP.
-* Mobile execution flow reached a stable, end-to-end working state.
-* Multiple stability phases were required to lock camera and navigation.
+* Mobile execution flow reached a stable end-to-end state.
+* Multiple stabilization phases were required for camera and navigation.
 * Architecture is now considered stable enough for commercial iteration.
 
 ---
 
 ## Usage Guidance
 
-* Use `PROJECT_STATE_v3.md` to understand **what exists right now**.
-* Use this document to understand:
+Use this document to understand:
 
-  * *why* things are built this way,
-  * how components relate,
-  * what constraints are intentional.
+* *why* the system is built this way,
+* architectural constraints and invariants,
+* relationships between components,
+* which limitations are intentional.
+
+For current implementation status, always refer to:
+**`PROJECT_STATE.md`**
 
 ---
 
 ## Final Note
 
-This project is no longer a prototype.
+CleanProof is no longer a prototype.
 
 It is a **real operational system** with:
 
@@ -278,8 +285,7 @@ It is a **real operational system** with:
 * legal-grade proof artifacts,
 * and a clear path to monetization.
 
-The main risk now is **not technical**, but **scope creep**.
+The primary risk is no longer technical —
+it is **scope creep**.
 
 Keep execution tight.
-
----

@@ -1,8 +1,37 @@
-````md
-# API Contracts (DEV) — Cleaning SaaS
+# API_CONTRACTS — CleanProof
 
-Документ фиксирует контракт между Backend (Django / DRF) и Frontend (React / Vite / Mobile).  
-Считается **единственным источником правды** для фронтендов и мобилки. Любые ломающие изменения сначала попадают сюда.
+Status: ACTIVE  
+Version: 1.1.0  
+Last updated: 2026-02-04
+
+Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
+
+- Manager Portal (React + Vite)
+- Mobile Cleaner App (Expo + React Native)
+
+Это **единственный источник правды** для фронтов и мобилки.  
+Любые ломающие изменения сначала фиксируются здесь, затем реализуются в коде.
+
+---
+
+## CHANGELOG
+
+### Правило ведения
+
+Каждая запись в changelog имеет **жёсткую структуру** и добавляется **сверху**:
+
+```md
+### X.Y.Z — YYYY-MM-DD
+- NEW: краткое описание нового эндпоинта / поля / поведения.
+- CHANGED: что изменилось в существующем контракте.
+- FIXED: уточнения, исправления, прояснение семантики.
+- DEPRECATED: (опционально) что объявлено устаревшим.
+- BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.1.0 — 2026-02-04
+- NEW: `/api/manager/jobs/active/` — добавлены флаги `has_before_photo`, `has_after_photo`.
+- CHANGED: `/api/manager/jobs/{id}/` — добавлены поля `manager_notes`, `cleaner_notes`.
+- FIXED: уточнена семантика SLA helper’ов (`compute_sla_status_for_job`, `compute_sla_reasons_for_job`).
 
 ---
 
@@ -10,10 +39,18 @@
 
 ### 0.1. Технологический стек
 
-* **Backend:** Django + Django REST Framework (DRF), API-first.
-* **Frontends:**
-  * Manager Portal: React + Vite.
-  * Mobile Cleaner App: Expo + React Native.
+- **Backend:** Django + Django REST Framework, API-first.
+- **DB:** SQLite в DEV, схема совместима с PostgreSQL.
+- ** Manager Portal:** React + Vite + TypeScript.
+- **Mobile Cleaner App:** Expo + React Native + TypeScript.
+
+Backend — единственный source of truth для:
+
+- статусов jobs
+- GPS / чек-листов / фото
+- SLA / аналитики
+- PDF / отчётов / email-логов
+- commercial-статусов компании
 
 ### 0.2. Base URL (DEV)
 
@@ -21,14 +58,23 @@
 http://127.0.0.1:8001
 ````
 
-Все эндпоинты ниже указываются относительно этого base URL в DEV.
+Все эндпоинты описаны **относительно** этого URL.
 
 ### 0.3. Авторизация
 
-Во всех запросах после успешного логина:
+После логина все защищённые запросы идут с заголовком:
 
 ```http
 Authorization: Token <TOKEN>
+```
+
+При отсутствии / некорректном токене:
+
+```http
+401 Unauthorized
+{
+  "detail": "Authentication credentials were not provided."
+}
 ```
 
 ### 0.4. DEV-пользователи
@@ -38,84 +84,67 @@ Cleaner:  cleaner@test.com  /  Test1234!
 Manager:  manager@test.com /  Test1234!
 ```
 
-Эти же данные зашиты в dev-конфиги фронтов (web + mobile).
+Эти же креды зашиты в dev-конфиги web и mobile.
 
-### 0.5. API Contract — Job lifecycle & GPS (DEV notes)
+### 0.5. Роли
 
-Backend API контракт в рамках данного этапа не изменялся.
+* `role = "manager"` — доступ ко всем manager-* эндпоинтам.
+* `role = "cleaner"` — доступ только к cleaner-* эндпоинтам.
+* Backend всегда проверяет:
 
-Подтверждено:
+  * роль;
+  * принадлежность объекта компании / пользователю;
+  * коммерческий статус компании (trial, blocked, active).
 
-* Check-in / Check-out используют существующие endpoints.
-* Фото before / after загружаются через существующий photos endpoint.
-* Checklist работает через bulk update / toggle endpoints.
+### 0.6. Координаты как источник истины
 
-DEV-особенность:
+* `latitude` / `longitude` — **авторитетный источник истины** для GPS.
+* Используются для:
 
-В dev-режиме мобильное приложение может подставлять GPS координаты задачи
-(`location_latitude / location_longitude`),
-чтобы backend воспринимал клинера как находящегося "на месте".
+  * навигации клинера;
+  * проверки check-in / check-out;
+  * включения в PDF / отчёты.
+* `name` / `address` носят описательный характер и не участвуют в гео-валидации.
+* Любые future geocoding/autocomplete **не перетирают** явно сохранённые координаты.
 
-Важно:
+### 0.7. Trial / Pricing / Marketing alignment
 
-* Это dev-only логика.
-* Backend не содержит dev-исключений.
-* В production GPS всегда берётся из реального устройства.
-* Контракт API считается стабильным и зафиксированным.
+* Marketing-страницы (`/cleanproof`, `/cleanproof/pricing`, `/cleanproof/demo`) **не создают сущностей** в системе и не трогают API.
 
-### 0.6. Landing & Proof Narrative Alignment
+* Trial:
 
-Лендинг CleanProof зафиксирован как отражение реального API-контракта продукта.
-Все заявленные шаги пользовательского флоу (check-in, photos, checklist, check-out, PDF)
-соответствуют фактическим backend-событиям и данным, которые могут быть подтверждены API.
+  * стартует через backend (`/api/cleanproof/trials/start/`);
+  * длится 7 дней;
+  * статус, даты и `days_left` считаются только на backend;
+  * soft-limits и trial-статус отдаются через `/api/cleanproof/usage-summary/`.
 
-Никаких маркетинговых обещаний вне технической реальности продукта не используется.
-Лендинг продаёт только то, что действительно фиксируется и может быть выдано
-в виде доказательства через API.
+* Лэндинг и демо **описывают только то, что реально есть в API**:
+  check-in, photos, checklist, check-out, PDF, SLA, отчёты.
 
-Demo page and landing page content are strictly aligned with existing API behavior and backend guarantees. All demonstrated flows (job creation, check-in/out, checklist completion, photo capture, PDF generation) correspond to real API events and persisted data. No demo or marketing materials reference functionality that is not backed by current API contracts. Demo navigation is intentionally minimal and does not expose internal product routes or authentication flows.
+### 0.8. Health check
 
-### 0.6.1. Marketing & Demo Alignment
+Простой liveness-эндпоинт:
 
-CleanProof landing page (`/cleanproof`) and demo request page (`/cleanproof/demo`) are purely marketing-facing and do not expose or simulate any product functionality. All descriptions, screenshots, and narrative elements strictly reflect existing API contracts and real backend events (job creation, check-in/out, checklist completion, photo proof, PDF generation). No marketing content implies features, workflows, or system behavior that are not backed by current API guarantees. The demo request flow does not create accounts, trigger backend actions, or require authentication.
+```http
+GET /api/health/
+→ 200 OK
+{ "status": "ok" }
+```
 
-### 0.6.2. Location coordinates as source of truth
-
-* `latitude` и `longitude` считаются **авторитетным источником истины** для всех GPS-операций.
-* Эти координаты используются для:
-
-  * навигации клинера,
-  * проверки GPS check-in/check-out,
-  * включения в артефакты доказательств (PDF-отчёты и т.п.).
-* Поля адреса и названия (`name`, `address`) являются описательными и не участвуют в валидации геолокации.
-* Любые будущие механики geocoding/autocomplete не должны перетирать явно сохранённые координаты.
-
-### 0.6.3. Pricing & Trial Flow (v1)
-
-* Кнопка **Start 7-day trial** на странице `/cleanproof/pricing` инициирует старт бесплатного пробного периода тарифа Standard.
-* На текущем этапе кнопка ведёт на существующий экран авторизации (`/`) с параметром `?trial=standard`.
-* Backend обязан поддерживать сценарий создания компании в статусе trial сроком 7 дней после успешного логина или регистрации.
-* Платёжные данные на этапе trial **не требуются**.
-* По окончании trial доступ ограничивается до выбора платного тарифа.
-
-### 0.6.4. Marketing Pages & Demo Flow Alignment
-
-Public CleanProof pages (Landing, Pricing, Product Updates, Contact, Demo Request) are informational and do not introduce any new backend behavior beyond existing API contracts. All calls-to-action (Request demo, Contact form, Pricing CTAs) are intentionally decoupled from direct account creation and billing logic. Demo requests and contact submissions are treated as pre-sales inputs and do not create system entities such as users, companies, jobs, or locations. Any future trial or subscription flow must be explicitly backed by new API endpoints and persisted data models before being referenced in marketing or pricing pages.
+Используется web/mobile для проверки доступности backend.
 
 ---
 
 ## 1. Auth API
 
-### 1.1. Общий логин (используется cleaner)
-
-**Endpoint**
+### 1.1. Общий логин (cleaner / generic)
 
 ```http
 POST /api/auth/login/
 Content-Type: application/json
 ```
 
-**Request (JSON)**
+**Request**
 
 ```json
 {
@@ -124,7 +153,7 @@ Content-Type: application/json
 }
 ```
 
-**Response 200 OK**
+**Response 200**
 
 ```json
 {
@@ -136,44 +165,34 @@ Content-Type: application/json
 }
 ```
 
-**Правила / ошибки**
+**Ошибки**
 
-Пустой `email` или `password` → `400 Bad Request`:
+* `400` — пустые поля:
 
-```json
-{
-  "detail": "Email and password are required."
-}
-```
+  ```json
+  { "detail": "Email and password are required." }
+  ```
 
-Неверная пара логин/пароль → `401 Unauthorized`:
+* `401` — неверные креды:
 
-```json
-{ "detail": "User not found" }
-```
+  ```json
+  { "detail": "User not found" }
+  ```
 
-или
+  или
 
-```json
-{ "detail": "Invalid credentials" }
-```
-
-После успешного логина все последующие запросы идут с заголовком:
-
-```http
-Authorization: Token <token>
-```
+  ```json
+  { "detail": "Invalid credentials" }
+  ```
 
 ### 1.2. Логин менеджера
-
-**Endpoint**
 
 ```http
 POST /api/manager/auth/login/
 Content-Type: application/json
 ```
 
-**Request (JSON)**
+**Request**
 
 ```json
 {
@@ -182,7 +201,7 @@ Content-Type: application/json
 }
 ```
 
-**Response 200 OK**
+**Response 200**
 
 ```json
 {
@@ -194,16 +213,9 @@ Content-Type: application/json
 }
 ```
 
-**Правила / ошибки**
+Ошибки — как у `/api/auth/login/`.
 
-Те же, что и для `/api/auth/login/`:
-
-* `400 Bad Request` при пустых полях.
-* `401 Unauthorized` при неверных кредах.
-
-### 1.3. Self-serve signup (Manager)
-
-**Endpoint**
+### 1.3. Self-serve signup (manager)
 
 ```http
 POST /api/auth/signup/
@@ -212,47 +224,81 @@ Content-Type: application/json
 
 **Назначение**
 
-Self-serve signup для менеджеров. При успешной регистрации:
+* создаёт `Company`;
+* создаёт менеджера, привязанного к компании;
+* запускает 7-дневный trial.
 
-* создаётся новая `Company`;
-* создаётся пользователь-менеджер, привязанный к этой компании;
-* автоматически запускается стандартный **7-дневный trial-план**.
-
-Trial-состояния (`is_trial_active`, `is_trial_expired`, `days_left`) и usage-лимиты (`jobs`, `cleaners`) далее вычисляются исключительно на backend и отдаются через:
+Trial-статус и usage-лимиты **используются только через**:
 
 ```http
 GET /api/cleanproof/usage-summary/
 ```
 
-(см. **3.2**).
+### 1.4. Cleaner login (phone + PIN)
+
+Альтернативная схема логина клинера.
+
+```http
+POST /api/auth/cleaner-login/
+Content-Type: application/json
+```
+
+**Request**
+
+```json
+{
+  "phone": "+971500000001",
+  "pin": "1234"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "token": "string",
+  "user_id": 3,
+  "full_name": "Dev Cleaner",
+  "role": "cleaner"
+}
+```
+
+**Reset PIN (manager)**
+
+```http
+POST /api/manager/cleaners/{id}/reset-pin/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Response 200**
+
+```json
+{
+  "cleaner_id": 3,
+  "new_pin": "1234"
+}
+```
+
+`new_pin` показывается менеджеру **один раз**, хранится только на backend.
 
 ---
 
 ## 2. Cleaner API
 
-Все cleaner-эндпоинты требуют:
+Все эндпоинты ниже требуют:
 
-* валидный токен:
+```http
+Authorization: Token <CLEANER_TOKEN>
+role = "cleaner"
+```
 
-  ```http
-  Authorization: Token <CLEANER_TOKEN>
-  ```
-
-* роль пользователя: `role = "cleaner"`.
-
-### 2.1. Today Jobs (список задач клинера на сегодня)
-
-**Endpoint**
+### 2.1. Today Jobs (список задач на сегодня)
 
 ```http
 GET /api/jobs/today/
 ```
 
-**Назначение**
-
-Вернуть список сегодняшних `job` для залогиненного клинера.
-
-**Response 200 OK (ПЛОСКИЙ контракт)**
+**Response 200 (плоский контракт)**
 
 ```json
 [
@@ -262,111 +308,31 @@ GET /api/jobs/today/
     "scheduled_date": "2026-01-17",
     "scheduled_start_time": null,
     "scheduled_end_time": null,
-    "status": "scheduled"
+    "status": "scheduled"  // "scheduled" | "in_progress" | "completed"
   }
 ]
 ```
 
-**Фиксация контракта**
+Гарантии:
 
-* `location__name` — простая строка. Нет вложенного объекта `location`.
-* В ответе **нет**:
+* всегда есть `id`, `location__name`, `scheduled_date`, `status`;
+* нет вложенного `location` / `checklist` / `photos`.
 
-  * `checklist`
-  * `photos`
-  * `cleaner`
-  * `location.id`, `address` и т.п.
-* Подробная информация по job берётся только из:
+Mobile опирается на:
 
-  ```http
-  GET /api/jobs/<id>/
-  ```
+* `location__name` — заголовок карточки;
+* `scheduled_date` — дата;
+* `status` — контролирует доступность check-in/out.
 
-**Минимальный набор, на который может опираться фронт/мобилка**
+401 возвращается при отсутствии токена (см. 0.3).
 
-* `id` — идентификатор job (используется в `GET /api/jobs/<id>/`).
-* `location__name` — заголовок карточки.
-* `scheduled_date`, `scheduled_start_time`, `scheduled_end_time` — дата/время.
-* `status` — одно из: `"scheduled" | "in_progress" | "completed"`.
-
-#### 2.1.1. Today Jobs — Mobile usage (зафиксированное поведение)
-
-**Ответ `/api/jobs/today/` остаётся ПЛОСКИМ:**
-
-```json
-[
-  {
-    "id": 5,
-    "location__name": "Dubai Marina Tower",
-    "scheduled_date": "2026-01-17",
-    "scheduled_start_time": null,
-    "scheduled_end_time": null,
-    "status": "scheduled"
-  }
-]
-```
-
-**Ключ `location__name` обязателен**
-
-* Mobile не вводит своих полей (`location_name`, `title` и т.п.).
-* Заголовок карточки строится строго из `location__name`.
-
-**Дата/время в карточке — чисто фронтовая логика**
-
-* API ничего не знает про текст `Today`.
-* Mobile сам решает, показывать ли:
-
-  * `Today`, или
-  * отформатированную `scheduled_date` (например, `Tue, 20 Jan` и т.п.).
-
-**Минимальный набор полей, на которые мобильный UI имеет право рассчитывать:**
-
-* `id` — ключ для перехода в `GET /api/jobs/<id>/`.
-* `location__name` — название объекта.
-* `scheduled_date` — дата.
-* `status` — `scheduled | in_progress | completed`.
-
-Все остальные поля считаются «дополнительными» и могут меняться/добавляться без гарантий для UI.
-
-#### 2.1.2. Today Jobs — обработка неавторизованного доступа (mobile)
-
-При отсутствии токена или протухшей сессии backend возвращает:
-
-```http
-401 Unauthorized
-```
-
-```json
-{
-  "detail": "Authentication credentials were not provided."
-}
-```
-
-Для мобильного приложения это трактуется как:
-
-> “Session expired. Please log in again.”
-
-UI:
-
-* показывает сообщение в баннере / карточке;
-* не пытается грузить `/api/jobs/<id>/`;
-* предлагает залогиниться снова (через экран Login).
-
-Важно: никаких специальных мобильных эндпоинтов под это нет, это просто стандартизированная реакция на `401` с таким `detail`.
-
-### 2.2. Job Detail (детали задачи для клинера)
-
-**Endpoint**
+### 2.2. Job Detail (Cleaner view)
 
 ```http
 GET /api/jobs/<id>/
 ```
 
-**Назначение**
-
-Детальная информация по конкретной job для клинера.
-
-**Response 200 OK (концептуальная форма)**
+**Response 200 (пример)**
 
 ```json
 {
@@ -415,45 +381,27 @@ GET /api/jobs/<id>/
       "order_index": 0,
       "is_completed": false,
       "is_required": true
-    },
-    {
-      "id": 102,
-      "text": "Clean bathroom",
-      "order_index": 1,
-      "is_completed": true,
-      "is_required": false
     }
-  ]
+  ],
+  "sla_status": "ok",
+  "sla_reasons": []
 }
 ```
 
-**Гарантии / особенности**
+Особенности:
 
-* `actual_start_time` и `actual_end_time` могут быть `null` — это ожидаемо.
-* `photos` может быть пустым массивом.
-* `check_events` может быть пустым массивом.
-* `check_events` возвращаются отсортированными по `created_at ASC` — фронт порядок не меняет.
-
-**Фронту важно**
-
-* `status` — управляет доступностью кнопок:
-
-  * check-in / check-out;
-  * upload photo.
-* `checklist_items` — источник чек-листа.
-* `photos` — массив; фронт сам мапит в слоты `before` / `after` по `photo_type`.
-* `check_events` — используются для построения таймлайна check-in/out.
+* `check_events` отсортированы по `created_at ASC`.
+* `photos` максимум по одному `before` и `after`.
+* `sla_status` и `sla_reasons` — вычисляемый SLA-слой (см. 5).
 
 ### 2.3. Check-in
-
-**Endpoint**
 
 ```http
 POST /api/jobs/<id>/check-in/
 Content-Type: application/json
 ```
 
-**Request (JSON)**
+**Request**
 
 ```json
 {
@@ -462,7 +410,7 @@ Content-Type: application/json
 }
 ```
 
-**Response 200 OK (пример)**
+**Response 200**
 
 ```json
 {
@@ -475,34 +423,26 @@ Content-Type: application/json
 }
 ```
 
-**Правила (backend)**
+Правила:
 
-* Роль — только `cleaner`.
-* Job принадлежит этому cleaner.
-* `status` до вызова — строго `"scheduled"`.
-* Расстояние до `location` ≤ 100 м.
+* job принадлежит клинеру;
+* `status === "scheduled"` до вызова;
+* расстояние до `location` ≤ 100 м.
 
-**Типичные ошибки**
+Ошибки:
 
-* `400 Bad Request` — далеко от точки / нет координат / другой бизнес-чек.
-* `403 Forbidden` — чужая job / неверная роль.
-* `409 Conflict` — неверный статус (например, уже `in_progress` или `completed`).
-
-**Фронт**
-
-* Показывает `detail` как toast/alert.
-* Статус локально не переписывает «наугад», ориентируется на ответ.
+* `400` — слишком далеко / нет координат / неверная бизнес-ситуация;
+* `403` — чужая job;
+* `409` — неверный статус (double check-in и т.п.).
 
 ### 2.4. Check-out
-
-**Endpoint**
 
 ```http
 POST /api/jobs/<id>/check-out/
 Content-Type: application/json
 ```
 
-**Request (JSON)**
+**Request**
 
 ```json
 {
@@ -511,7 +451,7 @@ Content-Type: application/json
 }
 ```
 
-**Response 200 OK (пример)**
+**Response 200**
 
 ```json
 {
@@ -524,43 +464,41 @@ Content-Type: application/json
 }
 ```
 
-**Правила (backend)**
+Правила:
 
-* `status` до вызова — строго `"in_progress"`.
-* Все required пункты чеклиста: `is_completed = true`.
-* Есть и `before`, и `after` фото.
-* Расстояние до `location` ≤ 100 м.
+* `status === "in_progress"` до вызова;
+* все required `checklist_items` закрыты;
+* загружены `before` и `after` фото;
+* GPS в допустимом радиусе.
 
-**Ошибки**
+Ошибки:
 
-* `400 Bad Request` — бизнес-ошибка (не весь чеклист закрыт, нет фото и т.п.).
-* `403 Forbidden` — не тот cleaner / не та роль.
-* `409 Conflict` — неверный статус для операции.
+* `400` — нет фото / чек-лист не завершён и т.п.;
+* `403` — чужая job;
+* `409` — неверный статус.
 
-### 2.5. Checklist toggle (один пункт)
+### 2.5. Checklist toggle / bulk
 
-**Endpoint**
+**Один пункт**
 
 ```http
 POST /api/jobs/<job_id>/checklist/<item_id>/toggle/
 Content-Type: application/json
 ```
 
-**Request**
-
-Может быть пустым:
+Request:
 
 ```json
 {}
 ```
 
-или явным:
+или
 
 ```json
 { "is_completed": true }
 ```
 
-**Response 200 OK**
+Response 200:
 
 ```json
 {
@@ -569,18 +507,14 @@ Content-Type: application/json
 }
 ```
 
-Фронту достаточно по `id` обновить локальное состояние чекбокса.
-
-### 2.6. Checklist bulk (массовое обновление)
-
-**Endpoint**
+**Bulk**
 
 ```http
 POST /api/jobs/<job_id>/checklist/bulk/
 Content-Type: application/json
 ```
 
-**Request**
+Request:
 
 ```json
 {
@@ -591,67 +525,27 @@ Content-Type: application/json
 }
 ```
 
-**Response 200 OK**
+Response 200:
 
 ```json
-{
-  "updated_count": 2
-}
+{ "updated_count": 2 }
 ```
 
-### 2.7. Photos
+### 2.6. Photos (upload / delete)
 
-#### 2.7.1. Чтение фото job (через Job Detail)
-
-На практике фронту достаточно того, что `GET /api/jobs/<id>/` уже отдаёт массив `photos` (см. 2.2).
-Отдельный `GET /api/jobs/<id>/photos/` не обязателен для работы UI.
-
-**Форма в ответе Job Detail**
-
-```json
-"photos": [
-  {
-    "id": 12,
-    "photo_type": "before",
-    "file_url": "https://cdn.example.com/.../before.jpg",
-    "latitude": 25.08912,
-    "longitude": 55.14567,
-    "photo_timestamp": "2026-01-15T09:06:00+04:00",
-    "exif_missing": false
-  },
-  {
-    "id": 13,
-    "photo_type": "after",
-    "file_url": "https://cdn.example.com/.../after.jpg",
-    "latitude": 25.08913,
-    "longitude": 55.14568,
-    "photo_timestamp": "2026-01-15T10:57:00+04:00",
-    "exif_missing": true
-  }
-]
-```
-
-**Фронт**
-
-* фильтрует по `photo_type` → слоты `before` / `after`;
-* использует `file_url` для превью;
-* может показывать индикатор `exif_missing`.
-
-#### 2.7.2. Загрузка фото
-
-**Endpoint**
+**Upload**
 
 ```http
 POST /api/jobs/<id>/photos/
 Content-Type: multipart/form-data
 ```
 
-**Поля формы**
+Поля:
 
-* `photo_type`: `"before"` или `"after"`
-* `file`: бинарник (image)
+* `photo_type`: `"before"` | `"after"`
+* `file`: бинарник изображения
 
-**Response 201 Created (пример)**
+Response 201:
 
 ```json
 {
@@ -665,163 +559,226 @@ Content-Type: multipart/form-data
 }
 ```
 
-**Правила**
+Правила:
 
-* Только при `status = "in_progress"`.
-* `"after"` можно загрузить только если уже есть `"before"`.
-* Максимум 1 `before` и 1 `after` на job.
-* Если в EXIF есть координаты:
+* только при `status = "in_progress"`;
+* `after` запрещён без `before`;
+* максимум по одному фото каждого типа;
+* при наличии EXIF-координат — проверка ≤ 100 м;
+* `exif_missing = true` если EXIF нет, но загрузка разрешена.
 
-  * они проверяются на расстояние ≤ 100 м от `location`.
-* Если EXIF нет:
+Ошибки:
 
-  * загрузка разрешена;
-  * в ответе может быть `exif_missing = true`.
+* `409` — второе фото того же типа или `after` без `before`;
+* `400` — слишком далеко по EXIF;
+* `403` — чужая job / неверная роль.
 
-**Ошибки**
-
-* `409 Conflict` — попытка:
-
-  * загрузить второе фото того же типа, или
-  * загрузить `after` без `before`.
-* `400 Bad Request` — слишком далеко по EXIF.
-* `403 Forbidden` — не тот cleaner / не та роль.
-
-#### 2.7.3. Удаление фото
-
-**Endpoint**
+**Delete**
 
 ```http
 DELETE /api/jobs/<id>/photos/<photo_type>/
 ```
 
-где `photo_type = "before" | "after"`.
+`photo_type = "before" | "after"`.
 
-**Response 204 No Content**
+Response 204.
 
-**Правила**
+Правила:
 
-* Только при `status = "in_progress"`.
-* Нельзя удалить `before`, если уже есть `after`.
-* Некорректный `photo_type` → `400 Bad Request`:
+* только при `status = "in_progress"`;
+* `before` нельзя удалить, если уже есть `after`.
 
-```json
-{
-  "detail": "Invalid photo_type. Use 'before' or 'after'."
-}
-```
-
-Удаление сейчас используется минимально, но контракт зафиксирован.
-
-### 2.8. PDF report (фактический контракт)
-
-**Endpoint**
+### 2.7. Job PDF (Cleaner)
 
 ```http
 POST /api/jobs/<id>/report/pdf/
 ```
 
-**Body**
-
-Пустой `{}` или вообще без тела.
-
-**Фактическое поведение**
-
-Backend возвращает PDF-файл как бинарный ответ:
+Возвращает бинарный PDF:
 
 ```http
 Content-Type: application/pdf
 Content-Disposition: attachment; filename="job-<id>-report.pdf"
 ```
 
-(`Content-Disposition` может присутствовать, но не гарантирован).
-
-**Фронт**
-
-* Mobile — открывает / шарит PDF через нативные механизмы.
-* Web (Manager Portal) — через `Blob` создаёт ссылку и триггерит загрузку.
-
-**Важно**
-
-* Эндпоинт идемпотентный — можно вызывать многократно.
-* Сейчас нет JSON-обёртки (`file_id`, `url`, `generated_at`). Это может появиться в будущем как отдельный слой, но не часть текущего контракта.
+PDF формируется из того же SLA/Proof-слоя, что и Manager-вид.
 
 ---
 
-## 3. Manager API
+## 3. Manager — Company / Cleaners / Locations
 
-Все manager-эндпоинты требуют:
-
-* валидный токен:
-
-  ```http
-  Authorization: Token <MANAGER_TOKEN>
-  ```
-
-* роль пользователя: `role = "manager"`.
-
-### 3.1. Today Jobs (менеджер)
-
-**Endpoint**
+Все эндпоинты:
 
 ```http
-GET /api/manager/jobs/today/
+Authorization: Token <MANAGER_TOKEN>
+role = "manager"
 ```
 
-**Назначение**
+### 3.1. Company profile
 
-Список job по компании менеджера за сегодня.
+```http
+GET /api/manager/company/
+```
 
-**Response 200 OK (концептуально)**
+Response 200:
+
+```json
+{
+  "id": 1,
+  "name": "Dev Company",
+  "contact_email": "info@devcompany.com",
+  "contact_phone": "+971500000000",
+  "logo_url": "https://cdn.example.com/logos/dev-company.png"
+}
+```
+
+```http
+PATCH /api/manager/company/
+Content-Type: application/json
+```
+
+Request (поля опциональны):
+
+```json
+{
+  "name": "New Company Name",
+  "contact_email": "ops@company.com",
+  "contact_phone": "+971511111111"
+}
+```
+
+Response 200 — обновлённый объект.
+
+### 3.2. Company logo upload
+
+```http
+POST /api/manager/company/logo/
+Content-Type: multipart/form-data
+```
+
+Form:
+
+* `file`: PNG/JPG
+
+Response 200:
+
+```json
+{
+  "logo_url": "https://cdn.example.com/logos/dev-company-new.png"
+}
+```
+
+### 3.3. Cleaners management
+
+**List**
+
+```http
+GET /api/manager/cleaners/
+```
+
+Response 200:
 
 ```json
 [
   {
-    "id": 10,
-    "status": "in_progress",
-    "scheduled_date": "2026-01-15",
-    "scheduled_start_time": "09:00:00",
-    "scheduled_end_time": "11:00:00",
-    "location": {
-      "id": 5,
-      "name": "Marina Heights Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    },
-    "cleaner": {
-      "id": 3,
-      "full_name": "Dev Cleaner"
-    },
-    "has_before_photo": true,
-    "has_after_photo": false
+    "id": 3,
+    "full_name": "Dev Cleaner",
+    "email": "cleaner1@devcompany.com",
+    "phone": "+971500000001",
+    "is_active": true
   }
 ]
 ```
 
-Manager Portal на основе этого:
+**Create**
 
-* строит список задач с полями: объект, дата, время, клинер, статус, факт наличия фото.
+```http
+POST /api/manager/cleaners/
+Content-Type: application/json
+```
 
-### 3.2. Trial activation, expired & usage (Manager)
+Request:
 
-#### 3.2.1. Trial activation (Manager)
+```json
+{
+  "full_name": "New Cleaner",
+  "email": "new.cleaner@devcompany.com",
+  "phone": "+971500000002",
+  "is_active": true
+}
+```
 
-Trial запускается явно через backend endpoint и не зависит от оплаты или биллинга.
+Правила:
 
-**Endpoint**
+* `full_name` обязателен;
+* хотя бы одно из `email` / `phone` должно быть передано;
+* `is_active` по умолчанию `true`.
+
+Response 201 — созданный cleaner.
+
+**Update**
+
+```http
+PATCH /api/manager/cleaners/<id>/
+Content-Type: application/json
+```
+
+Все поля опциональны. Response 200 — обновлённый объект.
+
+Ошибки:
+
+* `404` — клинер не найден / чужая компания;
+* `409` — конфликт email/phone внутри компании.
+
+**Reset PIN**
+
+см. 1.4.
+
+### 3.4. Locations
+
+**List**
+
+```http
+GET /api/manager/locations/
+```
+
+**Create**
+
+```http
+POST /api/manager/locations/
+Content-Type: application/json
+```
+
+**Update**
+
+```http
+PATCH /api/manager/locations/{id}/
+Content-Type: application/json
+```
+
+Локации:
+
+* всегда привязаны к `company`;
+* используются во всех job и meta-ответах;
+* могут иметь `latitude`/`longitude = null` — тогда навигация ограничена.
+
+---
+
+## 4. Manager — Trial / Usage / Commercial enforcement
+
+### 4.1. Trial start
 
 ```http
 POST /api/cleanproof/trials/start/
 Authorization: Token <MANAGER_TOKEN>
 ```
 
-**Поведение**
+Поведение:
 
-* если trial уже активен и не истёк → возвращается текущий статус;
-* если trial отсутствует или истёк → активируется новый trial на 7 дней;
-* повторный вызов в dev-среде разрешён;
-* endpoint может вызываться безопасно несколько раз без побочных эффектов.
+* если trial активен → возвращается текущий статус;
+* если trial нет или истёк → запускается новый trial на 7 дней.
 
-**Response 200 OK (пример)**
+Response 200 (пример):
 
 ```json
 {
@@ -834,43 +791,14 @@ Authorization: Token <MANAGER_TOKEN>
 }
 ```
 
-#### 3.2.2. Trial expired state (Manager)
-
-Истечение trial определяется исключительно backend.
-
-**Состояние**
-
-* `is_trial_active === false`
-* `is_trial_expired === true`
-* `days_left === 0`
-
-**Принципы**
-
-* Backend является единственным источником истины по статусу trial.
-* Frontend не вычисляет даты и не хранит бизнес-логику trial.
-* Поле `days_left` используется только для UX-индикации.
-* Trial-статус не инициирует оплату и не меняет доступность функциональности.
-* Истечение trial не вызывает автоматических блокировок.
-* Любые ограничения реализуются отдельно (guards), вне trial-механизма.
-
-#### 3.2.3. Usage summary & soft-limits (Manager)
-
-Для UX-индикации soft-limits используется агрегированный usage endpoint.
-
-**Endpoint**
+### 4.2. Usage summary & soft-limits
 
 ```http
 GET /api/cleanproof/usage-summary/
 Authorization: Token <MANAGER_TOKEN>
 ```
 
-**Назначение**
-
-* предоставить frontend агрегированное состояние trial + usage;
-* исключить дублирование бизнес-логики на клиенте;
-* использовать данные исключительно для UX-индикации.
-
-**Response 200 OK (пример)**
+Response 200:
 
 ```json
 {
@@ -885,39 +813,676 @@ Authorization: Token <MANAGER_TOKEN>
 }
 ```
 
-**Принципы**
+Принципы:
 
-* `usage-summary` не блокирует действия;
-* soft-limits ≠ guards;
-* данные используются только для баннеров и подсказок.
+* endpoint **ничего не блокирует**, только даёт состояние;
+* soft-limits используются для баннеров/подсказок.
 
-**Trial & Usage — source of truth**
+### 4.3. Commercial enforcement / read-only mode
 
-* Trial и usage-статусы считаются исключительно на backend.
-* `GET /api/cleanproof/usage-summary/` — единственный источник истины для UI по:
+Для заблокированных компаний:
 
-  * `plan`,
-  * флагам `is_trial_active / is_trial_expired`,
-  * `days_left`,
-  * usage-метрикам (`jobs_today_count`, `cleaners_count`) и их soft-limits.
-* Frontend не содержит бизнес-логики расчёта trial или лимитов, а только отображает состояние, полученное от backend.
+* все **изменяющие** эндпоинты → `403 Forbidden`
+* коды ошибок:
 
-**Enforcement**
+```json
+{
+  "code": "company_blocked",
+  "detail": "Your company is in read-only mode. Creating new jobs is not allowed."
+}
+```
 
-* Применение trial-ограничений (блокировка создания jobs / cleaners и т.п.) выполняется только backend’ом.
-* В случае превышения лимитов backend возвращает `403 Forbidden` и **стабильные коды ошибок**; фронт показывает сообщение и не дублирует логику.
+или
 
-#### 3.2.4. Commercial enforcement & read-only mode
+```json
+{
+  "code": "trial_expired",
+  "detail": "Your trial has expired. Please contact support to upgrade."
+}
+```
+---
 
-For suspended or blocked companies, the API enforces a strict **read-only mode**.
+## 5. Manager — Jobs & Reports (final, MVP)
 
-* Mutating endpoints (e.g. create job, create location, create cleaner) return HTTP `403`.
-* Response includes a machine-readable error code:
+### 5.1. Job PDF report (cleaner + manager)
 
-  * `company_blocked` — company is suspended and operates in read-only mode;
-  * `trial_expired` — trial period has ended.
+**Endpoint**
 
-**Example response:**
+```http
+POST /api/jobs/{id}/report/pdf/
+Authorization: Token <CLEANER_OR_MANAGER_TOKEN>
+````
+
+**Назначение**
+
+Сгенерировать и скачать PDF-отчёт по конкретной job.
+
+**Кто имеет доступ**
+
+* `role = cleaner` — только по своим jobs;
+* `role = manager` — только jobs своей компании.
+
+**Request**
+
+Тело не требуется (`{}` или пустой body).
+
+**Response 200 OK**
+
+Возвращается бинарный PDF:
+
+```http
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="job_report_<id>.pdf"
+```
+
+**Ошибки**
+
+* `403 Forbidden` — роль не `cleaner` и не `manager`:
+
+  ```json
+  { "detail": "Only cleaners and managers can generate PDF reports." }
+  ```
+* `404 Not Found` — job не найдена в пределах компании/клинера.
+
+---
+
+### 5.2. Job PDF → Email (manager)
+
+**Endpoint**
+
+```http
+POST /api/manager/jobs/{id}/report/email/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: application/json
+```
+
+**Назначение**
+
+Отправить PDF job-отчёта на email.
+
+**Кто имеет доступ**
+
+Только `role = manager`, job должна принадлежать компании менеджера.
+
+**Request body (опционально)**
+
+```json
+{
+  "email": "recipient@example.com"
+}
+```
+
+* если `email` не передан → используется `request.user.email`;
+* если в итоге email пустой → ошибка.
+
+**Поведение**
+
+1. Получаем job по `company` менеджера.
+2. Генерируем PDF тем же helper’ом, что и download:
+
+   * при исключении → `500`.
+3. Собираем письмо:
+
+   * subject: `Job report #<job.id>`;
+   * в тексте: id, location, address, date, cleaner, SLA-строка (если есть).
+4. Отправляем через `EmailMessage`.
+5. Пишем запись в `ReportEmailLog`:
+
+   * `kind = KIND_JOB_REPORT`;
+   * `status = sent/failed`;
+   * `error_message` при ошибке.
+
+**Response 200 OK (успех)**
+
+```json
+{
+  "detail": "PDF report emailed.",
+  "job_id": 123,
+  "target_email": "recipient@example.com"
+}
+```
+
+**Ошибки**
+
+* `403 Forbidden` — не менеджер:
+
+  ```json
+  { "detail": "Only managers can email PDF reports." }
+  ```
+* `400 Bad Request` — после всех fallback’ов email пустой:
+
+  ```json
+  { "detail": "Email is required." }
+  ```
+* `500 Internal Server Error` — ошибка генерации PDF:
+
+  ```json
+  { "detail": "Failed to generate PDF report." }
+  ```
+* `500 Internal Server Error` — PDF пустой:
+
+  ```json
+  { "detail": "PDF generation returned empty content." }
+  ```
+* `502 Bad Gateway` — ошибка отправки email (SMTP и т.п.):
+
+  ```json
+  { "detail": "Failed to send email." }
+  ```
+
+---
+
+### 5.3. Job report email history (manager)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/{id}/report/emails/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+История отправок PDF-отчёта по конкретной job.
+
+**Кто имеет доступ**
+
+Только `role = manager`, job должна принадлежать компании менеджера.
+
+**Response 200 OK**
+
+```json
+{
+  "job_id": 123,
+  "emails": [
+    {
+      "id": 10,
+      "sent_at": "2026-02-02T12:34:56.123456+04:00",
+      "target_email": "owner@example.com",
+      "status": "sent",
+      "sent_by": "Dev Manager",
+      "subject": "Job report #123",
+      "error_message": ""
+    }
+  ]
+}
+```
+
+* возвращается максимум 20 последних записей, отсортированных по `created_at DESC`;
+* `sent_by` — `full_name` пользователя, упавший в лог, или его email; может быть `null`, если `user` отсутствует.
+
+**Ошибки**
+
+* `403 Forbidden` — не менеджер:
+
+  ```json
+  { "detail": "Only managers can view report email history." }
+  ```
+* `404 Not Found` — job не принадлежит компании менеджера.
+
+---
+
+### 5.4. Today jobs (manager dashboard)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/today/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+Список jobs компании менеджера на **сегодня** для дашборда.
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": 10,
+    "status": "in_progress",
+    "scheduled_date": "2026-02-02",
+    "scheduled_start_time": "09:00:00",
+    "scheduled_end_time": "11:00:00",
+    "location": {
+      "id": 5,
+      "name": "Marina Heights Tower",
+      "address": "Dubai Marina, Dubai, UAE"
+    },
+    "cleaner": {
+      "id": 3,
+      "full_name": "Dev Cleaner",
+      "phone": "+971500000000"
+    }
+  }
+]
+```
+
+**Особенности**
+
+* дата берётся как `timezone.localdate()`;
+* фильтрация только по `company` менеджера.
+
+**Ошибки**
+
+* `403 Forbidden` — не менеджер:
+
+  ```json
+  { "detail": "Only managers can view jobs overview." }
+  ```
+
+---
+
+### 5.5. Active jobs (Manager Portal → Jobs / Active tab)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/active/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+Оперативный список jobs для вкладки **Jobs / Active**:
+
+* все jobs со статусом `scheduled` или `in_progress` (любая дата);
+* плюс `completed` jobs, у которых `actual_end_time` за последние `ACTIVE_COMPLETED_DAYS` дней (по коду: 30).
+
+**Response 200 OK**
+
+```json
+[
+  {
+    "id": 7,
+    "status": "in_progress",
+    "scheduled_date": "2026-02-02",
+    "scheduled_start_time": "09:00",
+    "scheduled_end_time": "11:00",
+    "location_name": "Dubai Marina Tower",
+    "location_address": "Dubai Marina, Dubai, UAE",
+    "cleaner_name": "Dev Cleaner",
+    "has_before_photo": true,
+    "has_after_photo": false
+  }
+]
+```
+
+**Семантика**
+
+* `scheduled_date` — строка `YYYY-MM-DD` или `null`;
+* времена записаны в формате `"HH:MM"` или `null`;
+* `has_before_photo` / `has_after_photo` считаются по `JobPhoto.photo_type`.
+
+**Ошибки**
+
+* `400 Bad Request` — у менеджера нет компании:
+
+  ```json
+  { "detail": "Manager has no company." }
+  ```
+
+---
+
+### 5.6. Create job (manager)
+
+**Endpoint**
+
+```http
+POST /api/manager/jobs/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: application/json
+```
+
+**Назначение**
+
+Создание job менеджером (планирование).
+
+**Request (JSON)**
+
+(через `ManagerJobCreateSerializer`, список полей см. там; в контракте фиксируем ключевые:)
+
+Обязательные:
+
+* `scheduled_date` — `YYYY-MM-DD`
+* `location_id` — integer
+* `cleaner_id` — integer
+
+Опциональные (MVP):
+
+* `scheduled_start_time` — `HH:MM[:SS]`
+* `scheduled_end_time` — `HH:MM[:SS]`
+* `checklist_template_id` — integer или `null`
+* `notes` / `manager_notes` (зависит от сериализатора)
+
+**Enforcement (trial / blocking)**
+
+Перед созданием выполняются проверки:
+
+1. **company.is_blocked() → 403**
+
+   * если `company.is_trial_expired()`:
+
+     ```json
+     {
+       "code": "trial_expired",
+       "detail": "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade."
+     }
+     ```
+   * иначе:
+
+     ```json
+     {
+       "code": "company_blocked",
+       "detail": "Your account is currently blocked. Please contact support."
+     }
+     ```
+
+2. **Trial jobs limit** при активном trial:
+
+   * если `company.is_trial_active` и `company.trial_jobs_limit_reached()`:
+
+     ```json
+     {
+       "code": "trial_jobs_limit_reached",
+       "detail": "Your free trial allows up to <TRIAL_MAX_JOBS> jobs. Please upgrade your plan to create more jobs."
+     }
+     ```
+
+**Response 201 Created**
+
+Тело ответа — объект job в формате `PlanningJobSerializer`, совместимый с planning/history (см. 4.8 / 4.9).
+
+**Ошибки**
+
+* `403 Forbidden` — роль не manager (до всех проверок компании):
+
+  ```json
+  { "detail": "Only managers can create jobs." }
+  ```
+* `400 Bad Request` — ошибки валидации сериализатора.
+
+---
+
+### 5.7. Job detail (manager)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/{id}/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+Полные детали job для менеджера: расписание, location/cleaner, фото, чек-лист, события, SLA.
+
+**Response 200 OK (структура)**
+
+```json
+{
+  "id": 10,
+  "status": "completed",
+  "scheduled_date": "2026-02-02",
+  "scheduled_start_time": "09:00:00",
+  "scheduled_end_time": "11:00:00",
+  "actual_start_time": "2026-02-02T09:05:12+04:00",
+  "actual_end_time": "2026-02-02T10:58:03+04:00",
+  "location": {
+    "id": 5,
+    "name": "Marina Heights Tower",
+    "address": "Dubai Marina, Dubai, UAE",
+    "latitude": 25.089123,
+    "longitude": 55.145678
+  },
+  "cleaner": {
+    "id": 3,
+    "full_name": "Dev Cleaner",
+    "phone": "+10000000000"
+  },
+  "manager_notes": "string or null",
+  "cleaner_notes": "string or null",
+  "photos": [
+    {
+      "photo_type": "before",
+      "file_url": "https://.../before.jpg",
+      "latitude": 25.08912,
+      "longitude": 55.14567,
+      "photo_timestamp": "2026-02-02T09:06:00+04:00",
+      "created_at": "2026-02-02T09:06:10+04:00"
+    }
+  ],
+  "checklist_items": [
+    {
+      "id": 101,
+      "text": "Vacuum living room",
+      "order_index": 0,
+      "is_completed": true,
+      "is_required": true
+    }
+  ],
+  "check_events": [
+    {
+      "event_type": "check_in",
+      "created_at": "2026-02-02T09:05:12+04:00",
+      "latitude": 25.08912,
+      "longitude": 55.14567
+    }
+  ],
+  "sla_status": "ok",
+  "sla_reasons": []
+}
+```
+
+**Особенности**
+
+* `photos.file_url`, если начинается с `/`, приводится к абсолютному URL через `request.build_absolute_uri`.
+* `sla_status` и `sla_reasons` считаются helper’ами:
+
+  * `compute_sla_status_for_job(job)`
+  * `compute_sla_reasons_for_job(job)`
+
+**Ошибки**
+
+* `403 Forbidden` — не менеджер:
+
+  ```json
+  { "detail": "Only managers can view job details." }
+  ```
+* `404 Not Found` — job не принадлежит компании менеджера.
+
+---
+
+### 5.8. Planning jobs list
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/planning/?date=YYYY-MM-DD
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+Список jobs за конкретный день для экрана **Planning**.
+
+**Query params**
+
+* `date` — обязательный:
+
+  * формат `YYYY-MM-DD`, либо
+  * `DD.MM.YYYY` (для совместимости с UI), либо
+  * ISO-строка c `T` (в этом случае берётся часть до `T`).
+
+При неверном формате:
+
+```json
+{
+  "detail": "Invalid date format. Expected YYYY-MM-DD or DD.MM.YYYY"
+}
+```
+
+**Response 200 OK**
+
+Массив объектов в формате helper’а `build_planning_job_payload(job)`:
+
+```json
+[
+  {
+    "id": 7,
+    "scheduled_date": "2026-02-02",
+    "scheduled_start_time": "09:00:00",
+    "scheduled_end_time": "11:00:00",
+    "status": "scheduled",
+    "location": {
+      "id": 1,
+      "name": "Dubai Marina Tower",
+      "address": "Dubai Marina, Dubai, UAE"
+    },
+    "cleaner": {
+      "id": 3,
+      "full_name": "Dev Cleaner"
+    },
+    "proof": {
+      "before_uploaded": true,
+      "after_uploaded": false,
+      "checklist_completed": false,
+      "before_photo": true,
+      "after_photo": false,
+      "checklist": false
+    },
+    "sla_status": "violated",
+    "sla_reasons": ["missing_after_photo", "checklist_not_completed"],
+    "checklist_template": {
+      "id": 2,
+      "name": "Apartment – Deep (12 items)"
+    },
+    "checklist_items": [
+      "Vacuum all floors",
+      "Mop hard floors"
+    ]
+  }
+]
+```
+
+**Семантика SLA внутри planning/history**
+
+* SLA здесь рассчитывается **упрощённо** в `build_planning_job_payload`:
+
+  * если job `status = completed`:
+
+    * нет `before` → `missing_before_photo`;
+    * нет `after` → `missing_after_photo`;
+    * checklist не пройден → `checklist_not_completed`;
+  * иначе `sla_status = "ok"` и `sla_reasons = []`.
+
+---
+
+### 5.9. Job history (manager)
+
+**Endpoint**
+
+```http
+GET /api/manager/jobs/history/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Назначение**
+
+История jobs за период (архив) для вкладки **History**.
+
+**Обязательные query-параметры**
+
+* `date_from` — `YYYY-MM-DD`
+* `date_to` — `YYYY-MM-DD`
+
+При неверном формате:
+
+```json
+{ "detail": "Invalid date format. Use YYYY-MM-DD." }
+```
+
+**Дополнительные фильтры**
+
+* `status` — фильтр по статусу job;
+* `cleaner_id` — фильтр по клинеру;
+* `location_id` — фильтр по локации.
+
+**Response 200 OK**
+
+Массив объектов в **том же формате, что и planning** (`build_planning_job_payload(job)`), отсортированный по:
+
+* `scheduled_date DESC`,
+* `scheduled_start_time DESC`,
+* `id DESC`.
+
+**Ошибки**
+
+* `403 Forbidden` — не менеджер:
+
+  ```json
+  { "detail": "Only managers can access job history." }
+  ```
+
+---
+
+### 5.10. Force-complete job (manager override)
+
+**Endpoint**
+
+```http
+POST /api/manager/jobs/{id}/force-complete/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: application/json
+```
+
+**Назначение**
+
+Принудительно завершить job со стороны менеджера и **явно зафиксировать SLA-нарушение**.
+
+**Кто имеет доступ**
+
+* `role = manager`;
+* job принадлежит компании менеджера;
+* компания не в блокировке (`company.is_blocked() == False`);
+* job ещё не `completed`.
+
+**Request body**
+
+```json
+{
+  "reason_code": "missing_after_photo",
+  "comment": "Client left early, cleaner could not take after-photo."
+}
+```
+
+**Правила**
+
+* `reason_code` — **обязательный**, одно из:
+
+  * `missing_before_photo`
+  * `missing_after_photo`
+  * `checklist_not_completed`
+  * `missing_check_in`
+  * `missing_check_out`
+  * `other`
+* `comment` — **обязательный**, непустая строка (человеческое пояснение).
+
+**Enforcement компании**
+
+Если `company.is_blocked()`:
+
+* код определяется по `company.is_trial_expired()`:
+
+```json
+{
+  "code": "trial_expired",
+  "detail": "Your free trial has ended. You can still view existing jobs and download reports, but overriding jobs requires an upgrade."
+}
+```
+
+или
 
 ```json
 {
@@ -926,400 +1491,89 @@ For suspended or blocked companies, the API enforces a strict **read-only mode**
 }
 ```
 
-### 3.3. Company profile (Manager)
+**Поведение**
 
-**Endpoint**
+1. Проверка роли, компании, блокировок, статуса job.
 
-```http
-GET /api/manager/company/
-Authorization: Token <MANAGER_TOKEN>
-```
+2. Если job уже `completed` → `400`.
 
-**Назначение**
+3. Обновляем:
 
-Вернуть профиль компании менеджера для экрана Settings.
+   * `job.status = completed`;
+   * `job.actual_end_time = now`, если было `null`;
+   * `job.sla_status = "violated"`;
+   * `job.sla_reasons` → список, объединённый с новым `reason_code` без дублей;
+   * по возможности заполняем:
 
-**Response 200 OK**
+     * `force_completed = True`
+     * `force_completed_at = now`
+     * `force_completed_by = user`.
 
-```json
-{
-  "id": 1,
-  "name": "Dev Company",
-  "contact_email": "info@devcompany.com",
-  "contact_phone": "+971500000000",
-  "logo_url": "https://cdn.example.com/logos/dev-company.png"
-}
-```
+4. Сохраняем job.
 
-**Гарантии**
+5. Пишем `JobCheckEvent`:
 
-* Возвращается ровно одна компания — та, к которой принадлежит менеджер.
-* Если `logo_url = null`, фронт показывает плейсхолдер.
-
----
-
-**Endpoint**
-
-```http
-PATCH /api/manager/company/
-Authorization: Token <MANAGER_TOKEN>
-Content-Type: application/json
-```
-
-**Назначение**
-
-Обновить базовые настройки компании: название и контактные данные.
-
-**Request (JSON)**
-
-```json
-{
-  "name": "New Company Name",
-  "contact_email": "ops@company.com",
-  "contact_phone": "+971511111111"
-}
-```
-
-Все поля опциональные: можно отправлять только те, которые меняются.
+   * `event_type = "force_complete"`,
+   * `user = manager`.
 
 **Response 200 OK**
 
 ```json
 {
-  "id": 1,
-  "name": "New Company Name",
-  "contact_email": "ops@company.com",
-  "contact_phone": "+971511111111",
-  "logo_url": "https://cdn.example.com/logos/dev-company.png"
-}
-```
-
-#### 3.3.1. Company logo upload
-
-**Endpoint**
-
-```http
-POST /api/manager/company/logo/
-Authorization: Token <MANAGER_TOKEN>
-Content-Type: multipart/form-data
-```
-
-**Поля формы**
-
-* `file`: бинарный PNG/JPG логотип компании.
-
-**Response 200 OK**
-
-```json
-{
-  "logo_url": "https://cdn.example.com/logos/dev-company-new.png"
-}
-```
-
-**Правила**
-
-* При загрузке старый логотип может быть перезаписан.
-* Backend отвечает только новым `logo_url`, фронт:
-
-  * обновляет превью;
-  * не хранит файл локально.
-
-### 3.4. Cleaners management (Manager)
-
-Все эндпоинты требуют:
-
-```http
-Authorization: Token <MANAGER_TOKEN>
-```
-
-и `role = "manager"`.
-
-#### 3.4.1. List cleaners
-
-**Endpoint**
-
-```http
-GET /api/manager/cleaners/
-```
-
-**Назначение**
-
-Вернуть список клинеров компании для блока Team / Cleaners в Settings.
-
-**Response 200 OK**
-
-```json
-[
-  {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "email": "cleaner1@devcompany.com",
-    "phone": "+971500000001",
-    "is_active": true
+  "id": 55,
+  "status": "completed",
+  "sla_status": "violated",
+  "sla_reasons": ["missing_after_photo"],
+  "force_completed": true,
+  "force_completed_at": "2026-02-02T12:34:56.789012+04:00",
+  "force_completed_by": {
+    "id": 7,
+    "full_name": "Dev Manager"
   }
-]
-```
-
-**Особенности**
-
-* Возвращаются только пользователи с `role = "cleaner"`.
-* `email` может быть `null`.
-* `phone` может быть `null`, но хотя бы одно из полей (`email`/`phone`) должно быть заполнено при создании.
-
-#### 3.4.2. Create cleaner
-
-**Endpoint**
-
-```http
-POST /api/manager/cleaners/
-Content-Type: application/json
-```
-
-**Request (JSON)**
-
-```json
-{
-  "full_name": "New Cleaner",
-  "email": "new.cleaner@devcompany.com",
-  "phone": "+971500000002",
-  "is_active": true
 }
 ```
 
-**Правила**
+(если каких-то `force_*` полей нет в модели — они просто опускаются в ответе).
 
-* `full_name` — обязательно.
-* `email` и `phone` — оба необязательные, но хотя бы одно из них должно быть передано.
-* `is_active` по умолчанию `true`, если не указано.
+**Ошибки**
 
-**Response 201 Created**
+* `403 Forbidden` — если не менеджер:
 
-```json
-{
-  "id": 4,
-  "full_name": "New Cleaner",
-  "email": "new.cleaner@devcompany.com",
-  "phone": "+971500000002",
-  "is_active": true
-}
-```
-
-**Типичные ошибки**
-
-* `400 Bad Request` — нет `full_name` или не передан ни `email`, ни `phone`.
-* `409 Conflict` — попытка создать клинера с уже существующим `phone` или `email` в рамках компании.
-
-#### 3.4.3. Update cleaner
-
-**Endpoint**
-
-```http
-PATCH /api/manager/cleaners/<id>/
-Content-Type: application/json
-```
-
-**Request (JSON)**
-
-```json
-{
-  "full_name": "Updated Cleaner Name",
-  "email": "updated.cleaner@devcompany.com",
-  "phone": "+971500000003",
-  "is_active": false
-}
-```
-
-Все поля опциональные.
-
-**Response 200 OK**
-
-```json
-{
-  "id": 4,
-  "full_name": "Updated Cleaner Name",
-  "email": "updated.cleaner@devcompany.com",
-  "phone": "+971500000003",
-  "is_active": false
-}
-```
-
-**Правила**
-
-* Менеджер не может менять `role` и `company` клинера.
-* Отключение клинера (`is_active = false`) не удаляет его задачи и историю.
-
-**Типичные ошибки**
-
-* `404 Not Found` — клинер не найден или не принадлежит компании менеджера.
-* `409 Conflict` — конфликт по `email` или `phone` (дубликат в компании).
-
-### 3.5. Locations (Manager API)
-
-Локации являются серверным источником истины и хранятся в backend.
-Все операции с локациями выполняются через Manager API и привязаны к компании менеджера.
-
-Доступные эндпоинты:
-
-* `GET /api/manager/locations/` — получить список локаций компании;
-* `POST /api/manager/locations/` — создать новую локацию;
-* `PATCH /api/manager/locations/{id}/` — обновить локацию.
-
-Каждая локация используется:
-
-* при создании job;
-* в Job Planning;
-* в мобильном приложении (через связанные job’ы).
-
-Дополнительно:
-
-* Все job-сущности ссылаются на локацию через `location_id`.
-
-* Backend фильтрует локации по `company`; фронт не использует mock-данные и не хранит свои списки локаций.
-
-* Локации также возвращаются агрегированно через:
-
-  ```http
-  GET /api/manager/meta/
+  ```json
+  { "detail": "Only managers can force-complete jobs." }
   ```
+* `400 Bad Request`:
 
-  (см. 4.1) для UX-оптимизации Create Job и Planning.
+  * менеджер без компании:
 
-* Frontend не хранит и не кэширует собственные списки локаций — используется только API.
+    ```json
+    { "detail": "Manager has no company." }
+    ```
+  * job уже completed:
 
-### Checklist templates (manager)
+    ```json
+    { "detail": "Job is already completed and cannot be force-completed." }
+    ```
+  * `reason_code` не передан или не из разрешённого списка:
 
-Менеджер может выбрать чек-лист при создании job.
+    ```json
+    { "detail": "Invalid or missing 'reason_code'." }
+    ```
+  * пустой `comment`:
 
-## Checklist templates in PlanningMeta
+    ```json
+    { "detail": "Comment is required." }
+    ```
+* `403 Forbidden` — компания заблокирована (см. блок про `company_blocked` / `trial_expired` выше).
+* `404 Not Found` — job не принадлежит компании менеджера или не существует.
 
-Эндпоинт GET /api/manager/meta/ возвращает список checklist_templates, используемых в Create Job Drawer.
-В ответ попадают только шаблоны чек-листов текущей компании, у которых существует как минимум один пункт (ChecklistTemplateItem).
-
-Если у компании на момент запроса отсутствуют такие шаблоны, backend автоматически инициализирует стандартный набор чек-листов (Apartment / Office / Villa) и возвращает их в этом же ответе.
-
-Поле ответа:
-
-"checklist_templates": [
-  { "id": 7, "name": "Apartment – Standard (6 items)" },
-  { "id": 8, "name": "Apartment – Deep (12 items)" }
-]
-
-
-При создании job выбранный шаблон передаётся как checklist_template_id.
-Если чек-лист не требуется, поле передаётся как null.
-
-**Endpoint**
-
-`GET /api/manager/checklists/templates/`
-
-**Auth:** manager (TokenAuthentication)  
-**Scope:** только внутри `user.company`.
-
-**Query params:** нет (v1).
-
-**Response (200)**
-
-```json
-[
-  {
-    "id": 1,
-    "name": "Standard Apartment Cleaning (6 items)"
-  },
-  {
-    "id": 2,
-    "name": "Standard Apartment Cleaning (12 items)"
-  },
-  {
-    "id": 3,
-    "name": "Office Cleaning (8 items)"
-  },
-  {
-    "id": 4,
-    "name": "Villa Cleaning (12 items)"
-  }
-]
-Семантика
-
-id — идентификатор ChecklistTemplate.
-
-name — человекочитаемое название шаблона (тип уборки + краткое описание).
-
-Status: IMPLEMENTED (v1).
-
-
----
-
-### 1.2. Расширение контракта создания job
-
-Найди секцию вида `POST /api/manager/jobs/` (или как она у тебя названа) и допиши поле:
-
-```md
-#### Request body (JSON)
-
-Обязательные поля:
-
-- `scheduled_date` — `YYYY-MM-DD`
-- `scheduled_start_time` — `HH:MM`
-- `scheduled_end_time` — `HH:MM`
-- `location_id` — integer
-- `cleaner_id` — integer
-
-Необязательные поля:
-
-- `notes` — string (опциональные инструкции)
-- `checklist_template_id` — integer, optional
-
-**Семантика `checklist_template_id`**
-
-- Если поле **передано** → для job используется указанный шаблон чек-листа.
-- Если поле **не передано** → backend ведёт себя как сейчас:
-  - если у локации есть `LocationChecklistTemplate` → применяется он;
-  - иначе job создаётся **без чек-листа**.
-- При выборе `No checklist` на фронте поле **не отправляем** (или отправляем `null` — в зависимости от реализации, но контракт лучше описать как «optional»).
-
-При создании job выбранный шаблон разворачивается в `JobChecklistItem` (snapshot).  
-Дальнейшие изменения шаблона **не влияют** на уже созданные jobs.
-2. Пример POST /api/manager/jobs/ с чек-листом
-Можно вставить в тот же раздел API как пример:
-
-POST /api/manager/jobs/
-Content-Type: application/json
-Authorization: Token <manager_token>
-
-{
-  "scheduled_date": "2026-02-01",
-  "scheduled_start_time": "09:00",
-  "scheduled_end_time": "12:00",
-  "location_id": 3,
-  "cleaner_id": 7,
-  "checklist_template_id": 2,
-  "notes": "Client will be at home, focus on kitchen and bathrooms."
-}
-Комментарий к примеру:
-
-Здесь используется шаблон Standard Apartment Cleaning (12 items) с id=2.
-
-Если бы менеджер выбрал No checklist, поле checklist_template_id просто не отправлялось бы.
----
-
-## 4. Manager — Job Planning & Create Job (NEW, зафиксированный контракт)
-
-### 4.1. Получение справочников: meta для Planning / Create Job
-
-**Endpoint**
+### 5.11. Manager meta (cleaners / locations / checklist templates)
 
 ```http
 GET /api/manager/meta/
 ```
 
-**Назначение**
-
-Единый endpoint для:
-
-* заполнения формы Create Job Drawer;
-* настройки фильтров в Job Planning (в будущем).
-
-**Response 200 OK**
+Response 200:
 
 ```json
 {
@@ -1334,406 +1588,263 @@ GET /api/manager/meta/
     }
   ],
   "checklist_templates": [
-    { "id": 1, "name": "Standard Cleaning" },
-    { "id": 2, "name": "Standard Apartment Cleaning" }
+    {
+      "id": 1,
+      "name": "Apartment – Standard (6 items)",
+      "description": "",
+      "items_preview": [
+        "Vacuum all floors",
+        "Mop hard floors",
+        "Dust all surfaces"
+      ],
+      "items_count": 6
+    }
   ]
 }
 ```
 
-**Примечания**
+Если у компании нет валидных шаблонов, при первом вызове backend:
 
-* Endpoint read-only.
-* Используется:
+* создаёт дефолтный набор:
 
-  * в Create Job Drawer;
-  * в фильтрах Planning (для select’ов по cleaner / location / template).
+  * Apartment – Standard (6 items)
+  * Apartment – Deep (12 items)
+  * Office – Standard (8 items)
+  * Villa – Full (12 items)
 
-### 4.2. Создание job менеджером
+* возвращает их в этом же ответе.
 
-**Endpoint**
-
-```http
-POST /api/manager/jobs/
-Content-Type: application/json
-```
-
-**Назначение**
-
-Создание job заранее менеджером.
-Созданная job автоматически появляется у клинера через `/api/jobs/today/` в день выполнения.
-
-**Request (JSON)**
-
-```json
-{
-  "scheduled_date": "2026-01-19",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "12:00:00",
-  "location_id": 1,
-  "cleaner_id": 3,
-  "checklist_template_id": 1
-}
-```
-
-**Поведение backend (ЗАФИКСИРОВАНО)**
-
-* Создаётся Job со статусом `scheduled`.
-* Если `checklist_template_id` передан:
-
-  * создаётся snapshot `JobChecklistItem` из `ChecklistTemplateItem`.
-* Существующие модели и миграции не меняются.
-
-**Response 201 Created (минимальный контракт для Planning UI)**
-
-```json
-{
-  "id": 7,
-  "scheduled_date": "2026-01-19",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "12:00:00",
-  "status": "scheduled",
-  "location": {
-    "id": 1,
-    "name": "Dubai Marina Tower",
-    "address": "Dubai Marina, Dubai, UAE"
-  },
-  "cleaner": {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "phone": "+10000000001"
-  },
-  "proof": {
-    "before_photo": false,
-    "after_photo": false,
-    "checklist": false
-  }
-}
-```
-
-### 4.3. Planning jobs list (read-only, Manager Job Planning)
-
-**Endpoint**
+### 5.12. Checklist templates list (отдельный)
 
 ```http
-GET /api/manager/jobs/planning/?date=YYYY-MM-DD
+GET /api/manager/checklists/templates/
 ```
 
-**Назначение**
-
-Отображение списка job за дату в экране Manager Job Planning.
-
-**Поддерживаемые форматы даты**
-
-* `YYYY-MM-DD`
-* `DD.MM.YYYY` (совместимость с UI)
-
-**Response 200 OK**
+Response 200 (минимальный контракт):
 
 ```json
 [
-  {
-    "id": 7,
-    "scheduled_date": "2026-01-19",
-    "scheduled_start_time": "09:00:00",
-    "scheduled_end_time": "12:00:00",
-    "status": "scheduled",
-    "location": {
-      "id": 1,
-      "name": "Dubai Marina Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    },
-    "cleaner": {
-      "id": 3,
-      "full_name": "Dev Cleaner"
-    },
-    "proof": {
-      "before_uploaded": false,
-      "after_uploaded": false,
-      "checklist_completed": false,
-      "before_photo": false,
-      "after_photo": false,
-      "checklist": false
-    },
-    "sla_status": "ok",
-    "sla_reasons": []
-  }
+  { "id": 1, "name": "Standard Apartment Cleaning (6 items)" },
+  { "id": 2, "name": "Standard Apartment Cleaning (12 items)" },
+  { "id": 3, "name": "Office Cleaning (8 items)" },
+  { "id": 4, "name": "Villa Cleaning (12 items)" }
 ]
 ```
 
-**Примечания**
+`Status: IMPLEMENTED (v1)`
 
-* Endpoint read-only.
-* `proof`-флаги:
 
-  * `before_uploaded` / `after_uploaded` / `checklist_completed` — backend-истина.
-  * `before_photo` / `after_photo` / `checklist` — UI-совместимость (алиасы под фронт).
-* Переименование существующих полей в `proof` запрещено без слоя совместимости.
-* SLA-слой (`sla_status`, `sla_reasons`) — вычисляемый (см. 4.5), read-only, не влияет на бизнес-логику выполнения job.
+## 6. Reports / PDF / Email / Email history
 
-### 4.4. Job Detail (менеджер)
 
-**Endpoint**
+### 6.1. Weekly / Monthly reports (JSON + PDF)
+
+**JSON**
 
 ```http
-GET /api/manager/jobs/<id>/
+GET /api/manager/reports/weekly/
+GET /api/manager/reports/monthly/
+Authorization: Token <MANAGER_TOKEN>
 ```
 
-**Назначение**
+Периоды считаются на backend:
 
-Детали job для менеджера (аналог cleaner detail + фокус на контроль и отчётность).
+* weekly — последние 7 дней;
+* monthly — последние 30 дней.
 
-**Response 200 OK (концептуально)**
+Response (концептуально):
 
 ```json
 {
-  "id": 10,
-  "status": "completed",
-  "scheduled_date": "2026-01-15",
-  "scheduled_start_time": "09:00:00",
-  "scheduled_end_time": "11:00:00",
-  "location": {
-    "id": 5,
-    "name": "Marina Heights Tower",
-    "address": "Dubai Marina, Dubai, UAE",
-    "latitude": 25.089123,
-    "longitude": 55.145678
+  "period": { "from": "2026-01-01", "to": "2026-01-07" },
+  "summary": {
+    "jobs_count": 100,
+    "violations_count": 12,
+    "issue_rate": 0.12
   },
-  "cleaner": {
-    "id": 3,
-    "full_name": "Dev Cleaner",
-    "phone": "+10000000000"
-  },
-  "check_events": [
-    {
-      "event_type": "check_in",
-      "created_at": "2026-01-15T09:05:12+04:00",
-      "latitude": 25.08912,
-      "longitude": 55.14567
-    },
-    {
-      "event_type": "check_out",
-      "created_at": "2026-01-15T10:58:03+04:00",
-      "latitude": 25.08913,
-      "longitude": 55.14568
-    }
-  ],
-  "photos": [
-    {
-      "id": 12,
-      "photo_type": "before",
-      "file_url": "https://cdn.example.com/.../before.jpg",
-      "photo_timestamp": "2026-01-15T09:06:00+04:00"
-    },
-    {
-      "id": 13,
-      "photo_type": "after",
-      "file_url": "https://cdn.example.com/.../after.jpg",
-      "photo_timestamp": "2026-01-15T10:57:00+04:00"
-    }
-  ],
-  "checklist_items": [
-    {
-      "id": 101,
-      "text": "Vacuum living room",
-      "order_index": 0,
-      "is_completed": true,
-      "is_required": true
-    }
-  ],
-  "notes": null
+  "cleaners": [ ... ],
+  "locations": [ ... ],
+  "top_sla_reasons": [
+    { "reason": "missing_after_photo", "count": 7 },
+    { "reason": "checklist_not_completed", "count": 5 }
+  ]
 }
 ```
 
-**Manager Portal на этом:**
+**PDF**
 
-* показывает:
+```http
+GET /api/manager/reports/weekly/pdf/
+GET /api/manager/reports/monthly/pdf/
+```
 
-  * статус, расписание, объект, клинера;
-  * чек-лист;
-  * фото (before/after);
-  * таймлайн `check_events`.
-* даёт действия:
+Возвращают PDF с теми же данными в отчётном виде.
 
-  * Generate PDF / Download PDF (через `POST /api/jobs/<id>/report/pdf/`).
+### 6.2. Weekly / Monthly reports email
 
-### 4.5. SLA & Exceptions (micro-SLA v1)
+```http
+POST /api/manager/reports/weekly/email/
+POST /api/manager/reports/monthly/email/
+Authorization: Token <MANAGER_TOKEN>
+Content-Type: application/json
+```
 
-Для job-сущностей введён вычисляемый SLA-слой, формируемый исключительно на backend и возвращаемый:
+Request (optional):
 
-* в ответах Planning (`GET /api/manager/jobs/planning/`);
-* в ответах History (`GET /api/manager/jobs/history/`, см. ниже);
-* в агрегирующих аналитических эндпоинтах (Performance, Reports).
+```json
+{
+  "email": "owner@example.com"
+}
+```
 
-**Семантика**
+Response 200:
 
-* `sla_status` — `"ok" / "violated"` для завершённых jobs (`status = "completed"`).
-* `sla_reasons` — массив machine-readable reason-codes, описывающих нарушения, например:
+```json
+{
+  "detail": "Weekly report emailed.",
+  "target_email": "owner@example.com",
+  "period": {
+    "from": "2026-01-22",
+    "to": "2026-01-28"
+  }
+}
+```
+
+Каждая отправка также логируется в `ReportEmailLog`.
+
+### 6.3. Owner overview
+
+```http
+GET /api/owner/overview/?days=<int>
+Authorization: Token <OWNER_TOKEN>
+```
+
+Read-only high-level summary для владельца:
+
+* period (from / to)
+* jobs_count
+* violations_count
+* issue_rate
+* top_locations
+* top_cleaners
+* top_reasons
+
+Owner-уровень **не даёт drill-down до конкретных jobs**.
+
+### 6.4. Reports → Violations Jobs
+
+```http
+GET /api/manager/reports/violations/jobs/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+**Query params (обязательно указать период + хотя бы один фильтр):**
+
+* `period_start` — `YYYY-MM-DD`
+* `period_end` — `YYYY-MM-DD`
+* `reason` — SLA reason-code
+* `cleaner_id`
+* `location_id`
+* пагинация: `page`, `page_size`
+
+Response:
+
+* `period.start` / `period.end`
+* `reason` / `reason_label` (если применимо)
+* `results[]`:
+
+  * `id`
+  * `status`
+  * `scheduled_date`
+  * `location_id` / `location_name`
+  * `cleaner_id` / `cleaner_name`
+  * `sla_status`
+  * `sla_reasons`
+
+### 6.5. Email history
+
+```http
+GET /api/manager/report-emails/
+Authorization: Token <MANAGER_TOKEN>
+```
+
+Поддерживает фильтры:
+
+* `date_from`, `date_to` — по `created_at`
+* `status` — `sent` | `failed`
+* `report_type` — `job_report` | `weekly_report` | `monthly_report`
+* `job_id`
+* `email` (substring-поиск)
+
+Пагинация: `page`, `page_size`.
+
+Response 200:
+
+```json
+{
+  "count": 42,
+  "page": 1,
+  "page_size": 20,
+  "results": [
+    {
+      "id": 1,
+      "report_type": "job_report",
+      "job_period": "2026-01-15",
+      "company_name": "Dev Company",
+      "location_name": "Marina Heights Tower",
+      "cleaner_name": "Dev Cleaner",
+      "target_email": "owner@example.com",
+      "status": "sent",
+      "sent_by": "Dev Manager",
+      "sent_at": "2026-01-16T10:00:00Z",
+      "error_message": null
+    }
+  ]
+}
+```
+
+---
+
+## 7. Analytics & SLA Engine
+
+### 7.1. SLA Engine (общая семантика)
+
+Backend использует helper:
+
+```text
++ compute_sla_status_for_job(job)
++ compute_sla_reasons_for_job(job)
+```
+
+Он возвращает:
+
+* `sla_status` — `"ok"` | `"violated"`
+* `sla_reasons` — массив строковых кодов:
 
   * `missing_before_photo`
   * `missing_after_photo`
   * `checklist_not_completed`
+  * `missing_check_in`
+  * `missing_check_out`
+  * `late_start`
+  * `early_leave`
+  * `proof_missing`
+  * `other`
+  * … (расширяемый список)
 
-**Правила**
+**Source of truth:**
 
-* SLA не хранится в базе данных как отдельная сущность, а вычисляется на лету из фактических proof-артефактов (check-in/out, photos, checklist).
-* SLA не влияет на базовую бизнес-логику выполнения job — это derived-слой представления.
-* Frontend не содержит SLA-логики и не пересчитывает статусы, а использует только `sla_status` и `sla_reasons` для:
+* SLA нигде не пересчитывается на фронте / в PDF;
+* все SLA-агрегаты (Reports, Performance, Analytics) опираются на один и тот же helper.
 
-  * индикации (бейджи, подсветка);
-  * фильтрации / сортировки в UI.
-
-### 4.6. Job History (Manager)
-
-**Endpoint**
-
-```http
-GET /api/manager/jobs/history/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
-```
-
-**Назначение**
-
-Исторический список jobs за период для экрана History / Reports.
-
-**Правила**
-
-* Учитываются только jobs компании текущего менеджера.
-* Фильтрация по диапазону дат выполняется на backend.
-* Структура job-объектов совместима с Planning (4.3) и дополнена SLA-слоем.
-
-**Response 200 OK (концептуально)**
-
-```json
-[
-  {
-    "id": 10,
-    "status": "completed",
-    "scheduled_date": "2026-01-15",
-    "scheduled_start_time": "09:00:00",
-    "scheduled_end_time": "11:00:00",
-    "location": {
-      "id": 5,
-      "name": "Marina Heights Tower",
-      "address": "Dubai Marina, Dubai, UAE"
-    },
-    "cleaner": {
-      "id": 3,
-      "full_name": "Dev Cleaner"
-    },
-    "proof": {
-      "before_uploaded": true,
-      "after_uploaded": true,
-      "checklist_completed": true,
-      "before_photo": true,
-      "after_photo": true,
-      "checklist": true
-    },
-    "sla_status": "ok",
-    "sla_reasons": []
-  }
-]
-```
-
----
-
-## 5. Ошибки (общий паттерн)
-
-Во всех эндпоинтах ошибки отдаются в едином формате:
-
-```json
-{
-  "detail": "Error message here"
-}
-```
-
-**Типичные коды**
-
-* `400 Bad Request` — бизнес-ошибка (GPS далеко, не все пункты чеклиста закрыты и т.п.).
-* `401 Unauthorized` — нет токена / токен неверен.
-* `403 Forbidden` — не та роль / чужая job / trial или usage-ограничение.
-* `404 Not Found` — job не найдена / не принадлежит пользователю.
-* `409 Conflict` — неверный статус для операции (double check-in, double photo upload и т.п.).
-
-**Фронт**
-
-* читает поле `detail`;
-* показывает пользователю;
-* не пытается парсить текст на бизнес-логику.
-
----
-
-## 6. Общие заметки для фронта
-
-* Все даты/время — в формате ISO 8601:
-
-  * даты: `"YYYY-MM-DD"` (например, `"2026-01-15"`);
-  * дата-время: `"2026-01-15T09:05:12+04:00"`.
-* Время без TZ (`"HH:MM:SS"`) интерпретируется как локальное для компании.
-* Backend может добавлять новые поля, но:
-
-  * существующие поля и их смысл считаются стабильными;
-  * ломающие изменения должны сперва попасть в этот документ.
-
-**Backend = источник истины**
-
-* фронт не меняет статусы сам;
-* фронт не пересчитывает бизнес-правила;
-* всё делает через API.
-
----
-
-## 7. Analytics Semantics (Manager)
-
-Секция описывает семантику аналитических метрик, которые могут быть построены на основе API.
-Это не отдельные эндпоинты, а консистентные определения для вычислений на стороне отчётности / аналитики.
-
-### 7.1. Time & Discipline
-
-* `check_in_time` = timestamp `JobCheckEvent` с `event_type = "check_in"`.
-* `check_out_time` = timestamp `JobCheckEvent` с `event_type = "check_out"`.
-* `job_duration` = `check_out_time - check_in_time`.
-* `on_time_check_in` = `check_in_time <= scheduled_start_time + tolerance`.
-* `tolerance` задаётся бизнесом отдельно (например, 15 минут).
-
-### 7.2. Quality
-
-* `checklist_passed` = все required `JobChecklistItem.is_completed = true`.
-* `checklist_completion_rate` = `completed_items / total_items`.
-
-### 7.3. Proof of Work
-
-* `before_photo_uploaded` = существует `JobPhoto(photo_type = "before")`.
-* `after_photo_uploaded` = существует `JobPhoto(photo_type = "after")`.
-* `full_proof` = `before_photo_uploaded AND after_photo_uploaded AND checklist_passed`.
-* `exif_missing_rate` = `count(exif_missing = true) / total_photos`.
-
-### 7.4. Aggregations
-
-Метрики могут быть агрегированы по:
-
-* cleaner
-* location
-* дате (день / неделя / месяц)
-
----
-
-## 8. Performance API (Manager scope)
-
-В проекте реализован performance-эндпоинт для анализа SLA-нарушений на уровне клинеров и локаций.
-
-**Endpoint**
+### 7.2. Performance API
 
 ```http
 GET /api/manager/performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
 Authorization: Token <MANAGER_TOKEN>
 ```
 
-**Правила**
-
-* учитываются только `completed` jobs;
-* данные фильтруются по company текущего менеджера;
-* SLA-статус и причины нарушений вычисляются backend’ом (frontend не агрегирует данные и не пересчитывает SLA).
-
-**Response 200 OK (концептуально)**
+Response 200 (концептуально):
 
 ```json
 {
@@ -1762,898 +1873,24 @@ Authorization: Token <MANAGER_TOKEN>
 }
 ```
 
-**Принципы**
+### 7.3. Manager Analytics — summary / cleaners / trends
 
-* Performance API — read-only слой.
-* Не вводит новых сущностей или бизнес-логики.
-* Агрегирует существующие job-данные и SLA-метаданные (`sla_status`, `sla_reasons`).
-
----
-
-### Job force-complete (manager override)
-
-**Purpose**
-
-Позволяет менеджеру принудительно завершить Job и зафиксировать факт override с причиной.  
-Используется в редких случаях, когда клинер не может загрузить фото / закрыть чек-лист, но работа фактически выполнена.
-
-**Endpoint**
-
-`POST /api/manager/jobs/{id}/force-complete/`
-
-- Доступно только менеджеру (`User.role = manager`).
-- Работает только для job со статусами `scheduled` или `in_progress`.
-- Компания должна быть `is_active = True` и не в suspended-состоянии.
-
-**Request body (JSON)**
-
-```json
-{
-  "reason_code": "missing_after_photo",
-  "comment": "Client left early, cleaner couldn't take after-photo."
-}
-Поля:
-
-reason_code — строка, обязательная. Один из доменных кодов SLA, например:
-missing_before_photo
-missing_after_photo
-checklist_not_completed
-comment — строка, обязательная. Живое объяснение от менеджера, почему был сделан override.
-
-Response (200 OK)
-
-{
-  "id": 55,
-  "status": "completed",
-  "sla_status": "violated",
-  "sla_reasons": ["missing_after_photo"],
-  "force_completed": true,
-  "force_completed_by": {
-    "id": 7,
-    "full_name": "DevNew Manager"
-  },
-  "force_completed_at": "2026-02-02T12:34:56Z"
-}
-Семантика:
-
-status — job переводится в completed.
-sla_status — всегда violated (override = осознанное нарушение стандартного proof).
-sla_reasons — включает переданный reason_code (может быть объединён с существующими причинами, если они были).
-force_completed — явный флаг override.
-force_completed_by / force_completed_at — кто и когда сделал override.
-Side effects
-
-При успешном вызове:
-Создаётся JobCheckEvent:
-
-type = "force_complete"
-user = request.user
-comment = <comment из запроса>
-payload = { "reason_code": ..., "previous_status": ..., "previous_sla_status": ... }
-Обновляются поля Job:
-
-status = completed
-
-completed_at / actual_end_time выставляются, если были пустыми
-
-sla_status и sla_reasons приводятся в состояние “нарушено по причине override”
-
-Errors
-
-400 BAD REQUEST — отсутствует reason_code или comment, job уже completed.
-403 FORBIDDEN — компания заблокирована (company_blocked) или trial/plan не позволяет override (на будущее).
-404 NOT FOUND — job не принадлежит компании менеджера или не существует.
-
-##Job Timeline — SLA violation filtering
-
-Job timeline supports a violation-focused view used for audit and SLA review.
-
-By default, the system enforces proof completeness on the cleaner side (check-in/out, photos, checklist), therefore standard jobs cannot produce SLA violations.
-
-The API exposes full job timeline events, while the client may apply a “violations-only” filter, showing only SLA-relevant or exception-related events (e.g. force-complete, missing proof, overrides).
-
-If no violations exist, the timeline is intentionally empty and represented as a valid state:
-“No SLA violations detected”.
-
-This behavior is considered correct and expected, and serves as proof of process integrity rather than absence of data.
-
-## 9. SLA Reports (Weekly / Monthly) & Reports Email
-
-API предоставляет агрегированные SLA-отчёты для менеджеров, предназначенные для просмотра стейкхолдерами и экспорта.
-
-## 9.1. JSON / PDF отчёты (weekly / monthly)
-
-**Endpoints**
-
-```http
-GET /api/manager/reports/weekly/
-GET /api/manager/reports/monthly/
-GET /api/manager/reports/weekly/pdf/
-GET /api/manager/reports/monthly/pdf/
-Authorization: Token <MANAGER_TOKEN>
-```
-
-**Scope & rules**
-
-* Данные ограничены компанией текущего менеджера.
-* Период рассчитывается только на backend:
-
-  * `weekly` — последние 7 дней;
-  * `monthly` — последние 30 дней.
-* Учитываются только `completed` jobs для SLA-оценки.
-* Логика SLA и reason-codes та же, что в Job History и Performance (единый source of truth).
-
-**JSON-ответ (концептуально)**
-
-```json
-{
-  "period": {
-    "from": "2026-01-01",
-    "to": "2026-01-07"
-  },
-  "summary": {
-    "jobs_count": 100,
-    "violations_count": 12,
-    "issue_rate": 0.12
-  },
-  "cleaners": [
-    {
-      "cleaner_id": 3,
-      "cleaner_name": "Dev Cleaner",
-      "jobs_total": 20,
-      "violations": 3,
-      "violation_rate": 0.15
-    }
-  ],
-  "locations": [
-    {
-      "location_id": 5,
-      "location_name": "Marina Heights Tower",
-      "jobs_total": 10,
-      "violations": 1,
-      "violation_rate": 0.1
-    }
-  ],
-  "top_sla_reasons": [
-    { "reason": "missing_after_photo", "count": 7 },
-    { "reason": "checklist_not_completed", "count": 5 }
-  ]
-}
-```
-
-**PDF-эндпоинты**
-
-```http
-GET /api/manager/reports/weekly/pdf/
-GET /api/manager/reports/monthly/pdf/
-```
-
-возвращают бинарный PDF-файл с тем же набором данных, что и JSON-ответы, в формате отчёта:
-
-```http
-Content-Type: application/pdf
-Content-Disposition: attachment; filename="cleanproof-weekly-report.pdf"
-```
-
-### Reports & Overview API
-
-Introduced read-only reporting endpoints for managerial and owner-level analytics.
-
-Endpoints:
-- `GET /api/manager/reports/weekly/`
-- `GET /api/manager/reports/monthly/`
-- `GET /api/owner/overview/?days=<number>`
-
-These endpoints return aggregated, precomputed metrics and do not expose raw job data.
-
-Owner overview response includes:
-- period (from / to)
-- jobs_count
-- violations_count
-- issue_rate
-- top_locations (by issues)
-- top_cleaners (by volume and issues)
-- top_reasons (SLA violation codes)
-
-All reports are informational and do not affect job state or business logic.
-
-### 9.2. Job report email (v1 — краткий контракт)
-
-#### 9.2.1. `POST /api/manager/jobs/{id}/report/email/` (основной контракт)
-
-**Endpoint**
-
-```http
-POST /api/manager/jobs/{id}/report/email/
-```
-
-Sends the verified Job PDF report to email.
-
-## Job PDF report (SLA & Proof)
-
-Job PDF report (GET /api/manager/jobs/<id>/report/pdf/) формируется на основе фактического состояния job и включает блок SLA & Proof.
-SLA-статус (ok / violated) и причины SLA (sla_reasons) вычисляются на backend с использованием общей доменной логики и не дублируются на уровне PDF.
-В случае SLA OK PDF явно указывает, что все обязательные доказательства (check-in/out, photos, checklist) присутствуют.
-В случае SLA violated в PDF отображается список конкретных причин нарушения.
-Job PDF использует тот же SLA source of truth, что и Job Details в Manager Portal.
-
-## Email Job PDF report
-
-Endpoint POST /api/manager/jobs/<id>/report/email/ используется для отправки Job PDF отчёта по email.
-PDF генерируется на backend на основе фактического состояния job и прикрепляется к письму как вложение.
-Email может быть отправлен:
-
-на email текущего пользователя (manager),
-на произвольный email, переданный в payload.
-Тело письма формируется сервером и содержит:
-идентификатор job,
-локацию и адрес,
-дату выполнения,
-имя клинера,
-
-SLA статус (OK / violated, с причинами при наличии),
-описание включённых доказательств (check-in/out, photos, checklist).
-Каждая отправка PDF логируется как бизнес-событие.
-
-## PDF Job Report & Email log
-
-Реализованы API-эндпоинты для генерации и доставки PDF-отчётов по job, а также для логирования факта отправки отчёта по email:
-
-GET /api/manager/jobs/<id>/report/pdf/
-Генерирует и возвращает PDF job report (check-in/out, фото, checklist, audit events).
-
-POST /api/manager/jobs/<id>/report/email/
-Отправляет PDF job report на указанный email и логирует факт отправки.
-
-GET /api/manager/jobs/<id>/report/emails/
-Возвращает историю email-отправок PDF-отчёта по конкретному job (sent_at, target_email, sent_by, status, error_message).
-
-История email-отправок используется как часть SLA / proof-контекста и предназначена для доказательства управленческих действий (отчёт был отправлен / не был отправлен).
-
-**Behavior (v1):**
-
-* Endpoint is available only to authenticated managers.
-* Job is resolved strictly within the manager’s company.
-* PDF is generated using the same backend logic as the Download PDF endpoint.
-* If no email is provided in request body, the report is sent to `request.user.email`.
-* Successful response indicates that the email has been sent (or queued, depending on email backend).
-
-**Request body (optional):**
-
-```json
-{
-  "email": "recipient@example.com"
-}
-```
-
-**Response (200):**
-
-```json
-{
-  "detail": "PDF report emailed.",
-  "job_id": 123,
-  "target_email": "manager@example.com"
-}
-```
-
-**Notes:**
-
-* Email delivery logic is backend-controlled.
-* Frontend does not infer or compute recipient email.
-
-### 9.3. Email PDF — Job report (подробный UX-слой v1)
-
-Этот блок описывает то же самое поведение, но более развернуто с точки зрения продукта/UX.
-
-**Endpoint**
-
-```http
-POST /api/manager/jobs/{job_id}/report/email/
-```
-
-**Описание**
-
-Отправляет PDF-отчёт по конкретной job на email.
-
-**Поведение**
-
-* PDF генерируется тем же backend-кодом, что и `/report/pdf/` (single source of truth).
-* По умолчанию отчёт отправляется на email текущего менеджера (`request.user.email`).
-* Допускается явная передача `email` в теле запроса.
-
-**Request body (optional)**
-
-```json
-{
-  "email": "owner@example.com"
-}
-```
-
-**Response (success)**
-
-```json
-{
-  "detail": "PDF report emailed.",
-  "job_id": 1,
-  "target_email": "owner@example.com"
-}
-```
-
-### 9.4. Email PDF — Weekly / Monthly reports (v1)
-
-**Endpoints**
-
-```http
-POST /api/manager/reports/weekly/email/
-POST /api/manager/reports/monthly/email/
-```
-
-**Описание**
-
-Отправляет PDF-отчёт по SLA и performance за фиксированный период (7 или 30 дней).
-
-**Поведение**
-
-* Период рассчитывается строго на backend.
-* PDF генерируется тем же кодом, что и `/weekly/pdf/` и `/monthly/pdf/`.
-* Email получателя:
-
-  * по умолчанию — `request.user.email`,
-  * либо явно переданный `email` в теле запроса.
-
-**Request body (optional)**
-
-```json
-{
-  "email": "owner@example.com"
-}
-```
-
-**Response (success)**
-
-```json
-{
-  "detail": "Weekly report emailed.",
-  "target_email": "owner@example.com",
-  "period": {
-    "from": "2026-01-22",
-    "to": "2026-01-28"
-  }
-}
-```
-
-### 9.5. Reports Email (v2 — расширенный контракт и логирование)
-
-All report email endpoints support optional recipient selection and are fully logged on the backend.
-
-#### 9.5.1. Job report email (v2)
-
-```http
-POST /api/manager/jobs/<id>/report/email/
-```
-
-**Request body (optional):**
-
-```json
-{
-  "email": "recipient@example.com"
-}
-```
-
-If `email` is not provided, `request.user.email` is used by default.
-
-The endpoint:
-
-* generates the same PDF as `/report/pdf/` (single source of truth),
-* sends the email using the configured Django email backend,
-* creates a `ReportEmailLog` entry for every send attempt.
-
-#### 9.5.2. Weekly / Monthly reports email (v2)
-
-```http
-POST /api/manager/reports/weekly/email/
-POST /api/manager/reports/monthly/email/
-```
-
-**Request body (optional):**
-
-```json
-{
-  "email": "recipient@example.com"
-}
-```
-
-**Behavior:**
-
-* period is calculated strictly on backend (7 / 30 days),
-* PDF is identical to `/weekly/pdf/` and `/monthly/pdf/`,
-* email is sent to the provided address or manager email by default,
-* each send is recorded in `ReportEmailLog` with period, recipient, and status.
-
----
-
-### Reports → Evidence (SLA drill-down)
-
-`GET /api/manager/reports/violations/jobs/`
-
-Read-only endpoint for drilling down from SLA aggregates to concrete jobs with a specific SLA violation reason.
-
-**Query params:**
-- `reason` — SLA reason code (e.g. `missing_after_photo`)
-- `period_start` — YYYY-MM-DD
-- `period_end` — YYYY-MM-DD
-
-**Response includes:**
-- selected `reason` and `reason_label`
-- requested period
-- pagination metadata
-- list of jobs with:
-  - job id
-  - scheduled date
-  - cleaner
-  - location
-  - SLA status and reasons
-
-The endpoint reuses the same SLA computation logic as Performance and Reports aggregation (single source of truth).  
-It is strictly read-only and does not affect job execution or status transitions.
-
----
-### Reports PDF (Manager → Owner)
-
-The weekly and monthly PDF reports are generated via manager-level endpoints and are intended for owner consumption.
-
-The PDF includes owner-level SLA aggregates:
-- total jobs in period
-- jobs with SLA violations
-- issue rate
-- top SLA reasons
-- primary locations and cleaners with issues
-- narrative summary
-
-There is no separate "owner PDF" endpoint.  
-The Owner overview shown in the UI is a presentation layer over the same aggregated data and does not introduce additional metrics beyond what is already included in the PDF.
-
----
-## Cleaner authentication (phone + PIN)
-
-Реализована схема аутентификации клинеров через номер телефона и 4-значный PIN. Менеджер создаёт клинера через POST /api/manager/cleaners/, указывая имя, телефон, опциональный email и статус активности. PIN может быть задан при создании либо сгенерирован сервером при сбросе. Для входа клинер использует endpoint POST /api/auth/cleaner-login/ с параметрами phone и pin, в ответ возвращается auth token и данные пользователя. Сброс PIN доступен только менеджеру через POST /api/manager/cleaners/{id}/reset-pin/ и возвращает новый PIN, который отображается один раз.
-
-## 10. API Contract — зафиксированные поля для Mobile Layer 1
-
-Секция описывает минимально необходимый контракт для Mobile Layer 1 (логика без финального дизайна).
-Эти поля уже используются и должны считаться стабильными.
-
-### 10.1. Job Details payload (мобильное приложение)
-
-Фактически используется мобильным приложением:
-
-```json
-{
-  "id": 0,
-  "status": "scheduled",
-  "scheduled_date": "YYYY-MM-DD",
-  "location": {
-    "id": 0,
-    "name": "string",
-    "address": "string or null",
-    "latitude": 0.0,
-    "longitude": 0.0
-  },
-  "cleaner": {
-    "id": 0,
-    "full_name": "string"
-  }
-}
-```
-
-**Зафиксированные правила**
-
-* `latitude` / `longitude`:
-
-  * могут быть `null`;
-  * используются только для навигации в Mobile App;
-  * отсутствие координат = UI показывает `Navigate (no location)` без `onPress`.
-* Backend не обязан гарантировать наличие координат для каждой локации.
-
-### 10.2. Job Photos (Mobile Layer 1)
-
-Контракт для получения фото (упрощённая форма):
-
-```json
-{
-  "type": "before",
-  "file_url": "string",
-  "created_at": "string"
-}
-```
-
-**Правила (уже реализованы и используются)**
-
-* максимум одно `before` и одно `after` фото на job;
-* `after` запрещён без `before`;
-* `file_url` используется:
-
-  * для превью в мобильном приложении;
-  * для встраивания в PDF-отчёт;
-* отсутствие фото = UI показывает `No photo yet`.
-
-(Фактический полный объект `photos` в Job Detail см. в разделах 2.2 / 2.7.1.)
-
-### 10.3. Checklist Items (Mobile Layer 1)
-
-```json
-{
-  "id": 0,
-  "text": "string",
-  "required": true,
-  "is_completed": false
-}
-```
-
-**Правила**
-
-* чеклист:
-
-  * read-only, пока `job.status != "in_progress"`;
-  * обязателен для check-out, если `required = true` (все required должны быть `is_completed = true`).
-* Backend остаётся единственным источником истины.
-  UI лишь повторяет эти ограничения и не вводит свои правила.
-
-  #### Checklist templates in manager meta
-
-**GET /api/manager/meta/** теперь возвращает в поле `checklist_templates` расширенный объект:
-
-```json
-{
-  "id": 1,
-  "name": "Apartment – Standard (6 items)",
-  "description": "",
-  "items_preview": [
-    "Vacuum all floors",
-    "Mop hard floors",
-    "Dust all surfaces"
-  ],
-  "items_count": 6
-}
-description — краткое описание шаблона (для чего используется).
-items_preview — первые N пунктов чеклиста (используются как превью в UI).
-items_count — общее количество пунктов в шаблоне.
-
-Если у компании yet нет ни одного валидного шаблона с пунктами, при первом запросе GET /api/manager/meta/ вызывается хелпер create_default_checklist_templates_for_company(company) и создаются базовые шаблоны:
-
-Apartment – Standard (6 items)
-Apartment – Deep (12 items)
-Office – Standard (8 items)
-Villa – Full (12 items)
-
-Checklist templates & job checklist linkage
-
-Эндпоинт GET /api/manager/meta/ возвращает список checklist_templates, включающий: id, name, description, items_preview и items_count. Эти данные используются фронтендом для осознанного выбора шаблона при создании job.
-
-При создании job через POST /api/manager/jobs/ можно передать поле checklist_template_id. Если оно указано, на стороне backend автоматически создаётся чеклист job на основе выбранного шаблона. Если поле не передано, job создаётся без чеклиста.
-
-Состояние чеклиста job учитывается в proof-блоке (proof.checklist) и используется для вычисления SLA.
-
-### 10.4. Job Events / Timeline (Mobile Layer 1)
-
-```json
-{
-  "type": "check_in",
-  "created_at": "string",
-  "actor_name": "string"
-}
-```
-
-**Использование**
-
-* отображение таймлайна в `JobDetailsScreen`;
-* данные read-only;
-* порядок событий определяется backend (по `created_at`), фронт порядок не переупорядочивает.
-
-## Email history — API contract (manager reports)
-
-Зафиксирован полный контракт раздела Email history для менеджера. Экран использует эндпоинт
-GET /api/manager/report-emails/ как единый источник данных для истории отправки всех отчётов (job, weekly, monthly). Контракт поддерживает фильтрацию по дате отправки (date_from, date_to — по created_at, формат YYYY-MM-DD), статусу (sent, failed), типу отчёта (job_report, weekly_report, monthly_report), job_id и части email получателя. Реализована серверная пагинация (page, page_size). Ответ стандартизирован и содержит count, параметры пагинации и массив results[] с денормализованными полями для UI: job_period, company_name, location_name, cleaner_name, target_email, status, sent_by, sent_at.
-
-### 10.5. Guard Rails (API + UI договорённость)
-
-**Backend**
-
-* Жёстко валидирует порядок действий:
-
-  * нельзя check-out без фото и чеклиста (см. 2.4);
-  * нельзя `after` без `before`;
-  * `completed` job — immutable (нельзя менять чеклист / фото / статусы).
-
-**Frontend (Mobile)**
-
-* Не предлагает невозможных действий:
-
-  * Check in — только при `status = "scheduled"`;
-  * Check out — только при `status = "in_progress"`;
-  * `completed` — без action-кнопок.
-
-### 10.6. Статус API для Mobile Layer 1
-
-Контракты на текущий момент достаточны для:
-
-* навигации;
-* камеры / галереи;
-* превью фото;
-* чеклиста;
-* таймлайна;
-* PDF.
-
-Новые API не требуются для закрытия Mobile Layer 1.
-Все изменения на Mobile — consumer-level, без расширения backend.
-
----
-
-## Job force-complete (manager override)
-
-### Purpose
-
-`force-complete` is a controlled manager-only action that allows completing a job
-when the standard execution flow (photos / checklist) cannot be finished,
-while **explicitly preserving SLA violations**.
-
-This mechanism exists to reflect real-world exceptions without weakening
-mobile enforcement or hiding execution issues.
-
-Force-complete never represents a successful job.
-It always results in an SLA violation.
-
----
-
-### Endpoint
-
-`POST /api/manager/jobs/<id>/force-complete/`
-
----
-
-### Permissions & Preconditions
-
-- Allowed role: `manager`
-- Job must belong to the manager’s company
-- Job status must be one of:
-  - `scheduled`
-  - `in_progress`
-- Company must be active and not suspended (read-only companies cannot force-complete jobs)
-
----
-## Analytics API (Manager)**
-
-Реализован и подключён API-слой аналитики для менеджерского интерфейса. Все эндпоинты принимают диапазон дат через query-параметры `date_from` и `date_to` и возвращают агрегированные данные без бизнес-логики на фронтенде.
-
-Поддерживаемые эндпоинты:
-
-* `GET /api/manager/analytics/summary/` — сводные KPI (jobs completed, on-time rate, proof completion rate, avg duration, issues).
-* `GET /api/manager/analytics/jobs-completed/` — дневной тренд выполненных работ.
-* `GET /api/manager/analytics/job-duration/` — тренд средней длительности jobs.
-* `GET /api/manager/analytics/proof-completion/` — тренды completion rate по before photo / after photo / checklist.
-* `GET /api/manager/analytics/cleaners-performance/` — performance-метрики по каждому клинеру.
-
-API используется страницей `/analytics` в Manager Portal. Контракт зафиксирован, формат ответов согласован с UI-компонентами.
-
----
-
-### Request Body
-
-```json
-{
-  "reason_code": "missing_after_photo",
-  "comment": "Client left early, cleaner could not take after-photo."
-}
-Fields
-reason_code (required, string)
-
-Allowed values:
-
-missing_before_photo
-missing_after_photo
-checklist_not_completed
-other
-comment (required, non-empty string)
-
-Human-readable explanation provided by the manager.
-This comment is stored in the audit trail and visible in the job timeline.
-
-Backend Behavior
-On successful force-complete:
-Job status is set to completed (if not already).
-actual_end_time is set to current time if missing.
-Job SLA status is set to violated.
-The provided reason_code is added to sla_reasons
-(merged with existing reasons, no duplicates).
-
-A JobCheckEvent is created with:
-event_type = "force_complete"
-user = manager
-comment = request.comment
-payload containing:
-reason_code
-previous job status
-previous SLA status
-
-Force-complete does not modify mobile execution rules and does not unblock
-cleaner-side actions.
-
-Response
-Returns the updated job representation:
-
-{
-  "id": 55,
-  "status": "completed",
-  "sla_status": "violated",
-  "sla_reasons": ["missing_after_photo"],
-  "force_completed": true,
-  "force_completed_at": "2026-02-02T12:34:56Z",
-  "force_completed_by": {
-    "id": 7,
-    "full_name": "Manager Name"
-  }
-}
-Errors
-400 BAD REQUEST
-
-missing or empty comment
-
-invalid or missing reason_code
-
-job already completed
-
-403 FORBIDDEN
-
-company is suspended (read-only mode)
-
-user is not allowed to manage the job
-
-404 NOT FOUND
-
-job does not exist or does not belong to the manager’s company
-
-SLA, Timeline & Reports Impact
-Force-complete always results in sla_status = violated
-
-The force-complete event appears in the Job Timeline
-
-The event is included when filtering timeline by violation-related events
-
-Reports and Analytics consume the same SLA data without special handling
-
-This endpoint intentionally makes exceptions visible, auditable, and measurable.
-ополнительные SLA-поля в ответе:
-
-- `sla_status` — `"ok"` или `"violated"`.
-- `sla_reasons` — массив строковых кодов причин нарушения SLA.
-  Возможные значения (минимальный набор v1):
-  - `"missing_before_photo"`
-  - `"missing_after_photo"`
-  - `"checklist_not_completed"`
-  - `"check_in_missing"`
-  - `"check_out_missing"`
-  - `"other"` (ручной override).
-
-- `force_completed` — `true`, если job был завершён через manager override.
-- `force_completed_at` — ISO datetime момента принудительного завершения (или `null`).
-- `force_completed_by` — объект с данными менеджера, который сделал override:
-  ```json
-  {
-    "id": 16,
-    "full_name": "DevNew Manager"
-  }
-
-### 4.2. Новый эндпоинт force-complete
-
-### POST /api/manager/jobs/{id}/force-complete/
-
-Принудительно помечает job как `completed` и устанавливает `sla_status=violated` с выбранной причиной.
-
-Только для аутентифицированных менеджеров.
-
-**Request**
-
-```http
-POST /api/manager/jobs/56/force-complete/
-Authorization: Token <manager-token>
-Content-Type: application/json
-{
-  "reason_code": "missing_after_photo",
-  "comment": "Client left early, cleaner could not take after-photo."
-}
-reason_code — обязательный код причины из списка:
-missing_before_photo
-missing_after_photo
-checklist_not_completed
-check_in_missing
-check_out_missing
-other
-comment — необязательный текстовый комментарий менеджера.
-
-Responses
-200 OK — job успешно force-completed. Тело ответа — обновлённый объект job (тот же формат, что в GET /api/manager/jobs/{id}/), включая:
-
-status: "completed"
-sla_status: "violated"
-sla_reasons (содержит переданный reason_code)
-force_completed: true
-
-force_completed_at
-force_completed_by.
-400 Bad Request — неверный reason_code или бизнес-ошибка (например, job уже completed).
-403 Forbidden — user не является менеджером.
-404 Not Found — job не найден.
-
-## Manager Analytics API (summary + cleaners performance)
-
-**Summary**
-
-`GET /api/manager/analytics/summary/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
-
-Возвращает агрегированную статистику по джобам за период:
-
-- `jobs_completed` — количество завершённых джобов;
-- `on_time_completion_rate` — доля джобов, завершённых вовремя (0–1);
-- `proof_completion_rate` — доля джобов с полным набором пруфов (0–1);
-- `avg_job_duration_hours` — средняя длительность джоба в часах (float);
-- `issues_detected` — количество зафиксированных нарушений/SLA-issues.
-
-Используется Manager Portal на странице `/analytics` для верхнего блока KPI-карточек.
-
-**Cleaner performance**
-
-`GET /api/manager/analytics/cleaners-performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
-
-Возвращает список клинеров с метриками за период:
-
-- `cleaner_id`, `cleaner_name`
-- `jobs_completed`
-- `avg_job_duration_hours`
-- `on_time_rate` (0–1)
-- `proof_rate` (0–1)
-- `issues`
-
-Используется для таблицы «Cleaner Performance» и сравнительного графика по клинерам на странице `/analytics`.
-
-
-## Итоговое правило
-
-Любая новая функциональность должна либо:
-
-1. укладываться в контракты, зафиксированные здесь, либо
-2. сначала обновить этот файл (`API_CONTRACT.md`) с чётким описанием изменений и только потом реализовывать их в коде.
-
-
-
-### 📊 Analytics API — v1 (Manager)
-
-Analytics API предоставляет **операционную аналитику** для менеджеров и не является отчётным или PDF-слоем.
-
-Все эндпоинты:
-
-* read-only
-* работают **только для Manager**
-* принимают единый период через `date_from / date_to`
-* используют completed jobs как источник данных
-
-#### Общие параметры
+Общий формат: все endpoints принимают:
 
 ```text
 date_from=YYYY-MM-DD
 date_to=YYYY-MM-DD
 ```
 
-Период включителен.
-Агрегация основана на `actual_end_time`.
+Период включителен, агрегируется по `actual_end_time`.
 
----
+#### 7.3.1. Summary
 
-#### GET /api/manager/analytics/summary/
+```http
+GET /api/manager/analytics/summary/
+```
 
-**Назначение:**
-Ключевые KPI за период.
-
-**Ответ:**
+Response:
 
 ```json
 {
@@ -2665,20 +1902,13 @@ date_to=YYYY-MM-DD
 }
 ```
 
-**Семантика:**
+#### 7.3.2. Cleaners performance
 
-* `on_time_completion_rate` — доля jobs, завершённых до планового времени
-* `proof_completion_rate` — доля jobs с полным proof (before + after + checklist)
-* `issues_detected` — количество jobs с SLA violations
+```http
+GET /api/manager/analytics/cleaners-performance/
+```
 
----
-
-#### GET /api/manager/analytics/cleaners-performance/
-
-**Назначение:**
-Сравнение клинеров за период.
-
-**Ответ:**
+Response:
 
 ```json
 [
@@ -2694,14 +1924,13 @@ date_to=YYYY-MM-DD
 ]
 ```
 
----
+#### 7.3.3. Jobs completed trend
 
-#### GET /api/manager/analytics/jobs-completed/
+```http
+GET /api/manager/analytics/jobs-completed/
+```
 
-**Назначение:**
-Тренд количества завершённых jobs по дням.
-
-**Ответ:**
+Response:
 
 ```json
 [
@@ -2710,14 +1939,13 @@ date_to=YYYY-MM-DD
 ]
 ```
 
----
+#### 7.3.4. Job duration trend
 
-#### GET /api/manager/analytics/job-duration/
+```http
+GET /api/manager/analytics/job-duration/
+```
 
-**Назначение:**
-Средняя фактическая длительность jobs по дням.
-
-**Ответ:**
+Response:
 
 ```json
 [
@@ -2725,14 +1953,13 @@ date_to=YYYY-MM-DD
 ]
 ```
 
----
+#### 7.3.5. Proof completion trend
 
-#### GET /api/manager/analytics/proof-completion/
+```http
+GET /api/manager/analytics/proof-completion/
+```
 
-**Назначение:**
-Тренд completeness proof по дням.
-
-**Ответ:**
+Response:
 
 ```json
 [
@@ -2743,27 +1970,15 @@ date_to=YYYY-MM-DD
     "checklist_rate": 1.0
   }
 ]
+```
 
-### SLA Breakdown — Analytics v2
-
-SLA-анализ по причинам нарушений за выбранный период.
-
-`GET /api/manager/analytics/sla-breakdown/`
-
-#### Query params
-
-- `date_from` — начало периода, `YYYY-MM-DD` (обязательный)
-- `date_to` — конец периода, включительно, `YYYY-MM-DD` (обязательный)
-
-Период считается по дате **фактического завершения job** (`actual_end_time`).
-
-#### Пример
+### 7.4. SLA Breakdown (Analytics v2)
 
 ```http
-GET /api/manager/analytics/sla-breakdown/?date_from=2026-01-01&date_to=2026-02-02
-````
+GET /api/manager/analytics/sla-breakdown/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+```
 
-#### Response
+Response:
 
 ```json
 {
@@ -2796,267 +2011,148 @@ GET /api/manager/analytics/sla-breakdown/?date_from=2026-01-01&date_to=2026-02-0
 }
 ```
 
-#### Семантика
+Status: `IMPLEMENTED (Analytics SLA v2, backend-only UI)`.
 
-* `jobs_completed` — количество jobs в статусе `completed` за период
-  (по `actual_end_time`).
+---
 
-* `violations_count` — сколько из этих jobs имеют `sla_status = "violated"`
-  по результату `compute_sla_status_and_reasons_for_job(job)`.
+## 8. Mobile Layer 1 — минимальный контракт
 
-* `violation_rate` — доля нарушенных jobs:
+Для Mobile v1 зафиксирован **минимальный необходимый** набор полей.
 
-  * `violations_count / jobs_completed` (0–1).
-
-* `reasons` — разбивка по причинам нарушений:
-
-  * `code` — строковый код причины (например, `late_start`, `early_leave`,
-    `checklist_not_completed`, `proof_missing`, …);
-  * `count` — сколько раз эта причина встретилась в периоде.
-
-* `top_cleaners` — агрегаты по клинерам:
-
-  * `jobs_completed` — jobs за период;
-  * `violations_count` — сколько из них нарушили SLA;
-  * `violation_rate` — доля нарушений по этому клинеру (0–1).
-
-* `top_locations` — агрегаты по локациям:
-
-  * та же семантика, что и для клинеров.
-
-**Source of truth:**
-
-* фильтрация: `Job.status = completed`, `actual_end_time` внутри периода;
-* статус и причины нарушений: `compute_sla_status_and_reasons_for_job(job)`;
-* если reasons — строка, она приводится к `[reason]`;
-* если reasons — список, внутри используются строковые коды.
-
-Status: `IMPLEMENTED (Analytics SLA v2, backend-only UI)`
-UI-представления (отдельные графики / табы) могут развиваться независимо от этого контракта.
-
-## 6. SLA Breakdown — нарушения по типам, клинерам и локациям
-
-Эндпоинт для аналитики по SLA-нарушениям за период.
-
-### Endpoint
-
-`GET /api/manager/analytics/sla-breakdown/`
-
-### Query params
-
-* `date_from` — дата начала периода, `YYYY-MM-DD` (обязательный)
-* `date_to` — дата конца периода, включительно, `YYYY-MM-DD` (обязательный)
-
-Пример:
-
-```http
-GET /api/manager/analytics/sla-breakdown/?date_from=2026-01-01&date_to=2026-02-02
-````
-
-### Response
+### 8.1. Job Details (Mobile)
 
 ```json
 {
-  "jobs_completed": 4,
-  "violations_count": 2,
-  "violation_rate": 0.5,
-  "reasons": [
-    { "code": "missing_after_photo", "count": 2 },
-    { "code": "checklist_not_completed", "count": 2 },
-    { "code": "missing_before_photo", "count": 1 }
-  ],
-  "top_cleaners": [
-    {
-      "cleaner_id": 17,
-      "cleaner_name": "Aisha Muxamed",
-      "jobs_completed": 4,
-      "violations_count": 2,
-      "violation_rate": 0.5
-    }
-  ],
-  "top_locations": [
-    {
-      "location_id": 10,
-      "location_name": "Marina Tower Residence LLS",
-      "jobs_completed": 4,
-      "violations_count": 2,
-      "violation_rate": 0.5
-    }
-  ]
+  "id": 0,
+  "status": "scheduled",
+  "scheduled_date": "YYYY-MM-DD",
+  "location": {
+    "id": 0,
+    "name": "string",
+    "address": "string or null",
+    "latitude": 0.0,
+    "longitude": 0.0
+  },
+  "cleaner": {
+    "id": 0,
+    "full_name": "string"
+  }
 }
 ```
 
-### Семантика полей
+`latitude` / `longitude` могут быть `null` — тогда кнопка навигации работает без ссылок на карты.
 
-* **jobs_completed** — количество job в статусе `completed` за указанный период
-  (по `actual_end_time`).
+### 8.2. Job Photos (Mobile)
 
-* **violations_count** — сколько из этих job имеют статус `sla_status = violated`
-  (по результату `compute_sla_status_and_reasons_for_job`).
+Упрощённая форма:
 
-* **violation_rate** — доля нарушенных job:
-  `violations_count / jobs_completed` (0–1).
+```json
+{
+  "type": "before",
+  "file_url": "string",
+  "created_at": "string"
+}
+```
 
-* **reasons** — список причин нарушений за период:
+Максимум одно `before` и одно `after`.
+Отсутствие фото → UI показывает “No photo yet”.
 
-  * `code` — машинное имя причины SLA:
+### 8.3. Checklist Items (Mobile)
 
-    * `late_start`
-    * `early_leave`
-    * `missing_before_photo`
-    * `missing_after_photo`
-    * `checklist_not_completed`
-    * и другие коды, возвращаемые SLA-движком;
-  * `count` — количество job, в которых эта причина присутствует
-    (одна job может иметь несколько причин, каждая причина считается отдельно).
+```json
+{
+  "id": 0,
+  "text": "string",
+  "required": true,
+  "is_completed": false
+}
+```
 
-* **top_cleaners** — агрегаты по клинерам:
+Пока `status != "in_progress"`, чек-лист read-only.
 
-  * `cleaner_id` / `cleaner_name`
-  * `jobs_completed` — всего job за период;
-  * `violations_count` — job с нарушением SLA;
-  * `violation_rate` — доля job с нарушением (0–1).
+### 8.4. Job Events / Timeline (Mobile)
 
-* **top_locations** — агрегаты по локациям, с теми же полями, что для клинеров.
+```json
+{
+  "type": "check_in",
+  "created_at": "string",
+  "actor_name": "string"
+}
+```
 
-> **Источник истины по SLA-нарушениям** — helper
-> `compute_sla_status_and_reasons_for_job(job)` и связанные с ним правила.
-> UI и отчёты не пересчитывают SLA самостоятельно.
-
----
-
-> **SLA Engine v2 & Analytics**
->
-> * Введён единый helper `compute_sla_status_and_reasons_for_job(job)` и набор стандартных кодов нарушений: `missing_before_photo`, `missing_after_photo`, `checklist_not_completed`, `missing_check_in`, `missing_check_out`.
-> * На его основе реализованы:
->
->   * агрегирующий SLA-отчёт `_get_company_report()` (используется в weekly/monthly JSON, PDF и e-mail-ендпоинтах);
->   * `GET /api/owner/overview/` — summary + top cleaners/locations/reasons;
->   * `GET /api/manager/performance/` — SLA-метрики по клинерам и локациям за произвольный период;
->   * `GET /api/manager/reports/violations/jobs/` — список jobs с конкретным типом нарушения.
-> * Force-complete job (`POST /api/manager/jobs/<id>/force-complete/`) пишет причины нарушения в `job.sla_reasons` и автоматически попадает во все SLA-отчёты и аналитику.
-
-### Implementation modules (backend)
-
-The REST API described in this document is implemented in the following Django view modules:
-
-- `backend/apps/api/views.py`  
-  Thin entry point that re-exports all API views and contains:
-  - default checklist templates for new companies,
-  - `ManagerMetaView` used by the dashboard bootstrap (`/api/manager/meta/`).
-
-- `backend/apps/api/views_auth.py`  
-  Auth endpoints:
-  - `/api/login/` (cleaner / generic login)  
-  - `/api/cleaner/login-pin/`  
-  - `/api/manager/login/`  
-  - `/api/manager/signup/`
-
-- `backend/apps/api/views_cleaner.py`  
-  Cleaner-facing endpoints:
-  - `/api/jobs/today/`, `/api/jobs/<id>/`  
-  - `/api/jobs/<id>/check-in/`, `/api/jobs/<id>/check-out/`  
-  - checklist toggle / bulk update  
-  - job photos upload/delete  
-  - job PDF report download for cleaners.
-
-- `backend/apps/api/views_manager_company.py`  
-  Manager company & cleaners management:
-  - `/api/manager/company/` (GET / PATCH)  
-  - `/api/manager/company/logo/`  
-  - `/api/manager/cleaners/` (list/create)  
-  - `/api/manager/cleaners/<id>/` (update)  
-  - `/api/manager/cleaners/<id>/reset-pin/`.
-
-- `backend/apps/api/views_manager_jobs.py`  
-  Manager job planning & SLA views:
-  - job create, today list, planning list, history list  
-  - job details for manager  
-  - SLA helpers and force-complete (`/api/manager/jobs/<id>/force-complete/`)  
-  - performance summary & violation jobs reports.
-
-- `backend/apps/api/views_reports.py`  
-  Reporting & email:
-  - job report email endpoints  
-  - weekly / monthly SLA reports (JSON + PDF)  
-  - owner overview  
-  - global report email log table  
-  - weekly / monthly report email send endpoints.
-
-This split is purely internal to the backend; the external API contracts (URLs, methods, payloads) remain exactly as described below.
-
-**Reports & Owner overview — contract guarantees**
-
-Reports API is designed as a read-only summary layer.
-Owner overview endpoints (`/api/owner/overview/`) return aggregated, non-drillable data intended for high-level business monitoring only. No job-level navigation or filtering is exposed for owners by design.
-
-Manager reports endpoints (`/api/manager/reports/*`) are the single source of truth for:
-
-* UI reports
-* PDF generation
-* Email reports
-
-All SLA-related metrics (issue rate, top reasons, violations count) must be calculated consistently across UI, PDF and email outputs. Percentages for SLA reasons are always calculated **relative to total SLA violations**, not total jobs.
-
----
-Окей, давай добьём документацию. Ниже — по одному абзацу на каждый файл, заточенные под прямую вставку.
-
----
-## Reports & SLA
-
-Owner и Manager отчёты зафиксированы как разные уровни доступа.
-GET /api/owner/overview/ возвращает read-only high-level summary за rolling-период (30 дней): issue_rate, jobs_count, violations_count, топ-локации и клинеры.
-Manager использует GET /api/manager/reports/weekly|monthly/ для детальных SLA-отчётов с разбивкой по причинам, клинерам и локациям.
-История отправок отчётов доступна через GET /api/manager/report-emails/ и используется как единый источник правды для UI / PDF / email.
-
-## Analytics & SLA breakdown
-
-GET /api/manager/analytics/sla-breakdown/ — основной источник SLA-аналитики: считает violations, а не jobs, и возвращает breakdown по причинам, топ-клинерам и локациям. Используется в Manager Reports и Analytics.
-
-Health check
-Добавлен GET /api/health/ → { "status": "ok" } как стандартный liveness-endpoint для web и mobile-клиентов.
-
-
-
-
-
-
-Готово. Ниже — **те же абзацы, но с явными подзаголовками `##`**, чтобы документы сразу читались и сканировались в репозитории.
+Backend задаёт порядок, фронт не переупорядочивает.
 
 ---
 
-## API_CONTRACTS.md
+## 9. Ошибки — общий паттерн
 
-### ## SLA Violations — Jobs List
+Все эндпоинты возвращают ошибки в виде:
 
-Добавлен эндпоинт получения списка задач с нарушениями SLA:
+```json
+{
+  "detail": "Error message here"
+}
+```
 
-`GET /api/manager/reports/violations/jobs/`
+Дополнительно могут быть:
 
-Эндпоинт предназначен для загрузки детализированного списка job’ов, нарушивших SLA, за указанный период.
+```json
+{
+  "code": "company_blocked",
+  "detail": "Your account is currently blocked. Please contact support."
+}
+```
 
-**Обязательные query-параметры:**
+Статусы:
 
-* `period_start` — дата начала периода (`YYYY-MM-DD`)
-* `period_end` — дата окончания периода (`YYYY-MM-DD`)
+* `400 Bad Request` — бизнес-ошибка (GPS, чек-лист, неверные аргументы и т.п.).
+* `401 Unauthorized` — нет/невалиден токен.
+* `403 Forbidden` — не та роль / чужие данные / commercial guard.
+* `404 Not Found` — объект не найден или не принадлежит компании.
+* `409 Conflict` — неверный статус для операции, конфликт фото, double action.
 
-**Дополнительно должен быть передан как минимум один фильтр:**
+Фронт:
 
-* `reason` — код причины нарушения SLA
-  (`missing_before_photo`, `missing_after_photo`, `checklist_not_completed`, `missing_check_in`, `missing_check_out`)
-* `cleaner_id` — ID клинера
-* `location_id` — ID локации
-
-**Ответ включает:**
-
-* период отчёта (`period.start`, `period.end`)
-* `reason` и человекочитаемый `reason_label` (если применимо)
-* список job’ов с полями:
-  `id`, `status`, `scheduled_date`, `location_id/name`, `cleaner_id/name`, `sla_status`, `sla_reasons`
-* базовую информацию о пагинации
-
-Эндпоинт используется исключительно в контексте Reports.
+* читает `detail`;
+* показывает пользователю;
+* не парсит текст в бизнес-логику.
 
 ---
-## Analytics & SLA APIs (implemented)
-Реализован полный набор API для аналитики и SLA-метрик менеджера. Добавлены endpoints для summary-метрик (jobs completed, on-time rate, proof completion, average job duration, issues detected) с расчётом дельт относительно предыдущего периода. Реализованы временные тренды по завершённым job’ам, длительности, proof-completion (before/after/checklist), SLA-нарушениям, а также breakdown SLA с причинами, топ-клинерами и локациями. Все расчёты основаны исключительно на completed jobs и используют actual timestamps как source of truth. API гарантирует отсутствие “дыр” в датах и всегда возвращает валидные значения (0 вместо null/NaN).
+
+## 10. Backend implementation modules (для разработчиков)
+
+Внутреннее разбиение views (не влияет на контракт):
+
+* `backend/apps/api/views.py`
+  единая точка подключения, manager meta, дефолтные чек-листы.
+
+* `backend/apps/api/views_auth.py`
+  login/signup, cleaner phone+PIN.
+
+* `backend/apps/api/views_cleaner.py`
+  today jobs, job details, check-in/out, checklist, photos, job PDF.
+
+* `backend/apps/api/views_manager_company.py`
+  company profile, logo, cleaners CRUD, reset-pin.
+
+* `backend/apps/api/views_manager_jobs.py`
+  job create/today/planning/history, manager job detail, SLA helpers, force-complete, performance.
+
+* `backend/apps/api/views_reports.py`
+  job report email, weekly/monthly JSON+PDF, owner overview, report email log, weekly/monthly email.
+
+---
+
+## 11. Итоговое правило
+
+Любая новая функциональность:
+
+1. либо **укладывается** в описанные здесь контракты,
+2. либо сначала обновляет `API_CONTRACTS.md` с явным описанием изменений,
+   и только затем реализуется в коде.
+
+Backend остаётся единственным источником истины по статусам, SLA, аналитике и отчётам.
+Фронты — только потребители этого контракта.
+
+```
+```
