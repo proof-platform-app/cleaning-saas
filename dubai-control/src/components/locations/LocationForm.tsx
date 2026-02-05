@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { LocationMapPicker } from "./LocationMapPicker";
+import { LocationMap } from "./LocationMap";
+import { AddressAutocompleteInput } from "./AddressAutocompleteInput";
 import type { Location as ApiLocation } from "@/api/client";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface LocationFormProps {
   location?: ApiLocation | null;
@@ -15,6 +17,7 @@ interface LocationFormProps {
     address: string;
     latitude: number;
     longitude: number;
+    is_active?: boolean;
   }) => void | Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
@@ -38,11 +41,15 @@ export function LocationForm({
   const [name, setName] = useState(location?.name || "");
   const [address, setAddress] = useState(location?.address || "");
   const [latitude, setLatitude] = useState<string>(
-    location?.latitude?.toString() || ""
+    location?.latitude?.toString() || "",
   );
   const [longitude, setLongitude] = useState<string>(
-    location?.longitude?.toString() || ""
+    location?.longitude?.toString() || "",
   );
+  const [isActive, setIsActive] = useState<boolean>(
+    (location as ApiLocation | null)?.is_active ?? true,
+  );
+
   const [errors, setErrors] = useState<FormErrors>({});
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -53,18 +60,20 @@ export function LocationForm({
       setLatitude(
         typeof location.latitude === "number"
           ? location.latitude.toString()
-          : ""
+          : "",
       );
       setLongitude(
         typeof location.longitude === "number"
           ? location.longitude.toString()
-          : ""
+          : "",
       );
+      setIsActive((location as ApiLocation | null)?.is_active ?? true);
     } else {
       setName("");
       setAddress("");
       setLatitude("");
       setLongitude("");
+      setIsActive(true);
     }
   }, [location]);
 
@@ -112,7 +121,6 @@ export function LocationForm({
     const latRaw = latitude?.toString() ?? "";
     const lngRaw = longitude?.toString() ?? "";
 
-    // Нормализуем запятые → точки
     const normalizedLat = latRaw.replace(",", ".").trim();
     const normalizedLng = lngRaw.replace(",", ".").trim();
 
@@ -124,7 +132,6 @@ export function LocationForm({
       return;
     }
 
-    // Дополнительно проверяем диапазон
     if (parsedLat < -90 || parsedLat > 90) {
       setLocalError("Latitude must be between -90 and 90.");
       return;
@@ -135,7 +142,6 @@ export function LocationForm({
       return;
     }
 
-    // Синхронизируем с полевыми ошибками (на всякий случай)
     setErrors({});
 
     try {
@@ -144,6 +150,7 @@ export function LocationForm({
         address: trimmedAddress,
         latitude: parsedLat,
         longitude: parsedLng,
+        is_active: isActive,
       });
     } catch (err) {
       console.error("[LocationForm] onSave error", err);
@@ -154,7 +161,6 @@ export function LocationForm({
   const handleMapLocationChange = (lat: number, lng: number) => {
     setLatitude(lat.toFixed(6));
     setLongitude(lng.toFixed(6));
-    // Clear any coordinate errors when user picks from map
     setErrors((prev) => ({
       ...prev,
       latitude: undefined,
@@ -163,7 +169,33 @@ export function LocationForm({
     setLocalError(null);
   };
 
-  // Check if form can be submitted (all required fields filled)
+  // когда менеджер выбирает адрес из автокомплита
+  const handleAddressSelect = (data: {
+    address: string;
+    latitude: number;
+    longitude: number;
+  }) => {
+    setAddress(data.address);
+    setLatitude(data.latitude.toFixed(6));
+    setLongitude(data.longitude.toFixed(6));
+    setErrors((prev) => ({
+      ...prev,
+      address: undefined,
+      latitude: undefined,
+      longitude: undefined,
+    }));
+    setLocalError(null);
+  };
+
+  // когда он просто печатает текст (до клика по подсказке)
+  const handleAddressChange = (value: string) => {
+    setAddress(value);
+    setErrors((prev) => ({
+      ...prev,
+      address: undefined,
+    }));
+  };
+
   const isFormValid =
     name.trim().length > 0 &&
     address.trim().length > 0 &&
@@ -191,22 +223,58 @@ export function LocationForm({
       ? parsedLng
       : null;
 
+  const isEditing = !!location;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {apiError && (
-        <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <p className="text-sm">{apiError}</p>
         </div>
       )}
 
       {localError && (
-        <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
           <p className="text-sm">{localError}</p>
         </div>
       )}
 
+      {/* Статус локации */}
+      <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Location status</Label>
+            <p className="text-xs text-muted-foreground">
+              Active locations are available for new jobs. Inactive locations
+              stay in history and reports, but are hidden from planning and
+              dropdowns.
+            </p>
+            {isEditing && !isActive && (
+              <p className="mt-1 text-[11px] text-amber-700">
+                This location is inactive. Existing jobs and PDF reports will
+                still reference it, but you won&apos;t be able to assign new
+                jobs here until you reactivate it.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {isActive ? "Active" : "Inactive"}
+              </span>
+              <Switch
+                checked={isActive}
+                onCheckedChange={(value: boolean) => setIsActive(value)}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Name */}
       <div className="space-y-2">
         <Label htmlFor="name">
           Name <span className="text-destructive">*</span>
@@ -227,6 +295,24 @@ export function LocationForm({
         </p>
       </div>
 
+      {/* Поиск адреса (Google Places) */}
+      <div className="space-y-2">
+        <AddressAutocompleteInput
+          label="Address search"
+          placeholder="Start typing address or building name…"
+          initialAddress={address}
+          disabled={isLoading}
+          onSelect={handleAddressSelect}
+          onAddressChange={handleAddressChange}
+          error={errors.address || undefined}
+        />
+        <p className="text-xs text-muted-foreground">
+          Start typing the address or building name. Pick a suggestion to fill
+          the full address and set coordinates automatically.
+        </p>
+      </div>
+
+      {/* Текстовое поле адреса (для ручной правки) */}
       <div className="space-y-2">
         <Label htmlFor="address">
           Address <span className="text-destructive">*</span>
@@ -244,6 +330,7 @@ export function LocationForm({
         )}
       </div>
 
+      {/* Координаты */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="latitude">
@@ -282,7 +369,8 @@ export function LocationForm({
         </div>
       </div>
 
-      <LocationMapPicker
+      {/* Карта */}
+      <LocationMap
         latitude={validLat}
         longitude={validLng}
         onLocationChange={handleMapLocationChange}
@@ -292,7 +380,7 @@ export function LocationForm({
         <Button type="submit" disabled={isLoading || !isFormValid}>
           {isLoading ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Saving...
             </>
           ) : (

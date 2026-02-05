@@ -29,6 +29,7 @@ type LocationFormData = {
   address?: string;
   latitude?: number | null;
   longitude?: number | null;
+  // is_active пробрасывается через LocationForm как часть ApiLocation
 };
 
 export default function Locations() {
@@ -78,21 +79,55 @@ export default function Locations() {
     }
   };
 
+  // --- Edit/Create view ---
   if (viewMode === "create" || viewMode === "edit") {
+    const isEditing = viewMode === "edit";
+    const isActive =
+      (selectedLocation as UILocation | null)?.is_active ?? true;
+
     return (
       <div className="p-8 animate-fade-in">
         <div className="max-w-2xl">
           <button
             onClick={handleCancel}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
+            className="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Locations
           </button>
 
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-8">
-            {viewMode === "create" ? "Add Location" : "Edit Location"}
+          <h1 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
+            {isEditing ? "Edit Location" : "Add Location"}
           </h1>
+
+          {isEditing && (
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <div className="mb-1 font-semibold">
+                Before you deactivate this location
+              </div>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  Deactivating will <strong>remove this location</strong> from
+                  job planning and dropdowns for new jobs.
+                </li>
+                <li>
+                  All existing jobs, history, PDF reports and analytics will{" "}
+                  <strong>keep pointing</strong> to this location.
+                </li>
+                <li>
+                  Locations with job history <strong>cannot be deleted</strong>;
+                  they can only be deactivated / reactivated.
+                </li>
+              </ul>
+              {!isActive && (
+                <p className="mt-2 text-xs">
+                  This location is currently marked as{" "}
+                  <span className="font-semibold">Inactive</span>. You can
+                  reactivate it later if the client comes back.
+                </p>
+              )}
+            </div>
+          )}
 
           <LocationForm
             location={selectedLocation}
@@ -106,30 +141,67 @@ export default function Locations() {
     );
   }
 
+  // --- List view ---
+  const hasInactiveLocations = locations.some(
+    (loc) => (loc as UILocation).is_active === false
+  );
+
   return (
     <div className="p-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Locations
           </h1>
-          <p className="mt-1 text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             Manage your work locations for cleaning jobs.
           </p>
         </div>
         <Button onClick={handleAddNew}>
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           Add Location
         </Button>
       </div>
 
+      {/* Info about Active / Inactive semantics */}
+      <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+        <div className="mb-1 font-semibold text-slate-900">
+          Active vs Inactive locations
+        </div>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <span className="font-medium">Active</span> locations appear in job
+            planning and can be used for new jobs.
+          </li>
+          <li>
+            <span className="font-medium">Inactive</span> locations stay in job
+            history and reports, but{" "}
+            <span className="font-medium">are hidden</span> from planning and
+            dropdowns.
+          </li>
+          <li>
+            Locations with job history <span className="font-medium">
+              cannot be deleted
+            </span>
+            ; use deactivation instead.
+          </li>
+        </ul>
+        {hasInactiveLocations && (
+          <p className="mt-2 text-[11px] text-slate-600">
+            Some locations are already inactive — they remain in reports but are
+            not available for new jobs.
+          </p>
+        )}
+      </div>
+
       {/* Locations Table */}
-      <div className="bg-card rounded-xl border border-border shadow-card overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
               <TableHead>Name</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Address</TableHead>
               <TableHead>Latitude</TableHead>
               <TableHead>Longitude</TableHead>
@@ -153,6 +225,14 @@ export default function Locations() {
                 ? format(new Date(createdRaw), "MMM d, yyyy")
                 : "—";
 
+              const isActive =
+                (location as UILocation).is_active ?? true;
+
+              const statusLabel = isActive ? "Active" : "Inactive";
+              const statusClasses = isActive
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                : "bg-slate-50 text-slate-500 border border-slate-200";
+
               return (
                 <TableRow
                   key={location.id}
@@ -162,7 +242,17 @@ export default function Locations() {
                   <TableCell className="font-medium">
                     {location.name}
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-xs">
+
+                  {/* Status */}
+                  <TableCell>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClasses}`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </TableCell>
+
+                  <TableCell className="max-w-xs text-muted-foreground">
                     <span className="line-clamp-2 whitespace-pre-line">
                       {location.address}
                     </span>
@@ -181,7 +271,7 @@ export default function Locations() {
         {locations.length === 0 && (
           <div className="p-12 text-center">
             <p className="text-muted-foreground">No locations added yet.</p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               Add your first work location to get started.
             </p>
           </div>

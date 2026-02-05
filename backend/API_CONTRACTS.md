@@ -33,6 +33,36 @@ Last updated: 2026-02-04
 - CHANGED: `/api/manager/jobs/{id}/` — добавлены поля `manager_notes`, `cleaner_notes`.
 - FIXED: уточнена семантика SLA helper’ов (`compute_sla_status_for_job`, `compute_sla_reasons_for_job`).
 
+### 1.6.0 — 2026-02-04
+- NEW: `GET /api/manager/jobs/export/` — CSV-export завершённых jobs для менеджера (audit / data export v1).
+  - Фильтрация по периоду (`from` / `to`) на основе `actual_end_time`.
+  - Дополнительные фильтры: `location_id`, `cleaner_id`, `sla_status`.
+  - Экспорт ограничен рамками компании менеджера.
+  - Формат: `text/csv`, download attachment.
+
+## 1.0.0 — 2026-02-04
+NEW: Добавлен эндпоинт CSV-экспорта jobs менеджера
+GET /api/manager/jobs/export/?from=YYYY-MM-DD&to=YYYY-MM-DD[&location_id=&cleaner_id=&sla_status=].
+Возвращает text/csv (заголовок + одна строка на job) для выбранного периода.
+FIXED: Зафиксировано, что CSV-экспорт использует те же бизнес-фильтры, что и /api/manager/jobs/history/,
+и при отсутствии jobs в периоде возвращает валидный CSV только с заголовком (без ошибок и 4xx).
+
+## 1.4.0 — 2026-02-04
+NEW: Задокументирован флаг is_active у Location и его влияние на операционное поведение (активные / неактивные локации).
+NEW: Зафиксировано правило деактивации локаций — вместо удаления используется is_active = false.
+CHANGED: Создание Job на неактивную локацию теперь считается ошибкой и возвращает 400 Bad Request с code: "location_inactive".
+CHANGED: Удаление локации, связанной с существующими jobs, запрещено на уровне backend и возвращает ошибку 400 Bad Request с code: "location_has_jobs".
+FIXED: Прояснена роль Location как опорной сущности для job history, отчётов и PDF — связь job → location считается инвариантом и не может быть нарушена.
+BREAKING: Клиенты, ранее полагавшиеся на физическое удаление локаций или создание jobs на любые location_id, должны обрабатывать ошибки location_inactive и location_has_jobs и перейти на deactivate-логику.
+DEPRECATED: Физическое удаление локаций в операционных сценариях (рекомендуемый сценарий — деактивация через is_active = false).
+
+### 1.6.0 — 2026-02-05
+- NEW: Интеграция Google Maps JavaScript API для раздела Locations (Manager Portal).
+- NEW: Использование Google Places API для адресного поиска (autocomplete) с получением координат (latitude / longitude).
+- CHANGED: Источник координат для Locations — теперь Google Maps вместо Leaflet / OpenStreetMap.
+- FIXED: Семантика определения координат локации — координаты считаются валидными только после выбора адреса из autocomplete или перемещения маркера на карте.
+- DEPRECATED: Использование Leaflet / OpenStreetMap для выбора координат локации объявлено устаревшим (подлежит удалению).
+
 ---
 
 ## 0. Общий контекст

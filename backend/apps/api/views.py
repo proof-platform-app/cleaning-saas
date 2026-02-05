@@ -229,7 +229,10 @@ class ManagerMetaView(APIView):
         )
 
         # 3) локации
-        locations_qs = Location.objects.filter(company=company).order_by("name", "id")
+        locations_qs = (
+            Location.objects.filter(company=company, is_active=True)
+            .order_by("name", "id")
+        )
 
         # 4) шаблоны с пунктами
         templates_qs = (

@@ -57,6 +57,12 @@ export function CreateJobDrawer({
     reload: reloadLocations,
   } = useLocations();
 
+  // Только активные локации для планирования
+  const activeLocations = useMemo(
+    () => locations.filter((loc) => (loc as any).is_active ?? true),
+    [locations],
+  );
+
   // ===== meta ===== (cleaners; locations тут больше не используем)
   const [meta, setMeta] = useState<PlanningMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
@@ -90,7 +96,7 @@ export function CreateJobDrawer({
     !trialExpired &&
     !companyBlocked &&
     !locationsLoading &&
-    locations.length > 0;
+    activeLocations.length > 0;
 
   // ===== utils =====
   function normalizeTimeToSeconds(value: string): string {
@@ -152,9 +158,9 @@ export function CreateJobDrawer({
   useEffect(() => {
     if (!open) return;
     if (locationId != null) return;
-    if (locations.length === 0) return;
-    setLocationId(locations[0].id);
-  }, [open, locationId, locations]);
+    if (activeLocations.length === 0) return;
+    setLocationId(activeLocations[0].id);
+  }, [open, locationId, activeLocations]);
 
   // при смене шаблона сбрасываем разворот чеклиста
   useEffect(() => {
@@ -170,13 +176,12 @@ export function CreateJobDrawer({
     [meta, checklistTemplateId],
   );
 
-    const checklistPreviewItems =
+  const checklistPreviewItems =
     selectedChecklistTemplate?.items_preview ?? [];
 
   // Пока бэкенд не отдаёт полный список, используем превью
   const checklistFullItems =
     showAllChecklistItems ? checklistPreviewItems : checklistPreviewItems;
-
 
   const checklistItemsToShow = showAllChecklistItems
     ? checklistFullItems
@@ -218,8 +223,8 @@ export function CreateJobDrawer({
     if (!meta || metaLoading) return;
 
     // базовые проверки
-    if (locations.length === 0) {
-      setSubmitError("Please create at least one location first.");
+    if (activeLocations.length === 0) {
+      setSubmitError("Please create at least one active location first.");
       setSubmitErrorCode(null);
       return;
     }
@@ -283,6 +288,22 @@ export function CreateJobDrawer({
         apiData?.error_code ||
         apiData?.error ||
         apiData?.detail?.code;
+
+      // Отдельно обрабатываем неактивную локацию
+      if (apiCode === "location_inactive") {
+        const detail =
+          (typeof apiData === "string" ? apiData : apiData?.detail) ??
+          "This location is inactive. Please choose another location.";
+
+        setSubmitError(detail);
+        setSubmitErrorCode("location_inactive");
+
+        // сбрасываем выбор и перезагружаем список локаций
+        setLocationId(null);
+        void reloadLocations();
+
+        return;
+      }
 
       const isTrialExpired =
         apiCode === "trial_expired" ||
@@ -360,10 +381,10 @@ export function CreateJobDrawer({
 
           {meta && (
             <>
-              {locations.length === 0 && !locationsLoading && (
+              {activeLocations.length === 0 && !locationsLoading && (
                 <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  No locations yet. Create a location first, then come back to
-                  create a job.
+                  No active locations yet. Create or activate a location first,
+                  then come back to create a job.
                 </div>
               )}
 
@@ -429,14 +450,14 @@ export function CreateJobDrawer({
                     <SelectTrigger>
                       <SelectValue
                         placeholder={
-                          locations.length === 0
-                            ? "No locations yet"
+                          activeLocations.length === 0
+                            ? "No active locations"
                             : "Select location"
                         }
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {locations.map((loc) => (
+                      {activeLocations.map((loc) => (
                         <SelectItem key={loc.id} value={String(loc.id)}>
                           {loc.name || `Location #${loc.id}`}
                         </SelectItem>
@@ -506,9 +527,7 @@ export function CreateJobDrawer({
                                   className="text-xs text-muted-foreground truncate"
                                   title={tpl.items_preview.join(" · ")}
                                 >
-                                  {tpl.items_preview
-                                    .slice(0, 2)
-                                    .join(" · ")}
+                                  {tpl.items_preview.slice(0, 2).join(" · ")}
                                   {typeof tpl.items_count === "number" &&
                                     tpl.items_count >
                                       tpl.items_preview.length &&

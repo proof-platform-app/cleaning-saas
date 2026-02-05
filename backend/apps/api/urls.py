@@ -4,6 +4,7 @@ from django.http import JsonResponse
 
 from apps.marketing.views import DemoRequestCreateView, ContactMessageCreateView
 from . import analytics_views
+from . import views
 
 # NOTE:
 # apps.api.views is a thin entry point that re-exports public API views
@@ -215,6 +216,13 @@ urlpatterns = [
         api_views.ManagerPlanningJobsView.as_view(),
         name="manager-jobs-planning",
     ),
+    
+    path(
+        "manager/jobs/export/",
+        views.ManagerJobsExportView.as_view(),
+        name="manager-jobs-export",
+    ),
+
 
     # =====================
     # Locations
@@ -343,7 +351,7 @@ urlpatterns = [
         name="manager-analytics-violations-trend"
      ),
 
-     
+
     # =====================
     # Owner
     # =====================

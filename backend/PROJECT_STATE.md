@@ -44,6 +44,50 @@
 * single source of truth (те же данные, что UI)
 * используется для download и email ✅
 
+### Locations — operational safeguards
+
+* `is_active` флаг в модели Location ✅  
+  (поле существует в БД, используется как основной operational switch)
+
+* Удаление локации с job history — ✅  
+  (физический delete запрещён на уровне БД через `on_delete=PROTECT`)
+
+* Archive / deactivate flow через `is_active` — ✅  
+  (локация выводится из операционных флоу без потери job history)
+
+* Создание новых jobs на `is_active = false` — ✅  
+  (backend-guard реализован, возвращается `400 Bad Request` с `code: "location_inactive"`)
+
+Принцип:
+
+> Location нельзя "убить", если по ней уже есть jobs.  
+> Исторические jobs и отчёты всегда остаются валидными, даже если локация больше не используется.
+
+- Locations: delete protection
+  - locations with job history **cannot** be deleted (DB-level PROTECT on Job.location);
+  - deactivation via `is_active = false` is the only allowed way to remove a location from operational flows;
+  - locations without any jobs can still be deleted (admin / script).
+
+### Locations — operational safeguards
+
+✅ `is_active` флаг в модели Location реализован и используется как единственный операционный переключатель.
+
+✅ Физическое удаление локаций с job history запрещено:
+- `Job.location` использует `on_delete=PROTECT`;
+- попытка удалить локацию с джобами невозможна на уровне БД и backend.
+
+✅ Archive / deactivate flow реализован через `is_active = false`:
+- неактивные локации скрыты из job planning и dropdown’ов;
+- существующие jobs, история, PDF-отчёты и аналитика продолжают ссылаться на локацию.
+
+✅ UI менеджера поддерживает deactivate / reactivate:
+- явное отображение статуса (Active / Inactive);
+- предупреждение о последствиях деактивации перед изменением;
+- деактивация не воспринимается как удаление.
+
+✅ Создание новых jobs на `is_active = false` локации запрещено backend-guard’ом.
+
+
 👉 Backend-ядро job execution **полностью закрыто**.
 
 ---
@@ -271,6 +315,9 @@ Execution → SLA → Reports → PDF → Email → Audit
 
 Execution-логика закрыта, дальше — UI-полировка.
 
+Открытые вопросы (не логика):
+* явные loading / retry / error состояния (photo upload, check-in/out) ⛔
+
 ---
 
 ## 🧑‍💼 СЛОЙ 2 — Управление
@@ -300,8 +347,15 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Performance layer ✅
 * Reports v2 (PDF + Email + Audit) ✅
 * Analytics v1 ✅
+* Jobs CSV export (owner/manager, completed jobs only) ✅
 * Multi-company roles ⛔
-* Data export ⛔
+* Location lifecycle (archive / inactive) ⛔
+* Mobile UX safety states ⛔
+
+## 🧪 QA & Regression
+
+* `QA_CHECKLIST.md` — ручной regression-checklist (smoke + happy-path + SLA + reports),
+  который прогоняется перед крупными изменениями или релизом. ✅
 
 ---
 
@@ -312,6 +366,7 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Mobile camera UX требует полировки
 * Locations без advanced features
 * Email delivery зависит от SMTP
+* Нет формализованного QA / regression checklist
 
 ---
 

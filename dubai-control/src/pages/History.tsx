@@ -19,6 +19,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { exportManagerJobsCsv } from "@/api/client";
 
 type DateRange = {
   from: Date;
@@ -74,6 +75,7 @@ export default function History() {
   const [locationFilterId, setLocationFilterId] = useState<number | null>(
     initialLocationFilterId,
   );
+  const [exportLoading, setExportLoading] = useState(false);
 
   // если пришли с другой страницы (Reports) с новыми query-параметрами —
   // аккуратно синхронизируем состояние History с URL
@@ -193,6 +195,51 @@ export default function History() {
     setLocationFilterId(null);
   };
 
+  const handleExportCsv = async () => {
+    try {
+      setExportLoading(true);
+
+      const payload: {
+        from: string;
+        to: string;
+        location_id?: number;
+        cleaner_id?: number;
+        sla_status?: "ok" | "violated";
+      } = {
+        from: dateFromStr,
+        to: dateToStr,
+      };
+
+      if (cleanerFilterId != null && !Number.isNaN(cleanerFilterId)) {
+        payload.cleaner_id = cleanerFilterId;
+      }
+
+      if (locationFilterId != null && !Number.isNaN(locationFilterId)) {
+        payload.location_id = locationFilterId;
+      }
+
+      if (showOnlyProblem) {
+        payload.sla_status = "violated";
+      }
+
+      const blob = await exportManagerJobsCsv(payload);
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `jobs_export_${dateFromStr}_${dateToStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("[History] Failed to export jobs CSV", e);
+      window.alert("Failed to export CSV. Please try again.");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -275,6 +322,16 @@ export default function History() {
                   Select a start and end date in the calendar to load job
                   history.
                 </p>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full mt-2"
+                  onClick={handleExportCsv}
+                  disabled={exportLoading}
+                >
+                  {exportLoading ? "Exporting CSV…" : "Download CSV"}
+                </Button>
               </div>
 
               {/* PROBLEM JOBS TOGGLE */}

@@ -38,6 +38,30 @@ Last reviewed: 2026-02-04
 - CHANGED: Analytics now uses live data instead of mocks.
 - FIXED: Clarified SLA engine as single source of truth for reports and analytics.
 
+### 0.1.0 — 2026-02-04
+- NEW: Добавлен CSV export завершённых jobs для audit и owner/manager использования.
+  - Endpoint: `GET /api/manager/jobs/export/`
+  - Экспортируются только `completed` jobs в заданном диапазоне дат (`from` / `to`).
+  - Source of truth по времени — `actual_end_time`, а не `scheduled_date`.
+  - В экспорт включены: job, location, cleaner, duration, SLA status, SLA reasons, force-complete флаг.
+  - Экспорт read-only, не влияет на execution, SLA или reports.
+- FIXED: Зафиксирована семантика audit-export как Layer 5 feature без UI и без бизнес-логики на фронте.
+
+### 1.0.0 — 2026-02-04
+- NEW: На экране Job History добавлена кнопка **“Download CSV”**, которая дергает
+  `GET /api/manager/jobs/export/` с текущим диапазоном дат и (по мере появления) фильтрами
+  локации/клинера/SLA-статуса. Экспорт используется как аудиторский выгрузочный инструмент.
+- CHANGED: Диапазон дат в Job History теперь является единственным источником правды
+  и для выборки списка (`/api/manager/jobs/history/`), и для CSV-экспорта — отдельные поля
+  под экспорт не вводятся.
+- FIXED: Уточнены ожидания по UX Data Export:
+  кнопка недоступна без выбранного периода, пустой период обязан возвращать пустой CSV
+  (только заголовок), ошибки сервера/сети отображаются в виде toast, не ломая страницу.
+
+### X.Y.Z — 2026-02-04
+- NEW: Locations deletion is blocked when referenced by jobs (database-level PROTECT).
+- NEW: Operational rule established — locations are deactivated via `is_active` instead of deletion.
+- FIXED: Guaranteed referential integrity for `Job.location` across job history.
 
 
 ## 0. Текущий статус проекта

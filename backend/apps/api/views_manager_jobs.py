@@ -1,6 +1,7 @@
 import logging
+import csv
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -15,6 +16,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from apps.accounts.models import Company, User
 from apps.jobs.models import (
@@ -38,7 +40,6 @@ from .serializers import (
     compute_sla_status_for_job,
     compute_sla_reasons_for_job,
 )
-
 logger = logging.getLogger(__name__)
 
 VALID_SLA_REASONS = {
@@ -527,6 +528,18 @@ class ManagerJobsCreateView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
+
+        # 🚦 Guard: нельзя создавать job на неактивную локацию
+        location = serializer.validated_data.get("location")
+        if isinstance(location, Location) and not getattr(location, "is_active", True):
+            return Response(
+                {
+                    "code": "location_inactive",
+                    "detail": "This location is inactive. Please choose another location.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         job = serializer.save()
         out = PlanningJobSerializer(job).data
         return Response(out, status=status.HTTP_201_CREATED)
@@ -1004,3 +1017,142 @@ class ManagerJobsHistoryView(APIView):
 
         data = [build_planning_job_payload(job) for job in qs]
         return Response(data, status=status.HTTP_200_OK)
+
+class ManagerJobsExportView(APIView):
+    """
+    CSV-export completed jobs for audit.
+
+    GET /api/manager/jobs/export/?from=YYYY-MM-DD&to=YYYY-MM-DD[&location_id=&cleaner_id=&sla_status=]
+    """
+
+    # важно: используем тот же TokenAuthentication, что и в других manager-вьюхах
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated, IsManager]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+
+        # базовая проверка, как в других manager-эндпоинтах
+        company = getattr(user, "company", None)
+        if not company:
+            return Response(
+                {"detail": "Manager has no company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # 1. Валидация дат
+        date_from_str = request.query_params.get("from")
+        date_to_str = request.query_params.get("to")
+
+        if not date_from_str or not date_to_str:
+            raise ValidationError(
+                {"detail": "`from` and `to` are required (YYYY-MM-DD)."}
+            )
+
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValidationError(
+                {"detail": "Invalid date format. Use YYYY-MM-DD."}
+            )
+
+        if date_from > date_to:
+            raise ValidationError({"detail": "`from` must be <= `to`."})
+
+        # 2. Дата-диапазон → aware datetime
+        start_dt = timezone.make_aware(datetime.combine(date_from, time.min))
+        end_dt = timezone.make_aware(datetime.combine(date_to, time.max))
+
+        # 3. Базовый queryset: только completed, только своя компания
+        qs = (
+            Job.objects.select_related("company", "location", "cleaner")
+            .filter(
+                company=company,
+                status=Job.STATUS_COMPLETED,
+                actual_end_time__gte=start_dt,
+                actual_end_time__lte=end_dt,
+            )
+        )
+
+        # 4. Доп. фильтры
+        location_id = request.query_params.get("location_id")
+        if location_id:
+            qs = qs.filter(location_id=location_id)
+
+        cleaner_id = request.query_params.get("cleaner_id")
+        if cleaner_id:
+            qs = qs.filter(cleaner_id=cleaner_id)
+
+        sla_status = request.query_params.get("sla_status")
+        if sla_status in ("ok", "violated"):
+            qs = qs.filter(sla_status=sla_status)
+
+        # 5. Готовим HttpResponse как CSV
+        filename = f"jobs_export_{date_from_str}_{date_to_str}.csv"
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
+
+        writer = csv.writer(response)
+
+        # 6. Заголовок
+        header = [
+            "job_id",
+            "company_id",
+            "location_id",
+            "cleaner_id",
+            "scheduled_start_datetime",
+            "scheduled_end_datetime",
+            "actual_start_time",
+            "actual_end_time",
+            "duration_minutes",
+            "sla_status",
+            "sla_reasons",
+            "force_completed",
+            "completed_at",
+        ]
+        writer.writerow(header)
+
+        # 7. Строки
+        for job in qs.iterator():
+            duration_minutes = None
+            if job.actual_start_time and job.actual_end_time:
+                delta = job.actual_end_time - job.actual_start_time
+                duration_minutes = int(delta.total_seconds() // 60)
+
+            sla_reasons_value = ""
+            if hasattr(job, "sla_reasons") and job.sla_reasons:
+                if isinstance(job.sla_reasons, (list, tuple)):
+                    sla_reasons_value = ";".join(job.sla_reasons)
+                else:
+                    sla_reasons_value = str(job.sla_reasons)
+
+            writer.writerow(
+                [
+                    job.id,
+                    getattr(job, "company_id", ""),
+                    getattr(job, "location_id", ""),
+                    getattr(job, "cleaner_id", ""),
+                    job.scheduled_start_datetime.isoformat()
+                    if getattr(job, "scheduled_start_datetime", None)
+                    else "",
+                    job.scheduled_end_datetime.isoformat()
+                    if getattr(job, "scheduled_end_datetime", None)
+                    else "",
+                    job.actual_start_time.isoformat()
+                    if job.actual_start_time
+                    else "",
+                    job.actual_end_time.isoformat()
+                    if job.actual_end_time
+                    else "",
+                    duration_minutes,
+                    getattr(job, "sla_status", ""),
+                    sla_reasons_value,
+                    getattr(job, "force_completed", False),
+                    job.actual_end_time.isoformat()
+                    if job.actual_end_time
+                    else "",
+                ]
+            )
+
+        return response

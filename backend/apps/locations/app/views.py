@@ -49,4 +49,4 @@ class ManagerLocationDetailView(generics.UpdateAPIView):
         if company is not None:
             qs = qs.filter(company=company)
 
-        return qs
+        return qs.order_by("id")

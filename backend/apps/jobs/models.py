@@ -32,7 +32,7 @@ class Job(models.Model):
 
     location = models.ForeignKey(
         Location,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="jobs",
     )
 
@@ -373,3 +373,5 @@ class JobPhoto(models.Model):
 
     def __str__(self) -> str:
         return f"Job {self.job_id} {self.photo_type}"
+    
+    

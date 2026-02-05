@@ -82,6 +82,45 @@ CleanProof не занимается биллингом, маркетингом 
   - полный просмотр proof, SLA, PDF, email-истории.
   - разделение на **операционный workspace** (Jobs/Planning) и **архив** (Job History).
 
+  #### Locations как опорная сущность
+
+Locations — это не просто справочник адресов, а опорная сущность для доказательств.
+
+* Локация может быть `active` или `inactive`.
+* `inactive` означает, что на эту локацию больше нельзя назначать новые jobs.
+* Локации с job history нельзя удалять — они остаются в системе для сохранения цепочки доказательств (History, Reports, PDF).
+* Менеджер "отключает" локацию через deactivate, а не через delete.
+
+Любые операции, которые приводят к потере связи job → location, считаются недопустимыми.
+
+### Locations — delete protection ✅
+
+- Locations with job history cannot be deleted.
+- Database-level protection enforced via `on_delete=PROTECT` on `Job.location`.
+- Operational flow: locations are deactivated via `is_active = false` instead of deletion.
+- Historical jobs always retain valid location references.
+
+### Locations — address & map behavior ✅
+
+- Основной сценарий создания локации — выбор адреса или объекта через поиск.
+- Менеджер вводит адрес / название объекта, получает автодополнение и выбирает нужный вариант.
+- После выбора адреса:
+  - координаты (latitude / longitude) определяются автоматически;
+  - карта центрируется на выбранной точке;
+  - маркер устанавливается автоматически.
+- Менеджер может вручную скорректировать положение маркера на карте, если требуется.
+- Ручной ввод latitude / longitude допускается только как fallback и не является основным сценарием.
+- Цель UX — исключить необходимость ручной работы с координатами в 95% случаев.
+
+### Locations — Google Maps integration (2026-02) ✅
+
+- Раздел Locations переведён на Google Maps JavaScript API.
+- Адресный поиск реализован через Google Places Autocomplete.
+- Выбор адреса автоматически устанавливает latitude / longitude.
+- Маркер на карте поддерживает drag-and-drop с обновлением координат.
+- Leaflet / OpenStreetMap больше не используются.
+- API key подключается через .env.local и подлежит обязательному ограничению (HTTP referrer + allowed APIs).
+
 ### 3.3. Trial / Commercial enforcement — ✅ READY
 
 - 7-day trial как UX-сценарий, а не платёжная логика.

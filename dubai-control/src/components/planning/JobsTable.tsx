@@ -138,7 +138,8 @@ export function JobsTable({ jobs, loading = false, onJobClick }: Props) {
                       <div className="mt-1">
                         <span
                           className={cn(
-                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                            // 🔽 изменили форму бейджа: больше не капсула, а прямоугольник с мягкими углами
+                            "inline-flex items-center rounded-lg border px-2.5 py-1 text-[11px] font-medium",
                             checklistBadgeIsWarning
                               ? "border-amber-200 bg-amber-50 text-amber-700"
                               : "border-slate-200 bg-slate-50 text-slate-700",

@@ -155,6 +155,9 @@ export interface Location {
   name: string;
   address: string | null;
 
+  // флаг активности локации (используется в Manager Portal)
+  is_active?: boolean;
+
   // возможные поля, которые уже были в UI/бэке
   latitude?: number | null;
   longitude?: number | null;
@@ -650,6 +653,43 @@ export async function fetchManagerJobsSummary(): Promise<ManagerJobSummary[]> {
   return raw.map((item) => normalizeJob(item));
 }
 
+// ---------- Jobs export (CSV, audit-only) ----------
+
+export type ManagerJobsExportParams = {
+  from: string; // "YYYY-MM-DD"
+  to: string; // "YYYY-MM-DD"
+  location_id?: number;
+  cleaner_id?: number;
+  sla_status?: "ok" | "violated";
+};
+
+export async function exportManagerJobsCsv(
+  params: ManagerJobsExportParams
+): Promise<Blob> {
+  await loginManager();
+
+  const searchParams = new URLSearchParams();
+  searchParams.set("from", params.from);
+  searchParams.set("to", params.to);
+
+  if (typeof params.location_id === "number") {
+    searchParams.set("location_id", String(params.location_id));
+  }
+
+  if (typeof params.cleaner_id === "number") {
+    searchParams.set("cleaner_id", String(params.cleaner_id));
+  }
+
+  if (params.sla_status) {
+    searchParams.set("sla_status", params.sla_status);
+  }
+
+  const path = `/api/manager/jobs/export/?${searchParams.toString()}`;
+
+  // read-only audit export: backend уже фильтрует только completed jobs
+  return apiFetchBlob(path, { method: "GET" });
+}
+
 // ---------- Job details ----------
 
 export async function fetchManagerJobDetail(
@@ -962,7 +1002,7 @@ export const apiClient = {
 
   async post<T = any>(
     path: string,
-    body?: any,
+    body: any = undefined,
     options: ApiClientOptions = {}
   ): Promise<{ data: T }> {
     await loginManager();
