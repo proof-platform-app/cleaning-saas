@@ -36,6 +36,9 @@ type Suggestion = {
   secondaryText: string;
 };
 
+const MIN_QUERY_LENGTH = 3;
+const DEBOUNCE_MS = 400;
+
 export function AddressAutocompleteInput({
   label = "Address",
   placeholder = "Start typing address or place name...",
@@ -51,13 +54,14 @@ export function AddressAutocompleteInput({
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const autocompleteServiceRef =
-    useRef<any>(null);
-
-  const placesServiceRef =
-    useRef<any>(null);
-
+  const autocompleteServiceRef = useRef<any>(null);
+  const placesServiceRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const debounceTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastQueryRef = useRef<string>("");
+  const requestIdRef = useRef(0);
 
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
@@ -86,50 +90,75 @@ export function AddressAutocompleteInput({
     }
   }, [isLoaded]);
 
-  // Подсказки при вводе
+  // Подсказки при вводе с rate limiting
   useEffect(() => {
     if (!isLoaded || !autocompleteServiceRef.current) return;
 
-    const value = inputValue.trim();
-    if (!value) {
+    const query = inputValue.trim();
+
+    // короткий запрос — не дергаем Places вообще
+    if (!query || query.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
+      setLoadingSuggestions(false);
+      setLocalError(null);
       return;
     }
 
-    let cancelled = false;
-    setLoadingSuggestions(true);
-    setLocalError(null);
+    // тот же самый запрос, что уже отправляли — не повторяем
+    if (query === lastQueryRef.current) {
+      return;
+    }
 
-    autocompleteServiceRef.current.getPlacePredictions(
-      {
-        input: value,
-        types: ["geocode"],
-      },
-      (results: any[], status: string) => {
-        if (cancelled) return;
+    // сбрасываем предыдущий таймер debounce
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
 
-        setLoadingSuggestions(false);
+    debounceTimerRef.current = setTimeout(() => {
+      if (!autocompleteServiceRef.current) return;
 
-        if (status !== "OK" || !results) {
-          setSuggestions([]);
-          return;
-        }
+      const currentRequestId = ++requestIdRef.current;
+      lastQueryRef.current = query;
+      setLoadingSuggestions(true);
+      setLocalError(null);
 
-        const mapped: Suggestion[] = results.map((r) => ({
-          description: r.description,
-          placeId: r.place_id,
-          mainText:
-            r.structured_formatting?.main_text ?? r.description,
-          secondaryText:
-            r.structured_formatting?.secondary_text ?? "",
-        }));
+      autocompleteServiceRef.current.getPlacePredictions(
+        {
+          input: query,
+          types: ["geocode"],
+        },
+        (results: any[], status: string) => {
+          // ответ от старого запроса — игнорируем
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
 
-        setSuggestions(mapped);
-      },
-    );
+          setLoadingSuggestions(false);
 
+          if (status !== "OK" || !results) {
+            setSuggestions([]);
+            return;
+          }
+
+          const mapped: Suggestion[] = results.map((r) => ({
+            description: r.description,
+            placeId: r.place_id,
+            mainText:
+              r.structured_formatting?.main_text ?? r.description,
+            secondaryText:
+              r.structured_formatting?.secondary_text ?? "",
+          }));
+
+          setSuggestions(mapped);
+        },
+      );
+    }, DEBOUNCE_MS);
+
+    // при смене inputValue / размонтировании — чистим таймер
     return () => {
-      cancelled = true;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
     };
   }, [inputValue, isLoaded]);
 

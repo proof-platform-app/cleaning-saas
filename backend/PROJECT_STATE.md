@@ -1,6 +1,6 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.0)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.1)
 
-Обновлено: 2026-02-04
+Обновлено: 2026-02-06
 
 **Формат статусов:**  
 ✅ сделано 🟡 частично / в процессе ⛔ не делали
@@ -44,31 +44,18 @@
 * single source of truth (те же данные, что UI)
 * используется для download и email ✅
 
-### Locations — operational safeguards
+---
 
-* `is_active` флаг в модели Location ✅  
-  (поле существует в БД, используется как основной operational switch)
-
-* Удаление локации с job history — ✅  
-  (физический delete запрещён на уровне БД через `on_delete=PROTECT`)
-
-* Archive / deactivate flow через `is_active` — ✅  
-  (локация выводится из операционных флоу без потери job history)
-
-* Создание новых jobs на `is_active = false` — ✅  
-  (backend-guard реализован, возвращается `400 Bad Request` с `code: "location_inactive"`)
+## Locations — operational safeguards (summary)
 
 Принцип:
 
-> Location нельзя "убить", если по ней уже есть jobs.  
+> Location нельзя "удалить", если по ней уже есть jobs.  
 > Исторические jobs и отчёты всегда остаются валидными, даже если локация больше не используется.
 
-- Locations: delete protection
-  - locations with job history **cannot** be deleted (DB-level PROTECT on Job.location);
-  - deactivation via `is_active = false` is the only allowed way to remove a location from operational flows;
-  - locations without any jobs can still be deleted (admin / script).
+---
 
-### Locations — operational safeguards
+## Locations — operational safeguards
 
 ✅ `is_active` флаг в модели Location реализован и используется как единственный операционный переключатель.
 
@@ -82,17 +69,71 @@
 
 ✅ UI менеджера поддерживает deactivate / reactivate:
 - явное отображение статуса (Active / Inactive);
-- предупреждение о последствиях деактивации перед изменением;
+- предупреждение о последствиях деактивации;
 - деактивация не воспринимается как удаление.
 
-✅ Создание новых jobs на `is_active = false` локации запрещено backend-guard’ом.
+✅ Создание новых jobs на `is_active = false` запрещено backend-guard’ом  
+(`400 Bad Request`, `code: "location_inactive"`).
 
+---
+
+## Locations — Manager UI (operational UX)
+
+* Create / Edit Location:
+  * двухколоночная форма (адрес / координаты)
+  * разделение:
+    - Address search (Google Places Autocomplete)
+    - Editable human-readable address (для отчётов и PDF)
+  * live-синхронизация:
+    - autocomplete → address + coordinates
+    - draggable marker → coordinates
+  * валидация и нормализация координат (lat / lng диапазоны) ✅
+
+* Location status:
+  * Active / Inactive toggle
+  * явное объяснение последствий
+  * поддержка re-activate
+  * deactivation ≠ deletion (чётко отражено в UI) ✅
+
+* Locations list:
+  * поиск по имени и адресу
+  * фильтр по статусу (active / inactive)
+  * сортировка (name / status / created)
+  * визуальные status badges
+  * click-to-edit строка таблицы ✅
+
+---
+
+## Locations — Maps & Addressing
+
+* Address search: Google Places Autocomplete ✅
+* Map provider: Google Maps JavaScript API ✅
+* Coordinate source:
+  * autocomplete
+  * draggable marker ✅
+* Leaflet / OpenStreetMap: не используется ⛔
+
+---
+
+## Google Maps & Places — security and billing
+
+* API key restricted by HTTP referrer:
+  * `http://localhost:8080/*`
+* API key restricted to required services:
+  * Maps JavaScript API
+  * Places API
+* Monthly billing budget enabled:
+  * limit: $10 / month
+  * alerts at 50%, 90%, 100%
+* Цель: предотвращение неконтролируемых расходов
+
+Status: ✅ enforced
 
 👉 Backend-ядро job execution **полностью закрыто**.
 
 ---
 
-### Backend — Trial & Commercial Enforcement
+## Backend — Trial & Commercial Enforcement
 
 * Trial lifecycle (create / active / expired) ✅
 * Usage tracking (jobs / cleaners) ✅
@@ -120,7 +161,7 @@
 * GPS + Open in Maps
 * SLA status + reasons
 * Generate / Download PDF
-* Email PDF (см. ниже)
+* Email PDF ✅
 
 ---
 
@@ -175,16 +216,16 @@
 
 **Backend**
 * `POST /api/manager/jobs/{id}/force-complete/`
-* переводит job → `completed`
+* job → `completed`
 * SLA = `violated`
-* сохраняет audit-поля:
+* audit:
   * `force_completed`
   * `force_completed_at`
   * `force_completed_by` ✅
 
 **Frontend**
 * Force-complete modal
-* выбор reason + comment
+* reason + comment
 * auto-refetch Job Details ✅
 
 ---
@@ -193,15 +234,15 @@
 
 ### Backend
 
-* Weekly reports:
+* Weekly:
   * `/api/manager/reports/weekly/`
   * `/api/manager/reports/weekly/pdf/`
   * `/api/manager/reports/weekly/email/` ✅
-* Monthly reports:
+* Monthly:
   * `/api/manager/reports/monthly/`
   * `/api/manager/reports/monthly/pdf/`
   * `/api/manager/reports/monthly/email/` ✅
-* Performance aggregation:
+* Aggregation:
   * completed jobs only
   * SLA-based calculations ✅
 
@@ -209,93 +250,35 @@
 
 ### ReportEmailLog (Audit)
 
-**Модель**
 * company
-* user (инициатор)
+* user
 * kind: `job_report / weekly_report / monthly_report`
 * job / period_from / period_to
 * to_email
 * subject
-* status: `sent / failed`
+* status
 * error_message
 * created_at
 
 Логируется:
-* Job PDF email
-* Weekly report email
-* Monthly report email ✅
-
----
-
-### Frontend (Reports)
-
-* `/reports` ✅
-* Owner view — read-only summary
-* Manager view — actionable blocks:
-  * top SLA reasons
-  * cleaners with issues
-  * locations with issues
-* Download PDF
-* Email report (любой email)
-* Email history (`/reports/email-logs`) ✅
-
-👉 Цепочка полностью замкнута:  
-Execution → SLA → Reports → PDF → Email → Audit
-
----
-
-## 🔍 Reports → Evidence (SLA Drill-down)
-
-**Backend**
-* `GET /api/manager/reports/violations/jobs/`
-* фильтры: reason / cleaner / location / period
-* SLA single source of truth
-* read-only ✅
-
-**Frontend**
-* `/reports/violations`
-* вход только через контекстные ссылки
-* Quick view (`JobSidePanel`)
-* переход к полной странице job’а ✅
+* Job PDF
+* Weekly report
+* Monthly report ✅
 
 ---
 
 ## 📊 Analytics (Manager)
 
-### Analytics — v1 (DONE)
-
-* `/analytics` маршрут ✅
+* `/analytics` ✅
 * KPI summary (live)
-* Trends:
-  * jobs completed
-  * duration
-  * proof completion
-  * SLA violations
+* Trends
 * Cleaner performance
-* SLA Performance:
-  * overview
-  * violation reasons
-  * hotspots (cleaners / locations)
+* SLA performance
 * Unified date range
 * completed jobs only
 * frontend без бизнес-логики ✅
 
 👉 Analytics **реально работает**, не stub.
-
----
-
-## 📋 Checklist Templates
-
-### Backend
-
-* ChecklistTemplate / ChecklistTemplateItem ✅
-* автоинициализация дефолтных шаблонов ✅
-* Create Job Meta API интеграция ✅
-
-### Frontend
-
-* стабильный список шаблонов
-* preview + details в Create Job Drawer ✅
 
 ---
 
@@ -308,14 +291,12 @@ Execution → SLA → Reports → PDF → Email → Audit
 * Job Details
 * Check-in / Check-out
 * Photos before / after
-* Checklist completion
+* Checklist
 * Timeline
 * Job PDF
 * GPS enforcement
 
-Execution-логика закрыта, дальше — UI-полировка.
-
-Открытые вопросы (не логика):
+Открытые вопросы (UX safety, не логика):
 * явные loading / retry / error состояния (photo upload, check-in/out) ⛔
 
 ---
@@ -348,14 +329,16 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Reports v2 (PDF + Email + Audit) ✅
 * Analytics v1 ✅
 * Jobs CSV export (owner/manager, completed jobs only) ✅
+* Location lifecycle (archive / inactive) ✅
 * Multi-company roles ⛔
-* Location lifecycle (archive / inactive) ⛔
 * Mobile UX safety states ⛔
+
+---
 
 ## 🧪 QA & Regression
 
-* `QA_CHECKLIST.md` — ручной regression-checklist (smoke + happy-path + SLA + reports),
-  который прогоняется перед крупными изменениями или релизом. ✅
+* `QA_CHECKLIST.md` — ручной regression checklist  
+  (smoke + happy-path + SLA + reports) ✅
 
 ---
 
@@ -364,9 +347,8 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Нет биллинга
 * Trial ограничен jobs / cleaners
 * Mobile camera UX требует полировки
-* Locations без advanced features
+* Locations без enterprise-level features (bulk actions, import/export, hierarchy)
 * Email delivery зависит от SMTP
-* Нет формализованного QA / regression checklist
 
 ---
 
@@ -377,7 +359,7 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Reports v2 — DONE ✅
 * Analytics — DONE ✅
 * Product = **операционный SaaS без биллинга**  
-  с реальной управленческой ценностью, доказательствами и audit trail.
+  с реальной управленческой ценностью и audit trail.
 
 **Статусы слоёв:**
 * Слой 0 — DONE ✅
@@ -385,7 +367,3 @@ Execution-логика закрыта, дальше — UI-полировка.
 * Слой 2 — DONE ✅
 * Слой 3 — готов к биллингу
 * Слои 4–5 — заделы
-```
-
----
-

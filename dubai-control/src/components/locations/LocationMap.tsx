@@ -1,4 +1,3 @@
-// dubai-control/src/components/locations/LocationMap.tsx
 import React, { useCallback, useMemo } from "react";
 import {
   GoogleMap,
@@ -19,6 +18,10 @@ type LocationMapProps = {
     lat: number;
     lng: number;
   };
+  /**
+   * Высота карты внутри контейнера формы.
+   * Можно переопределить из формы, по умолчанию — чуть выше базового.
+   */
   height?: string;
 };
 
@@ -45,7 +48,7 @@ export function LocationMap({
   longitude,
   onLocationChange,
   defaultCenter = DEFAULT_CENTER,
-  height = "260px",
+  height = "360px",
 }: LocationMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as
     | string

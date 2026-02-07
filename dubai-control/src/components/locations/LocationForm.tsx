@@ -1,4 +1,3 @@
-// dubai-control/src/components/locations/LocationForm.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -274,107 +273,140 @@ export function LocationForm({
         </div>
       </div>
 
-      {/* Name */}
-      <div className="space-y-2">
-        <Label htmlFor="name">
-          Name <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g., Marina Tower Residence"
-          maxLength={200}
-          className={errors.name ? "border-destructive" : ""}
-        />
-        {errors.name && (
-          <p className="text-sm text-destructive">{errors.name}</p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {name.length}/200 characters
-        </p>
-      </div>
+      {/* Короткая шпаргалка по шагам */}
+      <p className="text-xs text-muted-foreground">
+        Step 1 — choose a building in <span className="font-medium">Address search</span>.{" "}
+        Step 2 — check the address and coordinates. Step 3 — adjust the pin on
+        the map if needed.
+      </p>
 
-      {/* Поиск адреса (Google Places) */}
-      <div className="space-y-2">
-        <AddressAutocompleteInput
-          label="Address search"
-          placeholder="Start typing address or building name…"
-          initialAddress={address}
-          disabled={isLoading}
-          onSelect={handleAddressSelect}
-          onAddressChange={handleAddressChange}
-          error={errors.address || undefined}
-        />
-        <p className="text-xs text-muted-foreground">
-          Start typing the address or building name. Pick a suggestion to fill
-          the full address and set coordinates automatically.
-        </p>
-      </div>
+      {/* Основные поля в две колонки */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Левая колонка: название + поиск адреса */}
+        <div className="space-y-4">
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Marina Tower Residence"
+              maxLength={200}
+              className={errors.name ? "border-destructive" : ""}
+            />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {name.length}/200 characters
+            </p>
+          </div>
 
-      {/* Текстовое поле адреса (для ручной правки) */}
-      <div className="space-y-2">
-        <Label htmlFor="address">
-          Address <span className="text-destructive">*</span>
-        </Label>
-        <Textarea
-          id="address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="Full address including building, street, area..."
-          rows={3}
-          className={errors.address ? "border-destructive" : ""}
-        />
-        {errors.address && (
-          <p className="text-sm text-destructive">{errors.address}</p>
-        )}
-      </div>
-
-      {/* Координаты */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="latitude">
-            Latitude <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="latitude"
-            type="text"
-            value={latitude}
-            onChange={(e) => setLatitude(e.target.value)}
-            placeholder="e.g., 25.2048 or 25,2048"
-            className={errors.latitude ? "border-destructive" : ""}
-          />
-          {errors.latitude && (
-            <p className="text-sm text-destructive">{errors.latitude}</p>
-          )}
-          <p className="text-xs text-muted-foreground">Range: -90 to 90</p>
+          {/* Поиск адреса (Google Places) */}
+          <div className="space-y-2">
+            <AddressAutocompleteInput
+              label="Address search"
+              placeholder="Start typing address or building name…"
+              initialAddress={address}
+              disabled={isLoading}
+              onSelect={handleAddressSelect}
+              onAddressChange={handleAddressChange}
+              error={errors.address || undefined}
+            />
+            <p className="text-xs text-muted-foreground">
+              Start typing a building or tower name and pick a suggestion. We&apos;ll
+              fill in the address and coordinates for you.
+            </p>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="longitude">
-            Longitude <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="longitude"
-            type="text"
-            value={longitude}
-            onChange={(e) => setLongitude(e.target.value)}
-            placeholder="e.g., 55.2708 or 55,2708"
-            className={errors.longitude ? "border-destructive" : ""}
-          />
-          {errors.longitude && (
-            <p className="text-sm text-destructive">{errors.longitude}</p>
-          )}
-          <p className="text-xs text-muted-foreground">Range: -180 to 180</p>
+        {/* Правая колонка: address + координаты */}
+        <div className="space-y-4">
+          {/* Текстовое поле адреса (для ручной правки) */}
+          <div className="space-y-2">
+            <Label htmlFor="address">
+              Address <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Full address including building, street, area..."
+              rows={3}
+              className={errors.address ? "border-destructive" : ""}
+            />
+            {errors.address && (
+              <p className="text-sm text-destructive">{errors.address}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Human-readable address for reports and PDFs. Logic uses
+              coordinates, so you can rephrase this text if needed.
+            </p>
+          </div>
+
+          {/* Координаты */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">
+                Latitude <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="latitude"
+                type="text"
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="e.g., 25.2048 or 25,2048"
+                className={errors.latitude ? "border-destructive" : ""}
+              />
+              {errors.latitude && (
+                <p className="text-sm text-destructive">
+                  {errors.latitude}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Usually set automatically from the map (range: -90 to 90).
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="longitude">
+                Longitude <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="longitude"
+                type="text"
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="e.g., 55.2708 or 55,2708"
+                className={errors.longitude ? "border-destructive" : ""}
+              />
+              {errors.longitude && (
+                <p className="text-sm text-destructive">
+                  {errors.longitude}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Advanced field. Edit only if you know what you&apos;re doing
+                (range: -180 to 180).
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Карта */}
-      <LocationMap
-        latitude={validLat}
-        longitude={validLng}
-        onLocationChange={handleMapLocationChange}
-      />
+      {/* Карта — широким блоком под полями */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Location on map</Label>
+        <LocationMap
+          latitude={validLat}
+          longitude={validLng}
+          onLocationChange={handleMapLocationChange}
+          height="360px"
+        />
+      </div>
 
       <div className="flex items-center gap-3 pt-4">
         <Button type="submit" disabled={isLoading || !isFormValid}>
