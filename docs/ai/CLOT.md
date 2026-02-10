@@ -1,5 +1,8 @@
 # CLOT — AI Orchestration Contract for Proof Platform
 
+Market assumption: UAE enterprise context is the default.
+Agents must not propose features or behaviors conflicting with UAE_MARKET_CONTEXT.md unless explicitly instructed.
+
 ## 1. Purpose
 
 This document defines **how AI agents must work inside the Proof Platform codebase**.

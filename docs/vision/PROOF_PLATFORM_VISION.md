@@ -1,5 +1,7 @@
 # PROOF PLATFORM — VISION
 
+This platform is designed UAE-first. See UAE_MARKET_CONTEXT.md for foundational market assumptions.
+
 ## 1. What This Platform Is
 
 Proof Platform is a **single infrastructure layer for verifying physical work**.
@@ -169,6 +171,19 @@ Any request pushing in these directions must be declined.
 > We are building infrastructure for proving work was done.**
 
 All decisions — technical, product, commercial — must reinforce this principle.
+
+---
+
+## Market & Regulatory Context (Foundational)
+
+Proof Platform is designed and validated first for the United Arab Emirates (UAE) market.
+
+This affects:
+- compliance expectations,
+- audit standards,
+- communication norms,
+- enterprise buyer behavior,
+- operational workflows.
 
 ---
 

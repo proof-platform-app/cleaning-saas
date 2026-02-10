@@ -102,7 +102,7 @@ However, Proof Platform **does not**:
 * resolution type (temporary fix / permanent repair / not resolved)
 * severity or impact classification
 
-These fields exist to **enrich the proof**, not to turn the system into CMMS.
+These fields exist strictly to enrich proof and SLA evaluation, not to manage service workflows or turn the platform into a CMMS.
 
 ---
 

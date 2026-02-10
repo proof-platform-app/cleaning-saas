@@ -12,6 +12,9 @@ Analytics API v1 — это **операционный аналитически�
 Он **не интерпретирует причины отклонений** —  
 это задача SLA Engine и Reports.
 
+This API exposes operational analytics derived from proof data.
+It is not intended for business intelligence or predictive analysis.
+
 ---
 
 ## When to use this document
