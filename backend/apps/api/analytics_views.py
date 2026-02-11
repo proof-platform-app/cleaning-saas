@@ -158,6 +158,7 @@ def analytics_summary(request):
   - proof_completion_rate: доля completed jobs с полным proof
   - avg_job_duration_hours: средняя длительность (по факту)
   - issues_detected: количество jobs с SLA-нарушениями
+  - issue_rate: доля completed jobs с SLA-нарушениями
 
   + дельты по сравнению с предыдущим таким же периодом:
   - jobs_delta
@@ -165,6 +166,7 @@ def analytics_summary(request):
   - proof_delta
   - duration_delta
   - issues_delta
+  - issue_rate_delta
   """
   user = request.user
   company = getattr(user, "company", None)
@@ -235,6 +237,11 @@ def analytics_summary(request):
     previous["issues_detected"],
   )
 
+  issue_rate_delta = _percent_delta(
+    current["issue_rate"],
+    previous["issue_rate"],
+  )
+
   data = {
     **current,
     "jobs_delta": jobs_delta,
@@ -242,6 +249,7 @@ def analytics_summary(request):
     "proof_delta": proof_delta,
     "duration_delta": duration_delta,
     "issues_delta": issues_delta,
+    "issue_rate_delta": issue_rate_delta,
   }
   return Response(data, status=status.HTTP_200_OK)
 

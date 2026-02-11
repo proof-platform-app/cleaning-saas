@@ -120,19 +120,36 @@ actual_end_time - actual_start_time
 `GET /api/manager/analytics/summary/`
 
 Query:
-- `from`
-- `to`
+- `date_from` (`YYYY-MM-DD`)
+- `date_to` (`YYYY-MM-DD`)
 
 Response:
 ```json
 {
-"jobs_completed": 24,
-"on_time_completion_rate": 0.94,
-"proof_completion_rate": 0.98,
-"avg_job_duration_hours": 2.4,
-"issues_detected": 3
+  "jobs_completed": 24,
+  "on_time_completion_rate": 0.94,
+  "proof_completion_rate": 0.98,
+  "avg_job_duration_hours": 2.4,
+  "issues_detected": 3,
+  "issue_rate": 0.125,
+  "jobs_delta": 20,
+  "on_time_delta": -5,
+  "proof_delta": 2,
+  "duration_delta": 0,
+  "issues_delta": -25,
+  "issue_rate_delta": -25
 }
-````
+```
+
+Семантика полей:
+
+* `jobs_completed` — количество completed jobs за период (по `actual_end_time.date`)
+* `on_time_completion_rate` — доля jobs, завершённых до `scheduled_end_time` (`float`, 0–1)
+* `proof_completion_rate` — доля jobs с полным proof (before photo + after photo + checklist) (`float`, 0–1)
+* `avg_job_duration_hours` — средняя фактическая длительность job в часах (`float`)
+* `issues_detected` — количество jobs с `sla_status = "violated"` (`int`)
+* `issue_rate` — доля jobs с SLA-нарушениями: `issues_detected / jobs_completed` (`float`, 0–1); `0.0` если нет завершённых jobs
+* `*_delta` — процентное изменение метрики относительно предыдущего периода той же длины (`int`, может быть отрицательным); `0` если предыдущий период пустой
 
 **Семантика зафиксирована и стабильна.**
 
