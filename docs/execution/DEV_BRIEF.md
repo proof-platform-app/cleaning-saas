@@ -32,6 +32,21 @@ Last reviewed: 2026-02-04
 - DEPRECATED: (опционально) что объявлено устаревшим, но ещё поддерживается.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения в правилах.
 
+### 1.5.0 — 2026-02-12
+- NEW: Hybrid Verified Model — `completed` (verified) vs `completed_unverified` (force-completed, excluded from KPIs).
+- NEW: Job status `completed_unverified` for manager-overridden jobs.
+- NEW: Audit fields: `verification_override`, `force_completed_at`, `force_completed_by`, `force_complete_reason`.
+- NEW: JobCheckEvent immutability — save() override prevents updates after creation.
+- NEW: Row-level locking on all mutation endpoints (`select_for_update()` + `transaction.atomic()`).
+- CHANGED: Force-complete allowed only from `in_progress` (was: `scheduled`). Check-in GPS proof now required.
+- CHANGED: Force-complete transitions to `completed_unverified` (was: `completed`).
+- CHANGED: Force-complete request format — `reason` (free text) instead of `reason_code` + `comment`.
+- CHANGED: Analytics endpoints exclude `completed_unverified` from standard KPIs.
+- FIXED: Race conditions eliminated on checklist toggle, bulk update, check-out, photo upload.
+- FIXED: scheduled_end_time validation enforced (must be > scheduled_start_time).
+- BREAKING: Force-complete endpoint request/response format changed.
+- BREAKING: Force-complete blocked when job status is `scheduled`.
+
 ### 1.4.0 — 2026-02-04
 - NEW: Force-complete flow for managers with SLA violation enforcement.
 - NEW: Reports v2 email delivery with audit log (job / weekly / monthly).

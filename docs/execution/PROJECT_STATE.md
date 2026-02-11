@@ -1,6 +1,29 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.1)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.2)
 
-Обновлено: 2026-02-06
+Обновлено: 2026-02-12
+
+## Changelog
+
+### v7.2 — 2026-02-12
+
+**NEW:**
+- Hybrid Verified Model: `completed` (verified) vs `completed_unverified` (manager override)
+- Job status: `completed_unverified` (force-completed jobs, excluded from standard KPIs)
+- Audit fields: `verification_override`, `force_completed_at`, `force_completed_by`, `force_complete_reason`
+- JobCheckEvent immutability: save() override prevents updates
+- Row-level locking: `select_for_update()` + `transaction.atomic()` on all mutation endpoints
+
+**CHANGED:**
+- Force-complete allowed only from `in_progress` status (was: `scheduled`)
+- Force-complete transitions to `completed_unverified` (was: `completed`)
+- Analytics: all standard KPI endpoints exclude `completed_unverified`
+
+**FIXED:**
+- All CRITICAL audit risks resolved (force-complete security, race conditions, GPS bypass prevention)
+- All HIGH audit risks resolved (check-out integrity, event immutability)
+- Race conditions eliminated on checklist, check-out, photo upload
+
+---
 
 **Формат статусов:**  
 ✅ сделано 🟡 частично / в процессе ⛔ не делали
@@ -17,7 +40,9 @@
 #### Core execution (Jobs)
 
 * Jobs: модель, связи, бизнес-логика ✅
-* Статусный флоу: `scheduled → in_progress → completed` ✅
+* Статусный флоу: `scheduled → in_progress → completed / completed_unverified` ✅
+* Row-level locking: `select_for_update()` + `transaction.atomic()` на всех mutation endpoints ✅
+* Audit integrity: все CRITICAL + HIGH риски устранены ✅
 
 **Check-in / Check-out**
 * GPS check-in/out
@@ -37,6 +62,7 @@
 
 **Audit**
 * JobCheckEvent (полный audit trail) ✅
+* JobCheckEvent immutability (save() override) ✅
 
 **Job PDF**
 * реальная генерация бинарного PDF
@@ -216,16 +242,20 @@ Status: ✅ enforced
 
 **Backend**
 * `POST /api/manager/jobs/{id}/force-complete/`
-* job → `completed`
+* Allowed only from `in_progress` status (check-in required) ✅
+* job → `completed_unverified` (excluded from standard KPIs) ✅
 * SLA = `violated`
 * audit:
-  * `force_completed`
-  * `force_completed_at`
-  * `force_completed_by` ✅
+  * `verification_override` (boolean)
+  * `force_completed_at` (timestamp)
+  * `force_completed_by` (User FK)
+  * `force_complete_reason` (text) ✅
+* Row-level locking: `select_for_update()` + `transaction.atomic()` ✅
 
 **Frontend**
 * Force-complete modal
-* reason + comment
+* free-text reason (was: reason_code + comment)
+* только для jobs с status=in_progress
 * auto-refetch Job Details ✅
 
 ---

@@ -10,6 +10,20 @@ _Актуальная рабочая версия. Этот файл — не и
 - DEV_BRIEF.md — living integration guide with top-level CHANGELOG.
 - PROJECT_STATE.md — factual snapshot of the system, no changelog, versioned by file.
 
+## Changelog
+
+### 1.1.0 — 2026-02-12
+
+**NEW:**
+- Hybrid Verified Model: `completed` (verified with full proof) vs `completed_unverified` (manager override, excluded from KPIs)
+- Force-complete requires check-in (GPS proof established before override allowed)
+- Audit integrity: all CRITICAL + HIGH security risks eliminated
+
+**CHANGED:**
+- Force-complete only from `in_progress` status (check-in required)
+- Force-complete jobs excluded from standard analytics and KPIs
+- Analytics represent verified service delivery only
+
 ---
 
 ## 1. Что это за продукт
@@ -69,7 +83,7 @@ CleanProof не занимается биллингом, маркетингом 
 - Checklist: шаблоны на уровне компании → snapshot в `JobChecklistItem` → required-пункты проверяются при завершении job.
 - Photos: before / after, EXIF-проверка дистанции, нормализация в JPEG, единое хранилище.
 - Job PDF: backend-генерация, содержит факты, чек-лист, audit, фото, SLA-статус.
-- Force-complete: контролируемый override менеджером, всегда фиксирует SLA-нарушение.
+- Force-complete: контролируемый override менеджером (только из `in_progress`), transitions to `completed_unverified`, excluded from standard KPIs, всегда фиксирует SLA-нарушение.
 
 ### 3.2. Manager Portal — ✅ MVP готов
 
@@ -148,13 +162,15 @@ Locations — это не просто справочник адресов, а �
 - SLA-движок на backend (`compute_sla_status_and_reasons_for_job(job)`):
   - `sla_status: ok / violated`;
   - `sla_reasons: string[]` (late_start, missing_after_photo, checklist_not_completed и т.п.).
-- Force-complete интегрирован в SLA: override всегда даёт violation.
+- Force-complete интегрирован в SLA: override всегда даёт violation, transitions to `completed_unverified`.
+- **Analytics integrity**: standard KPIs based on `completed` jobs only (exclude `completed_unverified`).
+- Unverified completions tracked separately for audit purposes.
 - SLA-агрегаты:
   - violation rate,
   - top reasons,
   - top cleaners / locations.
 - Analytics Page:
-  - KPI-карточки,
+  - KPI-карточки (verified jobs only),
   - performance breakdown по клинерам,
   - SLA Performance,
   - violation-drilldown до списка конкретных jobs.
