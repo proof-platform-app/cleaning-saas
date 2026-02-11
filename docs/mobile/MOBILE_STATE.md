@@ -566,6 +566,229 @@ for D-1 (job detail cache) and D-2/D-3 (outbox). Until then the file is dead cod
 
 ---
 
+## 7. Execution Invariants (Non-Negotiable Rules)
+
+These are architectural constraints that **must never be violated** by any mobile
+implementation, offline mode, or performance optimisation. They are enforced by
+the backend and exist to protect the integrity of the proof verification engine.
+
+### 7.1 Check-in and Check-out are backend-validated only
+
+- Mobile **must never** implement client-side business logic for determining
+  whether a check-in or check-out is allowed (SLA time windows, distance
+  thresholds, status preconditions).
+- The mobile app sends GPS coordinates to the backend and **trusts the backend
+  response**.
+- If the backend returns 400 or 422 with validation errors, the mobile app
+  shows the message returned by the backend — it does not interpret, override,
+  or "help" the cleaner bypass the validation.
+
+### 7.2 SLA logic must never exist in mobile
+
+- SLA compliance (on-time, late, job window enforcement) is computed **only**
+  by the backend.
+- The mobile app **may** display SLA status badges and time windows from the
+  `JobDetail` response, but it **must not** calculate, infer, or adjust these
+  values locally.
+- No offline mode may create, update, or infer SLA state.
+
+### 7.3 Photos are not valid until backend confirms upload
+
+- A photo is not considered part of the audit record until the backend returns
+  a `201 Created` response with a `photo_id`.
+- The mobile app **must not** mark the "before photo" or "after photo" progress
+  step as complete based on a cached local URI alone.
+- If an upload is queued in the outbox (offline mode), the progress step
+  remains incomplete until the backend acknowledges the upload.
+
+### 7.4 Backend is the source of truth, even when mobile caches
+
+- All cached job data in `AsyncStorage` is **read-only** from the mobile app's
+  perspective.
+- The mobile app **must not** apply local edits to cached `JobDetail` or
+  checklist state without a successful backend call.
+- When online, the mobile app **must refetch** after every mutating action
+  (check-in, check-out, photo upload, checklist toggle) to stay in sync with
+  backend-enforced validation.
+
+### 7.5 No silent failures
+
+- Every mutating action (check-in, check-out, photo upload, checklist toggle)
+  **must** provide explicit UX feedback:
+  - Success → visual confirmation (e.g., refetch + updated UI state).
+  - Failure → inline or alert error message with retry affordance.
+- The app **must never** pretend an action succeeded when the backend rejected
+  it or the network call failed.
+- Optimistic UI updates are **forbidden** for check-in, check-out, and photo
+  uploads. Checklist toggles may show a pending spinner, but the `is_completed`
+  state is only updated after a successful backend response.
+
+### 7.6 Offline support must preserve audit integrity
+
+- Outbox queue (if implemented) **may only** contain:
+  - Checklist toggle actions (`checklist_bulk` type).
+  - Photo upload actions (`photo` type) with persisted local URI.
+- Outbox **must never** queue:
+  - Check-in or check-out actions.
+  - Status transitions.
+  - Job detail edits.
+- When the outbox is flushed on reconnect, items are replayed in the order they
+  were queued, and **each replay must refetch job detail** to validate the
+  current backend state before continuing.
+
+### 7.7 Proof sequence is server-side enforced
+
+- The backend enforces the proof sequence:
+  `scheduled → check-in → before photo → checklist → after photo → check-out → completed`.
+- The mobile app **must** respect the `status` field returned by the backend
+  and **must not** allow actions out of sequence (enforced via UI disabled
+  states, not client-side validation).
+- The mobile app **may** show friendly helper text ("You need to check in
+  first") but the actual gate is the backend's 400/422 response.
+
+### 7.8 GPS coordinates must be real device coordinates in production
+
+- The `__DEV__` bypass (`DEV_FORCE_JOB_COORDS`) that sends the job's own
+  coordinates instead of device GPS **must be disabled** in all production
+  builds.
+- Production check-in and check-out **must** use real GPS from
+  `expo-location` (or equivalent) or fail with `GPS_UNAVAILABLE` if the device
+  location is not available.
+- The fallback to job coordinates (with Alert) in `utils/gps.ts` is acceptable
+  for development/testing **only** and must be removed or gated behind a
+  backend-controlled "allow GPS bypass" flag for production.
+
+---
+
+## 8. Policy Layer & Future Relaxations
+
+The platform is designed with **strict defaults** and **backend-driven policy**
+to allow selective relaxation of execution rules without changing mobile code.
+
+### 8.1 Default rules are strict
+
+By default, the backend enforces:
+- SLA time windows (late if check-in after `scheduled_time + SLA window`).
+- GPS validation (distance from location).
+- Proof sequence (no after photo before before photo).
+- Required checklist items (check-out blocked if any required item incomplete).
+
+These defaults align with the verification guarantee of the Proof Platform.
+
+### 8.2 Relaxations via backend-driven execution policy
+
+Future backend work may introduce a `ExecutionPolicy` model (or similar) that
+allows per-context or per-job relaxations:
+- "Allow check-out without after photo" (for emergency jobs).
+- "Allow late check-in without SLA violation" (for maintenance context with
+  flexible windows).
+- "Skip GPS validation for specific locations" (for indoor-only sites).
+
+**Mobile implementation rule:**
+The mobile app **must not** hardcode these relaxations. All policy decisions
+are returned by the backend in the `JobDetail` response (e.g., a new
+`execution_policy` object with boolean flags).
+
+### 8.3 Mobile must not hardcode relaxations
+
+The mobile app **must not** introduce:
+- Feature flags (e.g., `ALLOW_CHECKOUT_WITHOUT_PHOTOS`) that bypass backend
+  validation.
+- Per-context branching logic (e.g., `if (context === "maintenance") { ... }`).
+- "Developer mode" overrides that silently skip check-in or proof steps.
+
+Any such logic would fragment the single-platform model and create audit gaps.
+
+### 8.4 All relaxations must be auditable
+
+If a relaxation is applied (via backend policy), it **must** be recorded in the
+audit log (e.g., `check_events` or a new `policy_overrides` field in the job
+record) so that reports and analytics can distinguish between:
+- Jobs completed under strict rules.
+- Jobs completed under relaxed rules (and which specific rules were relaxed).
+
+This ensures that the Manager Portal and analytics layer can filter and report
+on "fully verified" vs "policy-relaxed" jobs transparently.
+
+---
+
+## 9. Production-Ready Definition
+
+A mobile build is considered **production-ready** when all of the following
+criteria are met:
+
+### 9.1 Token expiry handling
+
+- When `apiFetch` receives a `401 Unauthorized` response, the app **must**:
+  - Call `setAuthToken(null)` to clear the stored token.
+  - Navigate the user back to the `Login` screen automatically (no manual
+    logout required).
+- Implemented in: `src/api/client.ts:apiFetch`.
+- **Current status:** Not implemented (Limitation #7 in §5).
+
+### 9.2 No hardcoded development credentials
+
+- The `LoginScreen` **must not** pre-fill email and password fields with
+  `cleaner@test.com` / `Test1234!` in production builds.
+- If development credentials are needed for testing, they **must** be gated
+  behind `__DEV__` or an explicit "dev mode" flag that is stripped from
+  production.
+- **Current status:** Dev credentials hardcoded in `LoginScreen` state (see
+  F-3 in §6).
+
+### 9.3 Dev GPS bypass removed from production
+
+- `DEV_FORCE_JOB_COORDS` in `utils/gps.ts` **must** be `false` in production.
+- The fallback to job coordinates (when device GPS unavailable) **must** either:
+  - Be removed entirely (production check-in fails if GPS unavailable), or
+  - Be controlled by a backend-returned `allow_gps_fallback` policy flag (see §8).
+- **Current status:** `__DEV__` gates the bypass; acceptable for now, but
+  Expo Go builds (which are always `__DEV__ = true`) will use fake GPS.
+
+### 9.4 Real outbox implementation (if offline support required)
+
+- If the app is marketed as "offline-capable", the outbox **must** be fully
+  implemented:
+  - `src/services/outbox.ts` backed by `AsyncStorage` (not global stubs).
+  - `outboxPush()` called when checklist toggle or photo upload fails offline.
+  - `flushOutbox()` correctly replays queued items on reconnect.
+- If offline support is **not** required for production (e.g., cleaners are
+  expected to always have internet), the current stub is acceptable, but:
+  - The "You are offline" banners must remain, and
+  - The app must clearly communicate (via in-app messaging or onboarding) that
+    offline mode is not supported.
+- **Current status:** Stub only (Limitation #8 in §5); D-2 and D-3 proposals
+  would make it production-ready.
+
+### 9.5 Clear offline UX (not blank screen)
+
+- When Job Details is opened offline, the app **must not** show a blank screen
+  with "You are offline. Job details are unavailable."
+- Either:
+  - Show the last cached job detail with a visible "Offline — showing last
+    saved data" banner (D-1 proposal), or
+  - Show a friendly empty state with "This job requires an internet connection
+    to load" and disable navigation to Job Details entirely until online.
+- **Current status:** Blank screen with retry button (see §3.2 and §3.6).
+
+### 9.6 No dead code or unused files
+
+- All files in `src/` **must** either be imported and used, or deleted:
+  - `src/types/job.ts` — currently unused (F-1).
+  - `src/offline/storage.ts:getDevGpsPayload` — superseded (F-5).
+- All exported functions in `src/offline/storage.ts` (`cacheSetJSON`,
+  `cacheGetJSON`) **must** either be wired up (D-1, F-4) or removed.
+- **Current status:** Dead code present (see §5 and F-5).
+
+### 9.7 All `console.log` statements production-guarded
+
+- All bare `console.log` calls **must** be wrapped with `if (__DEV__)` guards
+  to prevent logging sensitive data (GPS coordinates, auth tokens, job IDs) in
+  production.
+- **Current status:** ✅ Implemented in Phase C (C-3).
+
+---
+
 ## Appendix: File Map
 
 ```
