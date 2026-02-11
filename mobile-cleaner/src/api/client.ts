@@ -1,4 +1,5 @@
 // mobile-cleaner/src/api/client.ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
  * Mobile API client — Execution Core (Layer 1)
@@ -29,7 +30,9 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.0.162:8000";
 
 
-// ===== Простое хранение токена в памяти =====
+// ===== Auth token — memory + AsyncStorage =====
+
+const AUTH_TOKEN_KEY = "@auth_token";
 
 type AuthState = {
   token: string | null;
@@ -39,12 +42,42 @@ const auth: AuthState = {
   token: null,
 };
 
+/**
+ * setAuthToken — stores the token in memory AND persists it to AsyncStorage.
+ * Pass null to clear (logout).
+ */
 export function setAuthToken(token: string | null) {
   auth.token = token;
+  if (token) {
+    AsyncStorage.setItem(AUTH_TOKEN_KEY, token).catch((err) => {
+      console.warn("[setAuthToken] AsyncStorage.setItem failed:", err);
+    });
+  } else {
+    AsyncStorage.removeItem(AUTH_TOKEN_KEY).catch((err) => {
+      console.warn("[setAuthToken] AsyncStorage.removeItem failed:", err);
+    });
+  }
 }
 
 export function getAuthToken() {
   return auth.token;
+}
+
+/**
+ * loadStoredToken — called once at app startup to hydrate the in-memory token
+ * from AsyncStorage. Returns the token if found, null otherwise.
+ */
+export async function loadStoredToken(): Promise<string | null> {
+  try {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) {
+      auth.token = token;
+    }
+    return token ?? null;
+  } catch (err) {
+    console.warn("[loadStoredToken] AsyncStorage.getItem failed:", err);
+    return null;
+  }
 }
 
 // ===== Типы =====

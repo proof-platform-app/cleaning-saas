@@ -371,7 +371,13 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
-      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") return;
+      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") {
+        Alert.alert(
+          "Location unavailable",
+          "Could not get your GPS location. Please enable location access and try again."
+        );
+        return;
+      }
 
       Alert.alert(
         "Check-in failed",
@@ -427,7 +433,13 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
     } catch (e) {
-      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") return;
+      if (e instanceof Error && e.message === "GPS_UNAVAILABLE") {
+        Alert.alert(
+          "Location unavailable",
+          "Could not get your GPS location. Please enable location access and try again."
+        );
+        return;
+      }
 
       Alert.alert(
         "Check-out failed",
@@ -584,8 +596,6 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
    */
   const handleTakePhoto = async (photoType: "before" | "after") => {
     try {
-      setUploadingType(photoType);
-
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== "granted") {
         Alert.alert("Camera access", "Camera permission is required to take photos.");
@@ -605,6 +615,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       if (!asset?.uri) {
         return;
       }
+
+      // Spinner starts only after we have a valid asset — permission check and camera
+      // cancellation no longer trigger the upload indicator.
+      setUploadingType(photoType);
 
       await uploadJobPhoto(jobId, photoType, asset.uri);
 
@@ -743,8 +757,12 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
            * - пытаться "кэшировать" локально и не дергать backend,
            * - менять структуру payload без синхронизации с backend.
            */
+          // A-4: ignore concurrent taps while any item save is in flight
+          if (savingItemId !== null) return;
+
           try {
             setSavingItemId(itemId);
+            setIsChecklistSaving(true); // A-5: mark bulk-save state
             setChecklistError(null);
             await toggleJobChecklistItem(jobId, itemId, nextValue);
             const jobData = await fetchJobDetail(jobId);
@@ -754,6 +772,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             setChecklistError(e?.message || "Failed to update checklist item");
           } finally {
             setSavingItemId(null);
+            setIsChecklistSaving(false); // A-5
           }
         }}
       />
