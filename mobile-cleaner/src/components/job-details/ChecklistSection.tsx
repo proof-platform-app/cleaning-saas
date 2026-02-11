@@ -23,6 +23,11 @@ type Props = {
   submitting: boolean;
 
   onToggleItem: (itemId: number, next: boolean) => void;
+
+  // C-4: retry affordance for a failed toggle
+  failedItemId?: number | null;
+  failedNextValue?: boolean | null;
+  onRetryToggle?: (itemId: number, next: boolean) => void;
 };
 
 function ChecklistSection({
@@ -36,6 +41,9 @@ function ChecklistSection({
   savingItemId,
   submitting,
   onToggleItem,
+  failedItemId,
+  failedNextValue,
+  onRetryToggle,
 }: Props) {
   const disabled = !canEditChecklist || !isInProgress || submitting;
 
@@ -46,27 +54,45 @@ function ChecklistSection({
 
       {items.map((item) => {
         const isSaving = isChecklistSaving && savingItemId === item.id;
+        const isFailed = failedItemId === item.id;
         return (
-          <View key={item.id} style={styles.itemRow}>
-            <Text style={styles.itemText}>{item.text}</Text>
+          <View key={item.id}>
+            <View style={styles.itemRow}>
+              <Text style={styles.itemText}>{item.text}</Text>
 
-            <View style={styles.itemRight}>
-              {isSaving && (
-                <ActivityIndicator size="small" style={styles.spinner} />
-              )}
-              <Text
-                style={[
-                  styles.statusText,
-                  item.is_completed && styles.statusTextDone,
-                ]}
-                onPress={() => {
-                  if (disabled) return;
-                  onToggleItem(item.id, !item.is_completed);
-                }}
-              >
-                {item.is_completed ? "Done" : "Pending"}
-              </Text>
+              <View style={styles.itemRight}>
+                {isSaving && (
+                  <ActivityIndicator size="small" style={styles.spinner} />
+                )}
+                <Text
+                  style={[
+                    styles.statusText,
+                    item.is_completed && styles.statusTextDone,
+                  ]}
+                  onPress={() => {
+                    if (disabled) return;
+                    onToggleItem(item.id, !item.is_completed);
+                  }}
+                >
+                  {item.is_completed ? "Done" : "Pending"}
+                </Text>
+              </View>
             </View>
+
+            {/* C-4: inline retry affordance for a failed toggle */}
+            {isFailed && onRetryToggle && (
+              <Text
+                style={styles.retryText}
+                onPress={() =>
+                  onRetryToggle(
+                    item.id,
+                    failedNextValue ?? !item.is_completed
+                  )
+                }
+              >
+                Failed to save. Tap to retry.
+              </Text>
+            )}
           </View>
         );
       })}
@@ -146,5 +172,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     color: "#6B7280",
+  },
+  retryText: {
+    marginTop: 2,
+    marginBottom: 4,
+    fontSize: 12,
+    color: "#B91C1C",
+    fontWeight: "500",
   },
 });

@@ -22,6 +22,11 @@ ALLOWED_HOSTS = [
     "192.168.0.162",  # IP твоего Mac в локальной сети (Expo Go ходит сюда)
 ]
 
+if DEBUG:
+    # Dev-only: extend with current local network IP so mobile app can reach backend.
+    # Never runs when DEBUG=False — production hosts must be set explicitly above.
+    ALLOWED_HOSTS += ["192.168.31.78"]
+
 
 # Application definition
 

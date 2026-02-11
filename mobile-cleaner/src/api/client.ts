@@ -27,7 +27,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Базовый URL API (IP твоего Mac + порт backend'а)
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.0.162:8000";
+  process.env.EXPO_PUBLIC_API_BASE_URL || "http://192.168.31.78:8000";
 
 
 // ===== Auth token — memory + AsyncStorage =====
@@ -134,6 +134,7 @@ export type JobDetail = {
   actual_start_time: string | null;
   actual_end_time: string | null;
 
+  // Flat fields (canonical backend shape)
   location_name: string | null;
   manager_notes: string;
   cleaner_notes: string;
@@ -143,6 +144,21 @@ export type JobDetail = {
 
   before_photo_url: string | null;
   after_photo_url: string | null;
+
+  // Optional nested location object (some backend variants / future shape)
+  location?: {
+    name?: string | null;
+    address?: string | null;
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+  } | null;
+
+  // Optional flat location detail fields (some backend variants)
+  location_address?: string | null;
+  location_latitude?: number | string | null;
+  location_lat?: number | string | null;
+  location_longitude?: number | string | null;
+  location_lng?: number | string | null;
 };
 
 // Чтобы старый код, где ожидается JobListItem, не ломался
@@ -338,44 +354,16 @@ export async function fetchTodayJobs(): Promise<JobListItem[]> {
  *
  * Основной источник правды для Job Details Screen.
  *
- * Важно:
- * - Пытается несколько URL-кандидатов (legacy support),
- * - Возвращает JobDetail с checklist_items, check_events и фото-URL.
+ * GET /api/jobs/<jobId>/
+ *
+ * Возвращает JobDetail с checklist_items, check_events и фото-URL.
  *
  * НЕЛЬЗЯ:
- * - менять порядок кандидатов без ревью backend;
- * - убирать fallback’и, пока на backend не зафиксирован финальный URL.
+ * - менять URL без синхронизации с backend;
+ * - маппить структуру ответа здесь (UI это делает сам).
  */
 export async function fetchJobDetail(jobId: number): Promise<JobDetail> {
-  // Сейчас у нас стабильный DRF endpoint, старые варианты оставим как fallback
-  const candidates = [
-    `/api/jobs/${jobId}/`,
-    `/api/jobs/${jobId}/mobile-detail/`,
-    `/api/jobs/mobile-detail/${jobId}/`,
-    `/api/jobs/${jobId}/detail/`,
-  ];
-
-  let lastError: any = null;
-
-  for (const path of candidates) {
-    try {
-      const data = await apiFetch<JobDetail>(path, { method: "GET" });
-      return data;
-    } catch (e: any) {
-      lastError = e;
-      if (e?.status === 404) {
-        console.log("[JobDetails] 404 on", path, "- trying next");
-        continue;
-      }
-      console.log("[JobDetails] error on", path, e?.message || e);
-      throw e;
-    }
-  }
-
-  console.log("[JobDetails] all URL candidates failed", lastError);
-  throw new Error(
-    "Job detail endpoint not found (tried multiple URL patterns on backend)"
-  );
+  return apiFetch<JobDetail>(`/api/jobs/${jobId}/`, { method: "GET" });
 }
 
 // ===== Check-in / Check-out =====
@@ -408,7 +396,7 @@ export async function checkInJob(
     body: JSON.stringify(payload),
   });
 
-  console.log("[checkInJob] response:", data);
+  if (__DEV__) console.log("[checkInJob] response:", data);
   return data;
 }
 
@@ -440,7 +428,7 @@ export async function checkOutJob(
     body: JSON.stringify(payload),
   });
 
-  console.log("[checkOutJob] response:", data);
+  if (__DEV__) console.log("[checkOutJob] response:", data);
   return data;
 }
 
@@ -470,7 +458,7 @@ export async function updateJobChecklistBulk(
     body: JSON.stringify(payload),
   });
 
-  console.log("[updateJobChecklistBulk] raw response:", data);
+  if (__DEV__) console.log("[updateJobChecklistBulk] raw response:", data);
 
   // backend может вернуть:
   // - { items: [...] }
@@ -517,7 +505,7 @@ export async function toggleJobChecklistItem(
     body: JSON.stringify(payload),
   });
 
-  console.log("[toggleJobChecklistItem] response:", data);
+  if (__DEV__) console.log("[toggleJobChecklistItem] response:", data);
   return data;
 }
 
@@ -580,7 +568,7 @@ export async function uploadJobPhoto(
   uri: string
 ): Promise<any> {
   if (!uri) {
-    console.log("[uploadJobPhoto] called with empty uri");
+    if (__DEV__) console.log("[uploadJobPhoto] called with empty uri");
     throw new Error("Internal error: photo URI is missing");
   }
 
@@ -609,20 +597,14 @@ export async function uploadJobPhoto(
   form.append("file", fileObj);
 
   // ВАЖНО: не ставим Content-Type руками — apiFetch сам определит FormData
-  console.log("[uploadJobPhoto] sending form", {
-    jobId,
-    photoType,
-    uri,
-    name,
-    type,
-  });
+  if (__DEV__) console.log("[uploadJobPhoto] sending form", { jobId, photoType, uri, name, type });
 
   const data = await apiFetch<any>(`/api/jobs/${jobId}/photos/`, {
     method: "POST",
     body: form,
   });
 
-  console.log("[uploadJobPhoto] response:", data);
+  if (__DEV__) console.log("[uploadJobPhoto] response:", data);
   return data;
 }
 

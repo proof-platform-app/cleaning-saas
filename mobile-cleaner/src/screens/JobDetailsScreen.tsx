@@ -26,7 +26,10 @@ import {
   toggleJobChecklistItem,
   fetchJobReportPdf,
   JobChecklistItem,
+  JobDetail,
 } from "../api/client";
+
+import { defaultOutboxService } from "../services/outbox";
 
 // helpers
 import {
@@ -47,8 +50,6 @@ import JobTimelineSection from "../components/job-details/JobTimelineSection";
 import JobPhotosBlock from "../components/job-details/JobPhotosBlock";
 import ChecklistSection from "../components/job-details/ChecklistSection";
 import JobActionsSection from "../components/job-details/JobActionsSection";
-
-import type { OutboxItem } from "../offline/types";
 
 /**
  * JobDetailsScreen — Mobile Execution Core (Layer 1)
@@ -91,8 +92,6 @@ const COLORS = {
   success: "#059669",
 };
 
-type RawJob = any;
-
 type JobDetailsScreenProps = {
   route: {
     params: {
@@ -120,7 +119,7 @@ function parseCoordinate(value: any): number | null {
 export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const { jobId } = route.params;
 
-  const [job, setJob] = React.useState<RawJob | null>(null);
+  const [job, setJob] = React.useState<JobDetail | null>(null);
   const [photos, setPhotos] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
@@ -137,8 +136,22 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   const [checklistError, setChecklistError] = React.useState<string | null>(
     null
   );
+  // C-4: track which item failed so ChecklistSection can show inline retry
+  const [failedItemId, setFailedItemId] = React.useState<number | null>(null);
+  const [failedNextValue, setFailedNextValue] = React.useState<boolean | null>(
+    null
+  );
 
   const [isSyncing, setIsSyncing] = React.useState(false);
+  // Ref mirror of isSyncing used inside flushOutbox to avoid re-creating the callback
+  // (and re-subscribing NetInfo) every time isSyncing flips.
+  const isSyncingRef = React.useRef(false);
+
+  // visibleSyncing is a debounced view of isSyncing: becomes true only after
+  // isSyncing has been continuously true for 300ms.  Empty-outbox flushes
+  // (~50ms) never trigger the banner, eliminating the layout-jitter.
+  const [visibleSyncing, setVisibleSyncing] = React.useState(false);
+
   const [retryCount, setRetryCount] = React.useState(0); // B-3: manual retry trigger
 
   // ------------------------------------------
@@ -155,9 +168,8 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   // - первичная загрузка job / списка задач.
   //
   // Реальная очередь сейчас НЕ реализована:
-  // - ожидаем, что (global as any).outboxPeek / outboxShift
-  //   могут быть провайднуты где-то ещё;
-  // - если их нет, flushOutbox просто ничего не делает.
+  // - OutboxService (src/services/outbox.ts) оборачивает глобальные стабы;
+  // - если они не заданы, flushOutbox просто ничего не делает.
   //
   // ВАЖНО:
   // - Не добавлять новые type'ы в outbox, пока не
@@ -165,12 +177,13 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   // - Не менять формат payload без апдейта типов
   //   в src/offline/types.ts.
   const flushOutbox = React.useCallback(async () => {
-    if (!isOnline || isSyncing) return;
+    if (!isOnline || isSyncingRef.current) return;
 
+    isSyncingRef.current = true;
     setIsSyncing(true);
     try {
       while (true) {
-        const item = (await (global as any).outboxPeek?.()) as OutboxItem | null;
+        const item = await defaultOutboxService.peek();
         if (!item) break;
 
         // B-6: isolate each item — a single failure does not abort the rest
@@ -187,7 +200,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         }
 
         // Always shift (success or failure) to advance past this item
-        await (global as any).outboxShift?.();
+        await defaultOutboxService.shift();
       }
 
       const [jobData, photosData] = await Promise.all([
@@ -199,9 +212,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
       setPhotos(photosData ?? []);
       setChecklist(jobData?.checklist_items ?? []);
     } finally {
+      isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isOnline, isSyncing, jobId]);
+  }, [isOnline, jobId]); // isSyncing removed from deps — guarded via ref above
 
   React.useEffect(() => {
     const unsub = NetInfo.addEventListener((state) => {
@@ -212,6 +226,17 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
 
     return () => unsub();
   }, [flushOutbox]);
+
+  // Debounce the syncing banner: only show it if isSyncing stays true for ≥300ms.
+  // Empty-outbox flushes resolve in ~50ms and must not cause a layout shift.
+  React.useEffect(() => {
+    if (!isSyncing) {
+      setVisibleSyncing(false);
+      return;
+    }
+    const timer = setTimeout(() => setVisibleSyncing(true), 300);
+    return () => clearTimeout(timer);
+  }, [isSyncing]);
 
   React.useEffect(() => {
     if (isOnline === null) return;
@@ -727,19 +752,16 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         </View>
       </View>
 
-      {/* B-5: show syncing indicator regardless of online status (e.g. after reconnect) */}
-      {isSyncing && (
+      {/* Single status banner — one mount/unmount point eliminates double layout shift.
+          visibleSyncing is debounced (300ms) so empty-outbox flushes never jitter. */}
+      {(isOnline === false || visibleSyncing) && (
         <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>Syncing offline changes...</Text>
-        </View>
-      )}
-
-      {isOnline === false && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>
-            You are offline. Some actions are disabled.
-          </Text>
-          {isSyncing && (
+          {isOnline === false && (
+            <Text style={styles.offlineBannerText}>
+              You are offline. Some actions are disabled.
+            </Text>
+          )}
+          {visibleSyncing && (
             <Text style={styles.offlineBannerText}>
               Syncing offline changes...
             </Text>
@@ -811,6 +833,10 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           // A-4: ignore concurrent taps while any item save is in flight
           if (savingItemId !== null) return;
 
+          // C-4: clear previous failure before each attempt
+          setFailedItemId(null);
+          setFailedNextValue(null);
+
           try {
             setSavingItemId(itemId);
             setIsChecklistSaving(true); // A-5: mark bulk-save state
@@ -821,10 +847,39 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             setChecklist(jobData?.checklist_items ?? []);
           } catch (e: any) {
             setChecklistError(e?.message || "Failed to update checklist item");
+            // C-4: remember which item failed so the user can retry inline
+            setFailedItemId(itemId);
+            setFailedNextValue(nextValue);
           } finally {
             setSavingItemId(null);
             setIsChecklistSaving(false); // A-5
           }
+        }}
+        failedItemId={failedItemId}
+        failedNextValue={failedNextValue}
+        onRetryToggle={(itemId, nextValue) => {
+          // Delegates back to the same toggle logic
+          setFailedItemId(null);
+          setFailedNextValue(null);
+          void (async () => {
+            if (savingItemId !== null) return;
+            try {
+              setSavingItemId(itemId);
+              setIsChecklistSaving(true);
+              setChecklistError(null);
+              await toggleJobChecklistItem(jobId, itemId, nextValue);
+              const jobData = await fetchJobDetail(jobId);
+              setJob(jobData);
+              setChecklist(jobData?.checklist_items ?? []);
+            } catch (e: any) {
+              setChecklistError(e?.message || "Failed to update checklist item");
+              setFailedItemId(itemId);
+              setFailedNextValue(nextValue);
+            } finally {
+              setSavingItemId(null);
+              setIsChecklistSaving(false);
+            }
+          })();
         }}
       />
 
