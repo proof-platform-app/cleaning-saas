@@ -893,6 +893,185 @@ def analytics_sla_breakdown(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsManager])
+def analytics_locations_performance(request):
+  """
+  GET /api/manager/analytics/locations-performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
+
+  Возвращает список по локациям:
+
+  [
+    {
+      "location_id": 7,
+      "location_name": "Dubai Marina Tower",
+      "jobs_completed": 32,
+      "avg_job_duration_hours": 2.1,
+      "on_time_rate": 0.87,
+      "proof_rate": 0.94,
+      "issues": 4
+    },
+    ...
+  ]
+
+  Основано на completed jobs, фактически завершённых в диапазоне (actual_end_time).
+  proof_rate вычисляется идентично cleaners-performance: через compute_sla_status_and_reasons_for_job.
+  """
+  user = request.user
+  company = getattr(user, "company", None)
+
+  if not company:
+    return Response(
+      {"detail": "Manager has no company."},
+      status=status.HTTP_400_BAD_REQUEST,
+    )
+
+  date_from_str = (request.query_params.get("date_from") or "").strip()
+  date_to_str = (request.query_params.get("date_to") or "").strip()
+
+  if not date_from_str or not date_to_str:
+    return Response(
+      {
+        "detail": "date_from and date_to query params are required: YYYY-MM-DD"
+      },
+      status=status.HTTP_400_BAD_REQUEST,
+    )
+
+  try:
+    date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+    date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+  except ValueError:
+    return Response(
+      {"detail": "Invalid date format. Use YYYY-MM-DD."},
+      status=status.HTTP_400_BAD_REQUEST,
+    )
+
+  if date_from > date_to:
+    return Response(
+      {"detail": "date_from cannot be greater than date_to."},
+      status=status.HTTP_400_BAD_REQUEST,
+    )
+
+  # только completed jobs компании, завершённые в диапазоне по actual_end_time
+  qs = (
+    Job.objects.filter(
+      company=company,
+      status=Job.STATUS_COMPLETED,
+      actual_end_time__isnull=False,
+      actual_end_time__date__gte=date_from,
+      actual_end_time__date__lte=date_to,
+    )
+    .select_related("location")
+    .prefetch_related("photos", "checklist_items")
+  )
+
+  # агрегаты по каждой локации
+  locations: dict[int, dict] = {}
+
+  for job in qs:
+    location = getattr(job, "location", None)
+    if location is None:
+      # джобы без локации в рейтинг не включаем
+      continue
+
+    location_id = location.id
+    if location_id not in locations:
+      locations[location_id] = {
+        "location_id": location_id,
+        "location_name": getattr(location, "name", None) or "—",
+        "jobs_completed": 0,
+        "sum_duration_hours": 0.0,
+        "jobs_with_duration": 0,
+        "jobs_with_scheduled_end": 0,
+        "jobs_on_time": 0,
+        "jobs_with_full_proof": 0,
+        "issues": 0,
+      }
+
+    stats = locations[location_id]
+    stats["jobs_completed"] += 1
+
+    # --- длительность job (если обе точки времени есть) ---
+    if job.actual_start_time and job.actual_end_time:
+      delta = job.actual_end_time - job.actual_start_time
+      duration_hours = delta.total_seconds() / 3600.0
+      stats["sum_duration_hours"] += duration_hours
+      stats["jobs_with_duration"] += 1
+
+    # --- on-time completion ---
+    if job.scheduled_date and job.scheduled_end_time and job.actual_end_time:
+      stats["jobs_with_scheduled_end"] += 1
+
+      actual_end = job.actual_end_time
+
+      scheduled_end_dt = datetime.combine(
+        job.scheduled_date,
+        job.scheduled_end_time,
+      )
+      if timezone.is_naive(scheduled_end_dt):
+        scheduled_end_dt = timezone.make_aware(
+          scheduled_end_dt,
+          timezone.get_current_timezone(),
+        )
+
+      on_time = actual_end <= scheduled_end_dt
+      if on_time:
+        stats["jobs_on_time"] += 1
+
+    # --- proof + SLA (identical to cleaners_performance) ---
+    sla_status, _reasons = compute_sla_status_and_reasons_for_job(job)
+    if sla_status == "ok":
+      stats["jobs_with_full_proof"] += 1
+    else:
+      stats["issues"] += 1
+
+  # формируем финальный список
+  results: list[dict] = []
+  for stats in locations.values():
+    jobs_completed = stats["jobs_completed"] or 0
+
+    # средняя длительность
+    if stats["jobs_with_duration"] > 0:
+      avg_duration = (
+        stats["sum_duration_hours"] / float(stats["jobs_with_duration"])
+      )
+    else:
+      avg_duration = 0.0
+
+    # on-time rate
+    if stats["jobs_with_scheduled_end"] > 0:
+      on_time_rate = (
+        stats["jobs_on_time"] / float(stats["jobs_with_scheduled_end"])
+      )
+    else:
+      on_time_rate = 0.0
+
+    # proof rate (по всем completed jobs локации)
+    if jobs_completed > 0:
+      proof_rate = stats["jobs_with_full_proof"] / float(jobs_completed)
+    else:
+      proof_rate = 0.0
+
+    results.append(
+      {
+        "location_id": stats["location_id"],
+        "location_name": stats["location_name"],
+        "jobs_completed": jobs_completed,
+        "avg_job_duration_hours": avg_duration,
+        "on_time_rate": on_time_rate,
+        "proof_rate": proof_rate,
+        "issues": stats["issues"],
+      }
+    )
+
+  # сортируем: сначала по количеству issues (убывание), потом по числу jobs (убывание)
+  results.sort(
+    key=lambda x: (-x["issues"], -x["jobs_completed"], x["location_name"])
+  )
+
+  return Response(results, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsManager])
 def analytics_cleaners_performance(request):
   """
   GET /api/manager/analytics/cleaners-performance/?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD

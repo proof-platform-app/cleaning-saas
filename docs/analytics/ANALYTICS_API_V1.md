@@ -188,6 +188,51 @@ Status: **IMPLEMENTED**
 
 ---
 
+## 6. Location Performance
+
+`GET /api/manager/analytics/locations-performance/`
+
+Query:
+- `date_from` (`YYYY-MM-DD`)
+- `date_to` (`YYYY-MM-DD`)
+
+Используется для:
+
+* таблиц по локациям;
+* сравнения стабильности на разных объектах;
+* выявления локаций с повышенным числом SLA-нарушений.
+
+Response:
+```json
+[
+  {
+    "location_id": 7,
+    "location_name": "Dubai Marina Tower",
+    "jobs_completed": 32,
+    "avg_job_duration_hours": 2.1,
+    "on_time_rate": 0.87,
+    "proof_rate": 0.94,
+    "issues": 4
+  }
+]
+```
+
+Семантика полей:
+
+* `jobs_completed` — количество completed jobs за период (по `actual_end_time.date`)
+* `avg_job_duration_hours` — средняя фактическая длительность (`actual_end_time - actual_start_time`); `0.0` если нет данных
+* `on_time_rate` — доля jobs, завершённых до `scheduled_end_time`; `0.0` если плановое время не задано
+* `proof_rate` — доля jobs, для которых `compute_sla_status_and_reasons_for_job` вернул `"ok"`; идентично cleaners-performance
+* `issues` — количество jobs с `sla_status = "violated"`
+
+Сортировка: `issues` убывание → `jobs_completed` убывание → `location_name` возрастание.
+
+Локации без `job.location` (null) в ответ не включаются.
+
+Status: **IMPLEMENTED**
+
+---
+
 ## SLA Integration (v1)
 
 Analytics API **не рассчитывает SLA**.

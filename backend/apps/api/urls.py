@@ -336,6 +336,16 @@ urlpatterns = [
         name="manager-analytics-cleaners-performance-noslash",
     ),
     path(
+        "manager/analytics/locations-performance/",
+        analytics_views.analytics_locations_performance,
+        name="manager-analytics-locations-performance",
+    ),
+    path(
+        "manager/analytics/locations-performance",
+        analytics_views.analytics_locations_performance,
+        name="manager-analytics-locations-performance-noslash",
+    ),
+    path(
         "manager/analytics/sla-breakdown/",
         analytics_views.analytics_sla_breakdown,
         name="manager-analytics-sla-breakdown",
