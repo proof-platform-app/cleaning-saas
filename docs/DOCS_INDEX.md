@@ -410,7 +410,9 @@ Mobile frontend engineer, platform architect, product.
 
 ---
 
-## 15. Audit Reports
+## 15. Audit Reports & Security Fixes
+
+All audit-related documentation is located in `docs/audit/`.
 
 ### `docs/audit/BACKEND_EXECUTION_AUDIT_2026-02-11.md`
 
@@ -452,6 +454,176 @@ Platform architect, backend engineer, product, founder (for risk prioritization)
 - audit reports are read-only snapshots;
 - after fixes are implemented, create new audit report with date suffix;
 - mark resolved risks in new audit or create separate FIXES_TRACKING.md.
+
+---
+
+### `docs/audit/AUDIT_FIXES_README.md`
+
+**Роль:**
+Implementation summary of audit fixes (Hybrid Verified Model). Overview of all
+changes applied to resolve Critical and High audit risks.
+
+**Кому:**
+Platform architect, backend engineer, product.
+
+**Когда использовать:**
+
+- при изучении того, какие изменения были сделаны для устранения рисков;
+- перед deployment audit fixes в production;
+- при code review изменений execution layer.
+
+**Что внутри:**
+
+- Summary of deliverables (models, views, analytics, migration);
+- Risks resolved (Critical #1-4, High #5-6, Medium #11);
+- Breaking changes (force-complete API);
+- Zero-impact areas (cleaner API unchanged);
+- Testing checklist и verification steps;
+- Rollback plan.
+
+---
+
+### `docs/audit/AUDIT_FIXES_INVARIANTS.md`
+
+**Роль:**
+Comprehensive documentation of execution invariants preserved during audit fixes.
+Explains what changed vs what stayed the same.
+
+**Кому:**
+Platform architect, backend engineer, product.
+
+**Когда использовать:**
+
+- при проверке, что audit fixes не сломали core execution flow;
+- при планировании testing regression scenarios;
+- при обновлении DEV_BRIEF или API_CONTRACTS.
+
+**Что внутри:**
+
+- Core invariants preserved (normal execution flow unchanged);
+- New guarantees (force-complete security, race protection, immutability);
+- Analytics impact (verified vs unverified separation);
+- Migration path и rollback plan;
+- Testing checklist;
+- Documentation update requirements.
+
+---
+
+### `docs/audit/AUDIT_FIXES_APPLIED.md`
+
+**Роль:**
+Code changes summary for all audit fixes applied. Technical implementation details
+for backend engineers.
+
+**Кому:**
+Backend engineer, code reviewers.
+
+**Когда использовать:**
+
+- при code review audit fixes;
+- при debugging issues related to force-complete, locking, or immutability;
+- при применении similar patterns в других частях кодовой базы.
+
+**Что внутри:**
+
+- Detailed code changes in models.py, views_cleaner.py, views_manager_jobs.py;
+- Migration schema changes (0006_audit_fix_verification_override);
+- Frontend breaking changes;
+- Deployment steps;
+- Testing checklist.
+
+---
+
+### `docs/audit/POST_FIX_INTEGRITY_VERIFICATION.md`
+
+**Роль:**
+Post-fix integrity verification report. Comprehensive verification that all audit
+fixes work correctly and don't introduce new risks.
+
+**Кому:**
+Platform architect, QA engineer, backend engineer.
+
+**Когда использовать:**
+
+- после применения audit fixes (перед production deployment);
+- при validation что все Critical/High risks действительно resolved;
+- при планировании remaining risks (timezone, orphaned files).
+
+**Что внутри:**
+
+- Status transition matrix verification (6 sections);
+- Analytics filtering verification (8 endpoints checked);
+- JobCheckEvent immutability verification (triple-layer protection);
+- Row-level locking verification (5 mutation endpoints);
+- Scheduled time validation;
+- Remaining production risks (HIGH/MEDIUM/LOW priority);
+- Production readiness assessment.
+
+---
+
+### `docs/audit/INTEGRITY_VERIFICATION_EXECUTIVE_SUMMARY.md`
+
+**Роль:**
+Executive summary of post-fix integrity verification. High-level overview for
+non-technical stakeholders.
+
+**Кому:**
+Founder, product, platform architect.
+
+**Когда использовать:**
+
+- при принятии решения о production deployment после audit fixes;
+- при коммуникации security compliance со stakeholders;
+- при planning next security audit.
+
+**Что внутри:**
+
+- Verification scope summary;
+- Results summary (5 categories: PASS/FAIL);
+- Critical fix applied during verification (force-complete race condition);
+- Remaining known limitations (accepted for MVP);
+- Production readiness verdict (PASS/FAIL);
+- Deployment checklist.
+
+---
+
+### `docs/audit/MIGRATION_FIX_SUMMARY.md`
+
+**Роль:**
+Documentation of Django migration graph fix. Explains migration dependency conflict
+and resolution.
+
+**Кому:**
+Backend engineer, platform architect.
+
+**Когда использовать:**
+
+- при применении migration 0006_audit_fix_verification_override;
+- при debugging migration dependency errors;
+- при понимании, почему migration был renumbered.
+
+**Что внутри:**
+
+- Issue explanation (NodeNotFoundError);
+- Migration chain analysis (before/after);
+- Fix applied (0001 deleted, 0006 created with correct dependencies);
+- Terminal commands to run;
+- Expected output;
+- Rollback plan.
+
+---
+
+### Technical Specification Documents
+
+Следующие документы содержат detailed technical specifications для audit fixes:
+
+- **`docs/audit/AUDIT_FIXES_views_cleaner.md`** — Race condition fixes (4 endpoints)
+- **`docs/audit/AUDIT_FIXES_force_complete.md`** — Force-complete rewrite specification
+- **`docs/audit/AUDIT_FIXES_analytics.md`** — Analytics filtering specification
+
+**Кому:** Backend engineer (implementation reference).
+
+**Когда использовать:** При code review или reimplementation аналогичных паттернов.
 
 ---
 
@@ -642,6 +814,7 @@ Platform architect, backend engineer, product, founder (for risk prioritization)
 * Проверяешь, что ничего не сломалось → `QA_CHECKLIST.md`.
 * Готовишься к демо клиенту → `DEMO_SCRIPT_v1.md`.
 * Анализируешь риски и security gaps → `docs/audit/BACKEND_EXECUTION_AUDIT_2026-02-11.md`.
+* Проверяешь, что audit fixes применены корректно → `docs/audit/POST_FIX_INTEGRITY_VERIFICATION.md` + `docs/audit/INTEGRITY_VERIFICATION_EXECUTIVE_SUMMARY.md`.
 
 Если не укладывается никуда — лучше сначала придумать, **к какому слою это относится**, а уже потом писать документ.
 

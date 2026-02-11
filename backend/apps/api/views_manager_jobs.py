@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, time
 
 from django.conf import settings
 from django.core.mail import EmailMessage
+from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -748,6 +749,17 @@ class ManagerJobForceCompleteView(APIView):
     Force-complete job (manager override).
 
     POST /api/manager/jobs/<id>/force-complete/
+
+    AUDIT FIXES:
+    - Critical Risk #1: Block force-complete from scheduled (must check in first)
+    - Critical Risk #3: Transitions to completed_unverified (not completed)
+    - Critical Risk #4: Persist audit fields (verification_override, force_completed_at, etc.)
+
+    Hybrid Verified Model:
+    - Only allowed when job is in_progress (cleaner already checked in with GPS)
+    - Transitions to completed_unverified (separated from verified completions)
+    - Requires reason text
+    - All audit metadata persisted
     """
 
     authentication_classes = [TokenAuthentication]
@@ -784,115 +796,85 @@ class ManagerJobForceCompleteView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        job = get_object_or_404(
-            Job.objects.select_related("location", "cleaner"),
-            pk=pk,
-            company=company,
-        )
-
-        if job.status == Job.STATUS_COMPLETED:
-            return Response(
-                {"detail": "Job is already completed and cannot be force-completed."},
-                status=status.HTTP_400_BAD_REQUEST,
+        # AUDIT FIX: Critical Risk #2 - Atomic transaction + row-level locking
+        with transaction.atomic():
+            job = get_object_or_404(
+                Job.objects.select_related("location", "cleaner").select_for_update(),
+                pk=pk,
+                company=company,
             )
 
-        reason_code = (request.data.get("reason_code") or "").strip()
-        comment = (request.data.get("comment") or "").strip()
+            # AUDIT FIX: Block if already completed or completed_unverified
+            if job.status in (Job.STATUS_COMPLETED, Job.STATUS_COMPLETED_UNVERIFIED):
+                return Response(
+                    {"detail": "Job is already completed and cannot be force-completed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        allowed_reason_codes = set(VALID_SLA_REASONS) | {"other"}
+            # AUDIT FIX: Critical Risk #1 - Must be in_progress (check-in already happened)
+            if job.status != Job.STATUS_IN_PROGRESS:
+                return Response(
+                    {
+                        "detail": (
+                            "Force-complete is only allowed for jobs in progress. "
+                            "The cleaner must check in first to establish GPS proof. "
+                            f"Current status: {job.status}"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        if not reason_code or reason_code not in allowed_reason_codes:
-            return Response(
-                {"detail": "Invalid or missing 'reason_code'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            # Validate reason
+            reason = (request.data.get("reason") or "").strip()
+            if not reason:
+                return Response(
+                    {"detail": "Reason is required (text explanation for force-complete)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        if not comment:
-            return Response(
-                {"detail": "Comment is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            now = timezone.now()
 
-        now = timezone.now()
+            # AUDIT FIX: Critical Risk #3 - Transition to completed_unverified
+            job.status = Job.STATUS_COMPLETED_UNVERIFIED
 
-        job.status = Job.STATUS_COMPLETED
-        if not getattr(job, "actual_end_time", None):
-            job.actual_end_time = now
+            # Set actual_end_time if not already set
+            if not job.actual_end_time:
+                job.actual_end_time = now
 
-        existing = getattr(job, "sla_reasons", None)
-        if isinstance(existing, str):
-            reasons_list: list[str] = [existing]
-        elif isinstance(existing, (list, tuple)):
-            reasons_list = [str(r) for r in existing if r]
-        elif existing is None:
-            reasons_list = []
-        else:
-            reasons_list = [str(existing)]
-
-        if reason_code not in reasons_list:
-            reasons_list.append(reason_code)
-
-        try:
-            job.sla_status = "violated"
-        except Exception:
-            pass
-
-        try:
-            job.sla_reasons = reasons_list
-        except Exception:
-            pass
-
-        try:
-            job.force_completed = True
-        except Exception:
-            pass
-        try:
+            # AUDIT FIX: Critical Risk #4 - Persist audit fields (now exist on model)
+            job.verification_override = True
             job.force_completed_at = now
-        except Exception:
-            pass
-        try:
             job.force_completed_by = user
-        except Exception:
-            pass
+            job.force_complete_reason = reason
 
-        job.save()
+            job.save(update_fields=[
+                "status",
+                "actual_end_time",
+                "verification_override",
+                "force_completed_at",
+                "force_completed_by_id",
+                "force_complete_reason",
+            ])
 
-        try:
+            # Create audit event (TYPE_FORCE_COMPLETE now exists in model)
             JobCheckEvent.objects.create(
                 job=job,
                 user=user,
-                event_type="force_complete",
-            )
-        except Exception as exc:
-            logger.exception(
-                "Failed to create force-complete JobCheckEvent", exc_info=exc
+                event_type=JobCheckEvent.TYPE_FORCE_COMPLETE,
+                # No GPS coordinates (this is the override point)
             )
 
         response_data = {
             "id": job.id,
             "status": job.status,
-            "sla_status": getattr(job, "sla_status", None),
-            "sla_reasons": reasons_list,
+            "verification_override": job.verification_override,
+            "force_completed_at": job.force_completed_at.isoformat(),
+            "force_completed_by": {
+                "id": user.id,
+                "full_name": getattr(user, "full_name", "") or getattr(user, "email", ""),
+            },
+            "force_complete_reason": job.force_complete_reason,
         }
-
-        if hasattr(job, "force_completed"):
-            response_data["force_completed"] = bool(
-                getattr(job, "force_completed", False)
-            )
-
-        if hasattr(job, "force_completed_at"):
-            fc_at = getattr(job, "force_completed_at", None)
-            response_data["force_completed_at"] = fc_at.isoformat() if fc_at else None
-
-        if hasattr(job, "force_completed_by"):
-            by = getattr(job, "force_completed_by", None)
-            if by is not None:
-                response_data["force_completed_by"] = {
-                    "id": by.id,
-                    "full_name": getattr(by, "full_name", "") or getattr(
-                        by, "email", ""
-                    ),
-                }
 
         return Response(response_data, status=status.HTTP_200_OK)
 

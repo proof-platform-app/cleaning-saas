@@ -15,12 +15,14 @@ class Job(models.Model):
     STATUS_SCHEDULED = "scheduled"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_COMPLETED = "completed"
+    STATUS_COMPLETED_UNVERIFIED = "completed_unverified"
     STATUS_CANCELLED = "cancelled"
 
     STATUS_CHOICES = [
         (STATUS_SCHEDULED, "Scheduled"),
         (STATUS_IN_PROGRESS, "In progress"),
         (STATUS_COMPLETED, "Completed"),
+        (STATUS_COMPLETED_UNVERIFIED, "Completed (Unverified)"),
         (STATUS_CANCELLED, "Cancelled"),
     ]
 
@@ -58,13 +60,36 @@ class Job(models.Model):
     actual_end_time = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=STATUS_CHOICES,
         default=STATUS_SCHEDULED,
     )
 
     manager_notes = models.TextField(blank=True)
     cleaner_notes = models.TextField(blank=True)
+
+    # Force-complete audit fields (AUDIT FIX: Critical Risk #4)
+    verification_override = models.BooleanField(
+        default=False,
+        help_text="True if job was force-completed without full proof verification",
+    )
+    force_completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when manager force-completed this job",
+    )
+    force_completed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="force_completed_jobs",
+        help_text="Manager who force-completed this job",
+    )
+    force_complete_reason = models.TextField(
+        blank=True,
+        help_text="Reason provided by manager for force-completing this job",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,9 +101,12 @@ class Job(models.Model):
         return f"Job #{self.id} – {self.location} – {self.scheduled_date}"
 
     def clean(self):
+        # AUDIT FIX: Medium Risk #11 - validate scheduled_end_time
         if self.scheduled_start_time and self.scheduled_end_time:
             if self.scheduled_end_time <= self.scheduled_start_time:
-                raise ValidationError("scheduled_end_time must be after scheduled_start_time")
+                raise ValidationError(
+                    {"scheduled_end_time": "scheduled_end_time must be after scheduled_start_time"}
+                )
 
         # Шаблон чеклиста должен быть из той же компании, что и job
         if self.checklist_template and self.company_id:
@@ -231,14 +259,18 @@ class Job(models.Model):
 class JobCheckEvent(models.Model):
     """
     Событие check-in / check-out для job.
+
+    AUDIT FIX: High Risk #6 - Events are immutable after creation.
     """
 
     TYPE_CHECK_IN = "check_in"
     TYPE_CHECK_OUT = "check_out"
+    TYPE_FORCE_COMPLETE = "force_complete"
 
     EVENT_TYPES = (
         (TYPE_CHECK_IN, "Check-in"),
         (TYPE_CHECK_OUT, "Check-out"),
+        (TYPE_FORCE_COMPLETE, "Force Complete"),
     )
 
     job = models.ForeignKey(
@@ -269,6 +301,20 @@ class JobCheckEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.job_id} {self.event_type} at {self.created_at}"
+
+    def save(self, *args, **kwargs):
+        """
+        AUDIT FIX: High Risk #6 - Make JobCheckEvent immutable.
+
+        Events can only be created, never updated.
+        This protects the audit trail from tampering.
+        """
+        if self.pk is not None:
+            raise ValidationError(
+                "JobCheckEvent records are immutable and cannot be modified after creation. "
+                "Create a new event instead."
+            )
+        super().save(*args, **kwargs)
 
 
 class JobChecklistItem(models.Model):
@@ -373,5 +419,3 @@ class JobPhoto(models.Model):
 
     def __str__(self) -> str:
         return f"Job {self.job_id} {self.photo_type}"
-    
-    
