@@ -356,10 +356,20 @@ urlpatterns = [
         name="manager-analytics-sla-breakdown-noslash",
     ),
     path(
-        "manager/analytics/violations-trend/", 
-        analytics_views.analytics_violations_trend, 
-        name="manager-analytics-violations-trend"
-     ),
+        "manager/analytics/violations-trend/",
+        analytics_views.analytics_violations_trend,
+        name="manager-analytics-violations-trend",
+    ),
+    path(
+        "manager/analytics/sla-violations-trend/",
+        analytics_views.analytics_violations_trend,
+        name="manager-analytics-sla-violations-trend",
+    ),
+    path(
+        "manager/analytics/sla-violations-trend",
+        analytics_views.analytics_violations_trend,
+        name="manager-analytics-sla-violations-trend-noslash",
+    ),
 
 
     # =====================

@@ -250,6 +250,55 @@ Status: **IMPLEMENTED**
 
 ---
 
+## 7. SLA Violations Trend
+
+`GET /api/manager/analytics/sla-violations-trend/`
+
+Query:
+- `date_from` (`YYYY-MM-DD`)
+- `date_to` (`YYYY-MM-DD`)
+
+Используется для:
+
+* графика SLA-нарушений по дням;
+* выявления пиков и системных отклонений;
+* сравнения violation rate во времени.
+
+Response:
+```json
+[
+  {
+    "date": "2026-01-20",
+    "jobs_completed": 5,
+    "jobs_with_violations": 2,
+    "violation_rate": 0.4
+  },
+  {
+    "date": "2026-01-21",
+    "jobs_completed": 0,
+    "jobs_with_violations": 0,
+    "violation_rate": 0.0
+  }
+]
+```
+
+Семантика полей:
+
+* `date` — дата завершения job (`actual_end_time.date`), формат `YYYY-MM-DD`
+* `jobs_completed` — количество completed jobs за день (`int`)
+* `jobs_with_violations` — количество jobs, для которых `compute_sla_status_and_reasons_for_job` вернул `"violated"` (`int`)
+* `violation_rate` — доля jobs с нарушениями: `jobs_with_violations / jobs_completed` (`float`, 0–1); `0.0` если `jobs_completed == 0`
+
+Гарантии:
+
+* ответ содержит запись для **каждой даты** в диапазоне `[date_from, date_to]` включительно, даже если все значения равны нулю;
+* в расчёт включаются **только completed jobs** (по `actual_end_time.date`);
+* `scheduled_date` в расчётах не используется.
+
+Status: **IMPLEMENTED**
+
+---
+
 ## SLA Integration (v1)
 
 Analytics API **не рассчитывает SLA**.
