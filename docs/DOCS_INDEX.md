@@ -410,7 +410,52 @@ Mobile frontend engineer, platform architect, product.
 
 ---
 
-## 14. Остальные документы
+## 15. Audit Reports
+
+### `docs/audit/BACKEND_EXECUTION_AUDIT_2026-02-11.md`
+
+**Роль:**
+Security and integrity audit report of backend execution layer. Identifies critical
+risks, logical inconsistencies, security gaps, and data integrity vulnerabilities.
+
+**Кому:**
+Platform architect, backend engineer, product, founder (for risk prioritization).
+
+**Когда использовать:**
+
+- при планировании исправлений Critical/High рисков;
+- перед запуском production (чтобы убедиться, что audit findings закрыты);
+- при архитектурных изменениях execution layer (jobs, check-in/out, SLA);
+- при compliance reviews или подготовке к security certification.
+
+**Что внутри:**
+
+- Executive summary (7 critical risks, 4 high, 3 medium);
+- Step 1: Execution Flow Validation (status transitions, race conditions);
+- Step 2: Evidence Integrity Audit (SLA calculation, GPS validation, immutability);
+- Step 3: Multi-Tenant Isolation (company filtering, permission layer);
+- Step 4: Analytics Consistency (division-by-zero, aggregation base);
+- Step 5: Time & Date Edge Cases (timezone assumptions, midnight boundaries);
+- Step 6: Additional Findings (orphaned files, EXIF spoofing);
+- Consolidated Risk Summary (Critical/High/Medium tables + Confirmed Strong Areas).
+
+**Ключевые находки:**
+
+- **CRITICAL:** Force-complete bypasses check-in (no GPS proof);
+- **CRITICAL:** Race conditions (no locking on checklist toggles);
+- **CRITICAL:** Force-complete fields don't exist on Job model (audit trail lost);
+- **HIGH:** Timezone assumption (server TZ ≠ job TZ) breaks international SLA metrics;
+- **HIGH:** JobCheckEvent not immutable (evidence tampering possible).
+
+**Как менять:**
+
+- audit reports are read-only snapshots;
+- after fixes are implemented, create new audit report with date suffix;
+- mark resolved risks in new audit or create separate FIXES_TRACKING.md.
+
+---
+
+## 16. Остальные документы
 
 Если будут добавляться новые `.md`-файлы (например, PRD по конкретным фичам):
 
@@ -425,7 +470,7 @@ Mobile frontend engineer, platform architect, product.
 
 ---
 
-## 14. Как пользоваться всей системой документов
+## 17. Как пользоваться всей системой документов
 
 Ниже — типовые ситуации и **какой документ открывать в первую очередь**.
 Это не иерархия важности, а **карта навигации**, чтобы не читать всё подряд.
@@ -596,6 +641,7 @@ Mobile frontend engineer, platform architect, product.
 * Планируешь V2 / масштаб / enterprise → `CLEANPROOF_V2_SCOPE.md` + `SCALE_BRIEF.md`.
 * Проверяешь, что ничего не сломалось → `QA_CHECKLIST.md`.
 * Готовишься к демо клиенту → `DEMO_SCRIPT_v1.md`.
+* Анализируешь риски и security gaps → `docs/audit/BACKEND_EXECUTION_AUDIT_2026-02-11.md`.
 
 Если не укладывается никуда — лучше сначала придумать, **к какому слою это относится**, а уже потом писать документ.
 
