@@ -372,7 +372,45 @@ Founder, sales, bizdev.
 ---
 
 
-## 13. Остальные документы
+## 13. Mobile App (mobile-cleaner)
+
+### `docs/mobile/MOBILE_STATE.md`
+
+**Роль:**
+Factual snapshot of the Cleaner App: what it can do today, how it behaves
+offline (per code, not expectations), and a structured Phase D/E/F improvement
+roadmap.
+
+**Кому:**
+Mobile frontend engineer, platform architect, product.
+
+**Когда использовать:**
+
+- перед началом любой работы с `mobile-cleaner` — единственный документ,
+  который честно описывает текущее состояние и offline-поведение по коду;
+- при планировании Phase D (offline-first) и Phase E (UX comfort);
+- при онбординге нового разработчика на мобилку.
+
+**Что внутри:**
+
+- Scope & Context (как связана с backend / Manager Portal);
+- Current Capabilities: login, today jobs, job details, check-in/out, photos,
+  checklist, PDF (с указанием эндпоинтов и компонентов);
+- Network & Offline Behaviour: factual — что происходит при `isOnline === false`,
+  что такое outbox сейчас (stub), что видит пользователь;
+- Error Handling & UX Safety: все состояния, все паттерны отображения ошибок;
+- Known Limitations: честный список пробелов;
+- Improvement Roadmap (Phase D / E / F proposals).
+
+**Как менять:**
+
+- обновлять после каждой завершённой фазы (D, E, F);
+- никаких aspirational утверждений — только факты по коду;
+- версию / дату фиксировать в шапке.
+
+---
+
+## 14. Остальные документы
 
 Если будут добавляться новые `.md`-файлы (например, PRD по конкретным фичам):
 
@@ -550,12 +588,13 @@ Founder, sales, bizdev.
 ###  Как пользоваться этим индексом
 
 
-* Хочешь понять **что за продукт** → смотри `MASTER_BRIEF.md`.  
-* Хочешь узнать **что уже работает** → `PROJECT_STATE.md`.  
-* Подключаешь фронт/мобилу → `DEV_QUICKSTART.md` + `DEV_BRIEF.md` + `API_CONTRACTS.md`.  
-* Разбираешься в архитектуре и слоях → `PROJECT_CONTEXT.md` + нужный `MASTER_CONTEXT_*.md`.  
-* Планируешь V2 / масштаб / enterprise → `CLEANPROOF_V2_SCOPE.md` + `SCALE_BRIEF.md`.  
-* Проверяешь, что ничего не сломалось → `QA_CHECKLIST.md`.  
+* Хочешь понять **что за продукт** → смотри `MASTER_BRIEF.md`.
+* Хочешь узнать **что уже работает** → `PROJECT_STATE.md`.
+* Подключаешь фронт/мобилу → `DEV_QUICKSTART.md` + `DEV_BRIEF.md` + `API_CONTRACTS.md`.
+* Работаешь с **мобильным приложением** → `docs/mobile/MOBILE_STATE.md`.
+* Разбираешься в архитектуре и слоях → `PROJECT_CONTEXT.md` + нужный `MASTER_CONTEXT_*.md`.
+* Планируешь V2 / масштаб / enterprise → `CLEANPROOF_V2_SCOPE.md` + `SCALE_BRIEF.md`.
+* Проверяешь, что ничего не сломалось → `QA_CHECKLIST.md`.
 * Готовишься к демо клиенту → `DEMO_SCRIPT_v1.md`.
 
 Если не укладывается никуда — лучше сначала придумать, **к какому слою это относится**, а уже потом писать документ.

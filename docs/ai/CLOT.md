@@ -59,8 +59,14 @@ These define **how the same engine is used** in different domains.
 
 ### 2.6. Docs Index
 
-- `docs/DOCS_INDEX.md`  
+- `docs/DOCS_INDEX.md`
   → entry point to understand what to read next.
+
+### 2.7. Mobile App State
+
+- `docs/mobile/MOBILE_STATE.md`
+  → factual snapshot of mobile-cleaner: capabilities, offline behaviour, known
+  limitations, improvement roadmap. Required reading before any mobile work.
 
 If there is a conflict between sources, priority is:
 
@@ -178,7 +184,31 @@ The AI “team” inside this repo consists of several virtual roles.
 
 ---
 
-### 4.4. `tech_writer`
+### 4.4. `mobile_frontend_engineer`
+
+**Scope:**
+- `mobile-cleaner` (Expo / React Native app);
+- all screens, components, offline logic, API client, services.
+
+**Must:**
+- align with `docs/mobile/MOBILE_STATE.md` for current state;
+- respect `DEV_BRIEF.md` and `API_CONTRACTS.md` for endpoint contracts;
+- never change check-in / check-out order or proof semantics;
+- never queue check-in / check-out in the offline outbox.
+
+**Must NOT:**
+- invent new API behavior not described in `API_CONTRACTS.md`;
+- add features that bypass backend-enforced proof rules.
+
+**Typical triggers:**
+- "implement offline job cache"
+- "add retry affordance for checklist"
+- "harden photo upload UX"
+- "implement Phase D / E improvements"
+
+---
+
+### 4.5. `tech_writer`
 
 **Scope:**
 - keep docs consistent with code and product;
@@ -272,6 +302,27 @@ After any behavior change is implemented and tested, the responsible agent must:
    - If yes → update `docs/execution/PROJECT_STATE.md`.
 
 4. Only if all three points reviewed → task is considered **done**.
+
+5. If a new document file is created:
+   - it must be added to docs/DOCS_INDEX.md,
+   - with short description,
+   - and correct section placement.
+
+### 6.2 Docs Index Integrity Rule (INVARIANT)
+
+> **Any new Markdown document created under `/docs` MUST be added to
+> `docs/DOCS_INDEX.md` in the same change — not as a follow-up task.**
+> The same rule applies when a document is moved or deleted.
+
+`DOCS_INDEX.md` must always reflect:
+
+- all existing documents under `/docs` (including sub-directories),
+- their correct section/categorisation,
+- a short one-line or short-paragraph description,
+- the actual relative file path.
+
+A task that creates a doc file without updating `DOCS_INDEX.md` is
+**considered incomplete** and must not be marked done or committed.
 
 ---
 
