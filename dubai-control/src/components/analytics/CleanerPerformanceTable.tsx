@@ -4,9 +4,10 @@ import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 
 interface CleanerPerformanceTableProps {
   data: CleanerPerformance[];
+  onIssueClick?: (cleanerId: number) => void;
 }
 
-export function CleanerPerformanceTable({ data }: CleanerPerformanceTableProps) {
+export function CleanerPerformanceTable({ data, onIssueClick }: CleanerPerformanceTableProps) {
   const sortedData = [...data].sort((a, b) => b.jobsCompleted - a.jobsCompleted);
 
   return (
@@ -151,6 +152,22 @@ export function CleanerPerformanceTable({ data }: CleanerPerformanceTableProps) 
                   <td className="whitespace-nowrap px-6 py-4 text-center">
                     {cleaner.issuesCount === 0 ? (
                       <span className="text-sm text-muted-foreground">—</span>
+                    ) : onIssueClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onIssueClick(cleaner.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1 text-sm font-medium underline-offset-2 hover:underline",
+                          hasIssues
+                            ? "text-analytics-danger"
+                            : "text-analytics-warning",
+                        )}
+                      >
+                        {hasIssues && (
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        )}
+                        {cleaner.issuesCount}
+                      </button>
                     ) : (
                       <span
                         className={cn(

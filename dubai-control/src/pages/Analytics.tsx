@@ -10,6 +10,7 @@ import { DurationTrendChart } from "@/components/analytics/DurationTrendChart";
 import { ProofCompletionChart } from "@/components/analytics/ProofCompletionChart";
 import { CleanerPerformanceTable } from "@/components/analytics/CleanerPerformanceTable";
 import { CleanerComparisonChart } from "@/components/analytics/CleanerComparisonChart";
+import { SlaViolationsTrendChart } from "@/components/analytics/SlaViolationsTrendChart";
 
 import {
   staticKpiData,
@@ -29,6 +30,7 @@ import {
   getAnalyticsProofCompletion,
   getAnalyticsCleanersPerformance,
   getAnalyticsSlaBreakdown,
+  getAnalyticsSlaViolationsTrend,
   type AnalyticsDateRange,
   type AnalyticsSlaBreakdownResponse,
 } from "@/api/analytics";
@@ -145,6 +147,24 @@ function buildViolationsUrl(opts: {
   return qs ? `/reports/violations?${qs}` : "/reports/violations";
 }
 
+// сборка URL для /history с фильтрами по дате, SLA-статусу, клинеру или локации
+function buildHistoryFilterUrl(opts: {
+  dateFrom: string;
+  dateTo: string;
+  slaStatus?: "violated";
+  cleanerId?: number | null;
+  locationId?: number | null;
+}): string {
+  const params = new URLSearchParams();
+  params.set("date_from", opts.dateFrom);
+  params.set("date_to", opts.dateTo);
+  if (opts.slaStatus) params.set("sla_status", opts.slaStatus);
+  if (opts.cleanerId != null) params.set("cleaner_id", String(opts.cleanerId));
+  if (opts.locationId != null)
+    params.set("location_id", String(opts.locationId));
+  return `/history?${params.toString()}`;
+}
+
 function Analytics() {
   const navigate = useNavigate();
 
@@ -181,6 +201,7 @@ function Analytics() {
           jobDurationRes,
           proofRes,
           slaRes,
+          violationsTrendRes,
         ] = await Promise.all([
           getAnalyticsSummary(range),
           getAnalyticsCleanersPerformance(range),
@@ -188,6 +209,7 @@ function Analytics() {
           getAnalyticsJobDuration(range),
           getAnalyticsProofCompletion(range),
           getAnalyticsSlaBreakdown(range),
+          getAnalyticsSlaViolationsTrend(range),
         ]);
 
         const summary = summaryRes.data;
@@ -196,6 +218,7 @@ function Analytics() {
         const jobDuration = jobDurationRes.data;
         const proofTrend = proofRes.data;
         const sla = slaRes.data as AnalyticsSlaBreakdownResponse;
+        const violationsTrend = violationsTrendRes.data;
 
         // дефолтная причина для клика по общей карточке Issues:
         // берем первую из reasons, а если вдруг их нет — фиксированный код
@@ -383,6 +406,15 @@ function Analytics() {
             p.checklistRate = Math.round(
               (point.checklist_rate ?? 0) * 100,
             );
+          }
+        }
+
+        // sla-violations-trend → jobsWithViolations / violationRate
+        if (Array.isArray(violationsTrend)) {
+          for (const point of violationsTrend) {
+            const p = ensurePoint(point.date);
+            p.jobsWithViolations = point.jobs_with_violations ?? 0;
+            p.violationRate = point.violation_rate ?? 0;
           }
         }
 
@@ -575,6 +607,20 @@ function Analytics() {
               </div>
               <div className="mt-6">
                 <ProofCompletionChart data={trendData} />
+              </div>
+              <div className="mt-6">
+                <SlaViolationsTrendChart
+                  data={trendData}
+                  onPointClick={(date) =>
+                    navigate(
+                      buildHistoryFilterUrl({
+                        dateFrom: date,
+                        dateTo: date,
+                        slaStatus: "violated",
+                      }),
+                    )
+                  }
+                />
               </div>
 
               {/* small legend for what user sees */}
@@ -864,7 +910,19 @@ function Analytics() {
           ) : (
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <CleanerPerformanceTable data={cleanerPerformance} />
+                <CleanerPerformanceTable
+                  data={cleanerPerformance}
+                  onIssueClick={(cleanerId) =>
+                    navigate(
+                      buildHistoryFilterUrl({
+                        dateFrom: range.from,
+                        dateTo: range.to,
+                        slaStatus: "violated",
+                        cleanerId,
+                      }),
+                    )
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <CleanerComparisonChart data={cleanerPerformance} />

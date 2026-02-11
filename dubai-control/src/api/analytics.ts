@@ -63,6 +63,14 @@ export function getAnalyticsViolationsTrend(range: AnalyticsDateRange) {
   );
 }
 
+// Canonical URL alias (sla-violations-trend = same backend function)
+export function getAnalyticsSlaViolationsTrend(range: AnalyticsDateRange) {
+  const qs = buildRangeQuery(range);
+  return apiClient.get<AnalyticsViolationsTrendPoint[]>(
+    `/api/manager/analytics/sla-violations-trend/${qs}`,
+  );
+}
+
 // 3) Average Job Duration — тренд
 // GET /api/manager/analytics/job-duration/
 export type AnalyticsJobDurationPoint = {
