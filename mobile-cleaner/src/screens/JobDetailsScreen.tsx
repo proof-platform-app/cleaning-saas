@@ -9,6 +9,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Pressable,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -138,6 +139,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
   );
 
   const [isSyncing, setIsSyncing] = React.useState(false);
+  const [retryCount, setRetryCount] = React.useState(0); // B-3: manual retry trigger
 
   // ------------------------------------------
   // OFFLINE MODEL v0 (архитектура, не реализация)
@@ -171,12 +173,20 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         const item = (await (global as any).outboxPeek?.()) as OutboxItem | null;
         if (!item) break;
 
-        if (item.type === "checklist_bulk") {
-          await updateJobChecklistBulk(item.jobId, item.payload);
-        } else if (item.type === "photo") {
-          await uploadJobPhoto(item.jobId, item.photoType, item.localUri);
+        // B-6: isolate each item — a single failure does not abort the rest
+        try {
+          if (item.type === "checklist_bulk") {
+            await updateJobChecklistBulk(item.jobId, item.payload);
+          } else if (item.type === "photo") {
+            await uploadJobPhoto(item.jobId, item.photoType, item.localUri);
+          }
+        } catch (itemErr) {
+          if (__DEV__) {
+            console.warn("[flushOutbox] item failed, skipping:", item.type, itemErr);
+          }
         }
 
+        // Always shift (success or failure) to advance past this item
         await (global as any).outboxShift?.();
       }
 
@@ -238,7 +248,7 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
     return () => {
       cancelled = true;
     };
-  }, [jobId, isOnline]);
+  }, [jobId, isOnline, retryCount]);
 
   React.useEffect(() => {
     if (job) {
@@ -263,6 +273,16 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
             ? "You are offline. Job details are unavailable."
             : "Failed to load job details."}
         </Text>
+        {/* B-3: retry button — re-triggers the load effect without altering its logic */}
+        <Pressable
+          onPress={() => {
+            setLoading(true);
+            setRetryCount((c) => c + 1);
+          }}
+          style={styles.retryBtn}
+        >
+          <Text style={styles.retryBtnText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -616,24 +636,48 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
         return;
       }
 
+      // B-2: cache URI before upload so retry can reuse it without reopening camera
+      const cachedUri = asset.uri;
+
       // Spinner starts only after we have a valid asset — permission check and camera
       // cancellation no longer trigger the upload indicator.
       setUploadingType(photoType);
 
-      await uploadJobPhoto(jobId, photoType, asset.uri);
+      // B-2: upload + refresh as a named function so retry can call it again
+      const doUploadAndRefresh = async () => {
+        await uploadJobPhoto(jobId, photoType, cachedUri);
+        const [jobData, photosData] = await Promise.all([
+          fetchJobDetail(jobId),
+          fetchJobPhotos(jobId),
+        ]);
+        setJob(jobData);
+        setPhotos(photosData ?? []);
+        setChecklist(jobData?.checklist_items ?? []);
+      };
 
-      const [jobData, photosData] = await Promise.all([
-        fetchJobDetail(jobId),
-        fetchJobPhotos(jobId),
-      ]);
-      setJob(jobData);
-      setPhotos(photosData ?? []);
-      setChecklist(jobData?.checklist_items ?? []);
+      try {
+        await doUploadAndRefresh();
+      } catch (uploadErr: any) {
+        // B-2: offer retry on upload failure (camera already closed, URI cached)
+        Alert.alert(
+          "Photo upload failed",
+          uploadErr?.message || "Failed to upload photo.",
+          [
+            {
+              text: "Try again",
+              onPress: () => {
+                setUploadingType(photoType);
+                void doUploadAndRefresh().finally(() => setUploadingType(null));
+              },
+            },
+            { text: "Cancel", style: "cancel" },
+          ]
+        );
+      }
     } catch (e: any) {
       Alert.alert(
-        "Photo upload failed",
-        e?.message ||
-          "Calling the camera failed. Please try again."
+        "Camera error",
+        e?.message || "Calling the camera failed. Please try again."
       );
     } finally {
       setUploadingType(null);
@@ -682,6 +726,13 @@ export default function JobDetailsScreen({ route }: JobDetailsScreenProps) {
           </View>
         </View>
       </View>
+
+      {/* B-5: show syncing indicator regardless of online status (e.g. after reconnect) */}
+      {isSyncing && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>Syncing offline changes...</Text>
+        </View>
+      )}
 
       {isOnline === false && (
         <View style={styles.offlineBanner}>
@@ -914,5 +965,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 8,
     color: COLORS.textMain,
+  },
+  // B-3: retry button in empty state
+  retryBtn: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+  },
+  retryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

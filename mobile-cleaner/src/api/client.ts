@@ -198,13 +198,46 @@ async function apiFetch<T = any>(
   if (token && !headers["Authorization"]) {
     headers["Authorization"] = `Token ${token}`;
   } else if (!token) {
-    console.log("[apiFetch] No auth token set for request:", path);
+    if (__DEV__) console.log("[apiFetch] No auth token set for request:", path);
   }
 
-  const resp = await fetch(url, {
-    ...options,
-    headers,
-  });
+  // B-1: 30-second request timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    const msg: string = fetchErr?.message ?? "";
+
+    // B-1: AbortController fired → timeout
+    if (fetchErr?.name === "AbortError" || msg.includes("aborted")) {
+      throw new Error(
+        "Request timed out. Please check your connection and try again."
+      );
+    }
+
+    // B-4: device has no network path to server
+    if (
+      msg.includes("Network request failed") ||
+      msg.includes("Failed to fetch") ||
+      msg.includes("Network Error")
+    ) {
+      if (__DEV__) console.warn("[apiFetch] network error:", fetchErr);
+      throw new Error(
+        "No internet connection. Please check your network and try again."
+      );
+    }
+
+    throw fetchErr;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const raw = await resp.text();
   const contentType = resp.headers.get("content-type") || "";
