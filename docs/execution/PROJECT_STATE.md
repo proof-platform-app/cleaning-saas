@@ -23,6 +23,9 @@
 **FIXED:**
 - Settings API documentation consolidated in API_CONTRACTS.md (section 9)
 
+**ARCHITECTURE:**
+- Platform Layer v1 Definition of Done created (architectural lock document)
+
 ### v7.2 — 2026-02-12
 
 **NEW:**
@@ -368,9 +371,9 @@ Status: ✅ enforced
 * Usage limits (jobs / cleaners) ✅
 * Settings API v1.1 (Account & Billing MVP) ✅
   * Billing page UI (plan, status, usage, RBAC)
-  * Payment method stub (ready for Stripe)
+  * Payment method stub (ready for provider integration)
   * Invoice download stub (501 Not Implemented)
-* Stripe integration ⛔ (planned for v1.2)
+* Payment provider integration ⛔ (not included in v1)
 
 ---
 
@@ -424,5 +427,5 @@ Status: ✅ enforced
 * Слой 0 — DONE ✅
 * Слой 1 — MVP 🟡
 * Слой 2 — DONE ✅
-* Слой 3 — готов к Stripe-интеграции (Settings v1.1 готова)
+* Слой 3 — готов к интеграции платёжного провайдера (Settings v1.1 готова)
 * Слои 4–5 — заделы

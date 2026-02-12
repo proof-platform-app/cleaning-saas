@@ -688,7 +688,77 @@ Platform architect, backend engineer, frontend engineer, product.
 
 ---
 
-## 18. Как пользоваться всей системой документов
+## 18. Architecture
+
+### `docs/architecture/PLATFORM_LAYER_V1_DEFINITION_OF_DONE.md`
+
+**Роль:**
+Architectural lock document that formally defines Platform Layer v1 baseline and acts as guardrail against scope expansion.
+
+**Кому:**
+Backend engineer, product, architecture lead, anyone proposing changes to Platform Layer.
+
+**Когда использовать:**
+
+- before modifying auth system, roles, or RBAC rules;
+- before changing error response format;
+- before adding new billing semantics;
+- when proposing Platform Layer v2 features;
+- during architectural review of new contexts (Fit-out, Maintenance, etc.).
+
+**Что внутри:**
+
+- Platform Layer v1 scope (auth, roles, errors, RBAC, Settings v1.1, trial);
+- Core invariants (locked): role model, error structure, billing semantics, trial logic, deterministic payloads;
+- Explicitly NOT included: payment provider integration, 2FA, sessions, advanced billing, context-specific logic;
+- Change policy: version bump + contract review + verification update required;
+- Relationship to operational contexts (context-neutral platform);
+- Verification discipline (verify_rbac.sh + VERIFICATION_CHECKLIST.md).
+
+**Как менять:**
+
+- only when proposing breaking changes (v1 → v2);
+- update changelog in document;
+- update API_CONTRACTS.md, PROJECT_STATE.md, verification checklist;
+- pass verification scripts before commit.
+
+---
+
+## 19. UX Specifications
+
+### `docs/ux/SETTINGS_ACCOUNT_BILLING_UX_v1.1.md`
+
+**Роль:**
+Production-ready UX specification for Settings pages (Account + Billing).
+
+**Кому:**
+Frontend engineer, product, design system architect.
+
+**Когда использовать:**
+
+- при реализации Settings pages;
+- при проверке role-based access control logic;
+- при проверке token usage и component specs.
+
+**Что внутри:**
+
+- Settings Home (/settings) hub page with 4 tiles;
+- Account Settings (/settings/account) with profile, password, notifications;
+- Billing (/settings/billing) with subscription, usage, payment methods;
+- Role-based access control (Owner/Manager/Staff);
+- Progress bar color rules (≤79% accent, 80-99% warning, 100%+ error);
+- Token usage governance (no raw hex, no landing tokens, accent only on primary CTAs);
+- MVP boundaries (v1.1 vs v1.2+).
+
+**Как менять:**
+
+- после валидации с design system architect;
+- обновлять CHANGELOG в начале файла;
+- следовать governance rules из design system.
+
+---
+
+## 20. Как пользоваться всей системой документов
 
 Ниже — типовые ситуации и **какой документ открывать в первую очередь**.
 Это не иерархия важности, а **карта навигации**, чтобы не читать всё подряд.
