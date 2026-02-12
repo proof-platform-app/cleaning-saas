@@ -293,3 +293,13 @@ They may be introduced later, once:
 - Scope: AI agents within Proof Platform
 - Authority: CLOT.md
 - Change policy: Expand cautiously, based on real usage
+
+---
+
+## Execution Protocol
+
+All repository-changing tasks must follow:
+
+docs/ai/TASK_PROTOCOL.md
+
+No agent may modify the repository without following that protocol.
