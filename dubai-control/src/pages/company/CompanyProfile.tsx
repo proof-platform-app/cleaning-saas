@@ -298,7 +298,7 @@ export default function CompanyProfile() {
               onChange={(e) => setCompanyName(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="Enter company name"
-              disabled={isSaving}
+              disabled={updateMutation.isPending || isUploadingLogo}
             />
           </div>
 
@@ -311,7 +311,7 @@ export default function CompanyProfile() {
               onChange={(e) => setContactEmail(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="contact@company.com"
-              disabled={isSaving}
+              disabled={updateMutation.isPending || isUploadingLogo}
             />
             <p className="text-xs text-muted-foreground">
               This email will be used for client communications and reports
@@ -327,7 +327,7 @@ export default function CompanyProfile() {
               onChange={(e) => setContactPhone(e.target.value)}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="+971 50 123 4567"
-              disabled={isSaving}
+              disabled={updateMutation.isPending || isUploadingLogo}
             />
           </div>
 
