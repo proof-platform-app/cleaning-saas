@@ -851,7 +851,7 @@ export async function emailJobReportPdf(
 
 export async function getCompanyProfile(): Promise<CompanyProfile> {
   await loginManager();
-  return apiFetch<CompanyProfile>("/api/manager/company/");
+  return apiFetch<CompanyProfile>("/api/company/");
 }
 
 export async function updateCompanyProfile(
@@ -862,19 +862,19 @@ export async function updateCompanyProfile(
   }>
 ): Promise<CompanyProfile> {
   await loginManager();
-  return apiFetch<CompanyProfile>("/api/manager/company/", {
+  return apiFetch<CompanyProfile>("/api/company/", {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
+export async function uploadCompanyLogo(file: File): Promise<{ logo_url: string }> {
   await loginManager();
 
   const formData = new FormData();
   formData.append("file", file);
 
-  const url = `${API_BASE_URL}/api/manager/company/logo/`;
+  const url = `${API_BASE_URL}/api/company/logo/`;
 
   const headers: HeadersInit = {};
   const currentToken = syncTokenFromStorage();
@@ -896,7 +896,7 @@ export async function uploadCompanyLogo(file: File): Promise<CompanyProfile> {
     );
   }
 
-  return (await resp.json()) as CompanyProfile;
+  return (await resp.json()) as { logo_url: string };
 }
 
 // ---------- Cleaners API ----------
@@ -911,17 +911,29 @@ export type CreateCleanerPayload = {
 
 export async function getCleaners(): Promise<Cleaner[]> {
   await loginManager();
-  return apiFetch<Cleaner[]>("/api/manager/cleaners/");
+  return apiFetch<Cleaner[]>("/api/company/cleaners/");
 }
 
 export async function createCleaner(
   payload: CreateCleanerPayload
 ): Promise<Cleaner> {
   await loginManager();
-  return apiFetch<Cleaner>("/api/manager/cleaners/", {
+  return apiFetch<Cleaner>("/api/company/cleaners/", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function resetCleanerAccess(
+  cleanerId: number
+): Promise<{ temp_password: string; must_change_password: boolean }> {
+  await loginManager();
+  return apiFetch<{ temp_password: string; must_change_password: boolean }>(
+    `/api/company/cleaners/${cleanerId}/reset-access/`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 export async function updateCleaner(

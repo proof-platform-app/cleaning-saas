@@ -1,25 +1,64 @@
 // dubai-control/src/pages/company/CompanyProfile.tsx
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2, Upload, Loader2 } from "lucide-react";
+import { ArrowLeft, Building2, Upload, Loader2, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
+import {
+  getCompanyProfile,
+  updateCompanyProfile,
+  uploadCompanyLogo,
+  type CompanyProfile as CompanyProfileType,
+} from "@/api/client";
 
 export default function CompanyProfile() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const user = useUserRole();
   const canAccess = canAccessBilling(user.role); // Owner/Manager only
+  const queryClient = useQueryClient();
 
-  // State
-  const [isLoading, setIsLoading] = useState(false);
-  const [companyName, setCompanyName] = useState("CleanProof Demo Company");
-  const [contactEmail, setContactEmail] = useState("contact@company.example");
-  const [contactPhone, setContactPhone] = useState("+971 50 123 4567");
-  const [logo, setLogo] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  // Form state
+  const [companyName, setCompanyName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+
+  // Logo upload state
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch company profile
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["company-profile"],
+    queryFn: getCompanyProfile,
+    enabled: canAccess,
+  });
+
+  // Update company profile mutation
+  const updateMutation = useMutation({
+    mutationFn: (payload: Partial<CompanyProfileType>) =>
+      updateCompanyProfile(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["company-profile"], data);
+      toast({
+        title: "Changes saved",
+        description: "Company profile updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Failed to update company profile";
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: message,
+      });
+    },
+  });
 
   // Redirect non-authorized users
   useEffect(() => {
@@ -33,34 +72,113 @@ export default function CompanyProfile() {
     }
   }, [canAccess, navigate, toast]);
 
+  // Sync form state with fetched profile
+  useEffect(() => {
+    if (profile) {
+      setCompanyName(profile.name);
+      setContactEmail(profile.contact_email || "");
+      setContactPhone(profile.contact_phone || "");
+    }
+  }, [profile]);
+
   const handleSave = async () => {
-    setIsSaving(true);
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    toast({
-      title: "Changes saved",
-      description: "Company profile updated successfully",
+    updateMutation.mutate({
+      name: companyName,
+      contact_email: contactEmail || null,
+      contact_phone: contactPhone || null,
     });
-
-    setIsSaving(false);
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleLogoUpload = async (file: File) => {
+    // Validate file size (max 2MB)
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: "Logo must be under 2MB",
+      });
+      return;
+    }
 
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setLogo(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid file type",
+        description: "Logo must be PNG, JPG, JPEG, or WEBP",
+      });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+
+    try {
+      const result = await uploadCompanyLogo(file);
+
+      // Update cache with new logo_url
+      queryClient.setQueryData(["company-profile"], (old: any) => ({
+        ...old,
+        logo_url: result.logo_url,
+      }));
+
+      toast({
+        title: "Logo uploaded",
+        description: "Company logo updated successfully",
+      });
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message || "Failed to upload logo";
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: message,
+      });
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleLogoUpload(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleLogoUpload(file);
+    }
   };
 
   if (!canAccess) {
     return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl p-8">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -97,36 +215,75 @@ export default function CompanyProfile() {
           {/* Company Logo */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Company Logo</label>
-            <div className="flex items-center gap-4">
-              <div className="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted">
-                {logo ? (
-                  <img
-                    src={logo}
-                    alt="Company logo"
-                    className="h-full w-full rounded-xl object-cover"
-                  />
+            <div className="flex items-start gap-4">
+              {/* Logo Preview with Drag & Drop */}
+              <div
+                className={`relative flex h-24 w-24 items-center justify-center rounded-xl border-2 border-dashed transition-colors ${
+                  isDragging
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-muted"
+                } ${isUploadingLogo ? "opacity-50" : ""}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => !isUploadingLogo && fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                {isUploadingLogo ? (
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                ) : profile?.logo_url ? (
+                  <>
+                    <img
+                      src={profile.logo_url}
+                      alt="Company logo"
+                      className="h-full w-full rounded-xl object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50 opacity-0 transition-opacity hover:opacity-100">
+                      <Upload className="h-6 w-6 text-white" />
+                    </div>
+                  </>
                 ) : (
-                  <Building2 className="h-8 w-8 text-muted-foreground" />
+                  <div className="flex flex-col items-center gap-1">
+                    <Building2 className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Drop or click</span>
+                  </div>
                 )}
               </div>
-              <div>
+
+              {/* Upload Instructions */}
+              <div className="flex-1">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => document.getElementById("logo-upload")?.click()}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingLogo}
                 >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload logo
+                  {isUploadingLogo ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      {profile?.logo_url ? "Replace logo" : "Upload logo"}
+                    </>
+                  )}
                 </Button>
                 <input
-                  id="logo-upload"
+                  ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
                   className="hidden"
-                  onChange={handleLogoUpload}
+                  onChange={handleFileInputChange}
+                  disabled={isUploadingLogo}
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  PNG, JPG up to 2MB. Recommended: 400x400px
+                <p className="mt-2 text-xs text-muted-foreground">
+                  PNG, JPG, JPEG, or WEBP up to 2MB
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Drag and drop or click to upload
                 </p>
               </div>
             </div>
@@ -176,11 +333,26 @@ export default function CompanyProfile() {
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSaving ? "Saving..." : "Save changes"}
+            <Button
+              onClick={handleSave}
+              disabled={updateMutation.isPending || isUploadingLogo}
+            >
+              {updateMutation.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {updateMutation.isPending ? "Saving..." : "Save changes"}
             </Button>
-            <Button variant="outline" disabled={isSaving}>
+            <Button
+              variant="outline"
+              disabled={updateMutation.isPending || isUploadingLogo}
+              onClick={() => {
+                if (profile) {
+                  setCompanyName(profile.name);
+                  setContactEmail(profile.contact_email || "");
+                  setContactPhone(profile.contact_phone || "");
+                }
+              }}
+            >
               Cancel
             </Button>
           </div>
