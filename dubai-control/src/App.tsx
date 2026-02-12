@@ -14,7 +14,9 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetails from "./pages/JobDetails";
 import History from "./pages/History";
-import Settings from "./pages/Settings";
+import SettingsHome from "./pages/settings/SettingsHome";
+import AccountSettings from "./pages/settings/AccountSettings";
+import Billing from "./pages/settings/Billing";
 import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
 import JobPlanning from "./pages/JobPlanning";
@@ -98,7 +100,9 @@ const App = () => (
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings" element={<SettingsHome />} />
+              <Route path="/settings/account" element={<AccountSettings />} />
+              <Route path="/settings/billing" element={<Billing />} />
             </Route>
 
             {/* =========================
