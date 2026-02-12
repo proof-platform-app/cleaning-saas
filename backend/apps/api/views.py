@@ -14,6 +14,7 @@ from apps.locations.models import (
 
 from .views_auth import *  # noqa
 from .views_cleaner import *  # noqa
+from .views_company import *  # noqa
 from .views_manager_company import *  # noqa
 from .views_manager_jobs import *  # noqa
 from .views_reports import *  # noqa

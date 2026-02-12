@@ -373,6 +373,25 @@ urlpatterns = [
 
 
     # =====================
+    # Company (Org-scope, Owner/Manager)
+    # =====================
+    path(
+        "company/",
+        api_views.CompanyView.as_view(),
+        name="company-profile",
+    ),
+    path(
+        "company/logo/",
+        api_views.CompanyLogoUploadView.as_view(),
+        name="company-logo",
+    ),
+    path(
+        "company/cleaners/",
+        api_views.CompanyCleanersView.as_view(),
+        name="company-cleaners",
+    ),
+
+    # =====================
     # Owner
     # =====================
     path(

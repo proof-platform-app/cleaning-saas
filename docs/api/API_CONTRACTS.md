@@ -1,7 +1,7 @@
 # API_CONTRACTS — CleanProof
 
 Status: ACTIVE
-Version: 1.7.0
+Version: 1.8.0
 Last updated: 2026-02-12
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
@@ -27,6 +27,18 @@ Last updated: 2026-02-12
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.8.0 — 2026-02-12
+
+- NEW: Company API (Org-scope, Owner/Manager) — добавлены endpoints для управления компанией и командой с расширенным RBAC.
+- NEW: `GET /api/company/` — получение профиля компании (Owner/Manager).
+- NEW: `PATCH /api/company/` — обновление профиля компании (name, contact_email, contact_phone).
+- NEW: `POST /api/company/logo/` — загрузка логотипа компании.
+- NEW: `GET /api/company/cleaners/` — список клинеров компании (Owner/Manager).
+- NEW: `POST /api/company/cleaners/` — создание нового клинера (Owner/Manager).
+- CHANGED: RBAC расширен — endpoints доступны как для Owner, так и для Manager (ранее только Manager).
+- CHANGED: Стандартизован формат ошибок — все Company API endpoints возвращают `{code, message, fields?}`.
+- BREAKING: Staff и Cleaner роли получают 403 FORBIDDEN на все Company API endpoints.
 
 ### 1.7.0 — 2026-02-12
 
@@ -2511,7 +2523,377 @@ Backend RBAC verification script: `backend/verify_rbac.sh`
 
 ---
 
-## 10. Ошибки — общий паттерн
+## 10. Company API (Org-scope, Owner/Manager)
+
+Company API endpoints provide organization-level management for company profile and team members.
+
+**RBAC:**
+- Owner: Full access to all endpoints
+- Manager: Full access to all endpoints
+- Staff/Cleaner: 403 Forbidden
+
+**Authentication:** All endpoints require Token authentication.
+
+**Error Format:** Standardized `{code, message, fields?}` format.
+
+---
+
+### 10.1. Company Profile — GET /api/company/
+
+**Purpose:** Get company profile.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+GET /api/company/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "id": 1,
+  "name": "CleanProof Demo Company",
+  "contact_email": "contact@company.example",
+  "contact_phone": "+971 50 123 4567",
+  "logo_url": "https://cdn.example.com/logos/company-logo.png"
+}
+```
+
+**Fields:**
+- All string fields return empty string "" if null
+- `logo_url`: Full URL to company logo or empty string
+
+**Errors:**
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Company management is restricted to administrators"
+  }
+  ```
+- 404: Company not found
+  ```json
+  {
+    "code": "company_not_found",
+    "message": "Company not found for this user"
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.2. Company Profile — PATCH /api/company/
+
+**Purpose:** Update company profile.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+PATCH /api/company/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "name": "New Company Name",
+  "contact_email": "ops@company.com",
+  "contact_phone": "+971 50 999 8888"
+}
+```
+
+**Fields:**
+- `name`: string, required, cannot be empty
+- `contact_email`: string, optional, email format
+- `contact_phone`: string, optional
+
+**Response 200:**
+```json
+{
+  "id": 1,
+  "name": "New Company Name",
+  "contact_email": "ops@company.com",
+  "contact_phone": "+971 50 999 8888",
+  "logo_url": "https://cdn.example.com/logos/company-logo.png"
+}
+```
+
+**Errors:**
+- 400: Validation error
+  ```json
+  {
+    "code": "validation_error",
+    "message": "Company name cannot be empty",
+    "fields": {
+      "name": ["Company name cannot be empty"]
+    }
+  }
+  ```
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Company management is restricted to administrators"
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.3. Company Logo — POST /api/company/logo/
+
+**Purpose:** Upload company logo.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+POST /api/company/logo/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: multipart/form-data
+
+file: <binary data>
+```
+
+**Form Fields:**
+- `file`: Image file (PNG, JPG)
+
+**Response 200:**
+```json
+{
+  "logo_url": "https://cdn.example.com/logos/company-logo-new.png"
+}
+```
+
+**Errors:**
+- 400: No file provided
+  ```json
+  {
+    "code": "validation_error",
+    "message": "No file provided"
+  }
+  ```
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Logo upload is restricted to administrators"
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.4. Company Cleaners — GET /api/company/cleaners/
+
+**Purpose:** Get list of company cleaners.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+GET /api/company/cleaners/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+[
+  {
+    "id": 3,
+    "full_name": "Ahmed Hassan",
+    "email": "ahmed@cleanproof.example",
+    "phone": "+971 50 123 4567",
+    "is_active": true
+  },
+  {
+    "id": 4,
+    "full_name": "Fatima Ali",
+    "email": "fatima@cleanproof.example",
+    "phone": "+971 55 987 6543",
+    "is_active": true
+  }
+]
+```
+
+**Fields:**
+- All string fields return empty string "" if null
+- `is_active`: boolean, indicates if cleaner is active
+- Results ordered by `full_name`, then `id`
+
+**Errors:**
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Cleaner management is restricted to administrators"
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.5. Company Cleaners — POST /api/company/cleaners/
+
+**Purpose:** Create new cleaner.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+POST /api/company/cleaners/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "full_name": "Mohammed Khan",
+  "email": "mohammed@cleanproof.example",
+  "phone": "+971 50 555 1234",
+  "pin": "1234",
+  "is_active": true
+}
+```
+
+**Fields:**
+- `full_name`: string, required
+- `email`: string, optional (but either email or phone required)
+- `phone`: string, optional (but either email or phone required)
+- `pin`: string, required, must be exactly 4 digits
+- `is_active`: boolean, optional, defaults to true
+
+**Response 201:**
+```json
+{
+  "id": 5,
+  "full_name": "Mohammed Khan",
+  "email": "mohammed@cleanproof.example",
+  "phone": "+971 50 555 1234",
+  "is_active": true
+}
+```
+
+**Errors:**
+- 400: Validation error
+  ```json
+  {
+    "code": "validation_error",
+    "message": "Validation failed",
+    "fields": {
+      "full_name": ["Full name is required"],
+      "pin": ["PIN must be exactly 4 digits"]
+    }
+  }
+  ```
+- 400: Phone or email required
+  ```json
+  {
+    "code": "validation_error",
+    "message": "Phone or email is required"
+  }
+  ```
+- 400: Duplicate email/phone
+  ```json
+  {
+    "code": "validation_error",
+    "message": "Validation failed",
+    "fields": {
+      "email": ["Cleaner with this email already exists"]
+    }
+  }
+  ```
+- 403: Trial expired
+  ```json
+  {
+    "code": "trial_expired",
+    "message": "Your free trial has ended. You can still view existing jobs and download reports, but adding new cleaners requires an upgrade."
+  }
+  ```
+- 403: Trial cleaners limit reached
+  ```json
+  {
+    "code": "trial_cleaners_limit_reached",
+    "message": "Your free trial allows up to 3 active cleaners. Deactivate an existing cleaner or upgrade to add more."
+  }
+  ```
+- 403: Company blocked
+  ```json
+  {
+    "code": "company_blocked",
+    "message": "Your account is currently blocked. Please contact support."
+  }
+  ```
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Cleaner management is restricted to administrators"
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.6. Company API Error Format (Standardized)
+
+All Company API endpoints use a standardized error response format:
+
+#### 400 Validation Error
+```json
+{
+  "code": "validation_error",
+  "message": "Validation failed",
+  "fields": {
+    "full_name": ["Full name is required"],
+    "pin": ["PIN must be exactly 4 digits"]
+  }
+}
+```
+
+#### 403 Forbidden (RBAC)
+```json
+{
+  "code": "access_denied",
+  "message": "Company management is restricted to administrators"
+}
+```
+
+#### 403 Forbidden (Trial/Commercial)
+```json
+{
+  "code": "trial_expired",
+  "message": "Your free trial has ended. You can still view existing jobs and download reports, but adding new cleaners requires an upgrade."
+}
+```
+
+#### 404 Not Found
+```json
+{
+  "code": "company_not_found",
+  "message": "Company not found for this user"
+}
+```
+
+**Rules:**
+- All error responses include `code` and `message` fields
+- Validation errors additionally include optional `fields` object with field-specific errors
+- Content-Type is always `application/json`
+- HTTP status codes strictly follow REST conventions
+- All string fields in success responses return empty string "" instead of null
+
+---
+
+## 11. Ошибки — общий паттерн
 
 Все эндпоинты возвращают ошибки в виде:
 
@@ -2546,7 +2928,7 @@ Backend RBAC verification script: `backend/verify_rbac.sh`
 
 ---
 
-## 11. Backend implementation modules (для разработчиков)
+## 12. Backend implementation modules (для разработчиков)
 
 Внутреннее разбиение views (не влияет на контракт):
 
@@ -2571,9 +2953,12 @@ Backend RBAC verification script: `backend/verify_rbac.sh`
 * `backend/apps/accounts/api/views_settings.py`
   Settings API (Account & Billing MVP v1.1): current user, profile update, password change, notification preferences, billing summary, invoice download.
 
+* `backend/apps/api/views_company.py`
+  Company API (Org-scope, Owner/Manager): company profile, logo upload, cleaners list/create.
+
 ---
 
-## 12. Итоговое правило
+## 13. Итоговое правило
 
 Любая новая функциональность:
 

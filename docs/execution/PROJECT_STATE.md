@@ -1,8 +1,23 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.2)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.4)
 
 Обновлено: 2026-02-12
 
 ## Changelog
+
+### v7.4 — 2026-02-12
+
+**NEW:**
+- Company API v1.0 (Org-scope, Owner/Manager) — DONE ✅
+- Backend endpoints: GET /api/company, PATCH /api/company, POST /api/company/logo, GET /api/company/cleaners, POST /api/company/cleaners
+- RBAC: Owner/Manager allowed (full access), Staff/Cleaner blocked (403 FORBIDDEN)
+- Standardized error format: `{code, message, fields?}` across all Company API endpoints
+- Frontend Company section: `/company/profile`, `/company/team` (READY for backend integration)
+- API documentation: API_CONTRACTS.md section 10 (Company API)
+- Verification script: `backend/verify_company_api.sh`
+
+**ARCHITECTURE:**
+- Clear separation: Company API (org-scope) vs Settings API (user-scope)
+- RBAC expanded: Owner + Manager (not just Manager as in legacy endpoints)
 
 ### v7.3 — 2026-02-12
 
@@ -362,11 +377,13 @@ Status: ✅ enforced
   * Billing (plan summary, usage, RBAC enforcement)
   * Frontend integration complete
   * Verification checklist: `docs/settings/VERIFICATION_CHECKLIST.md`
-* Company (Org Scope) — Frontend DONE, Backend NOT CONNECTED 🟡
-  * `/company/profile` — Company profile management (name, logo, contacts)
-  * `/company/team` — Team & Cleaners list (preview with mock data)
-  * RBAC: Owner/Manager only (Staff/Cleaner blocked with redirect)
-  * Backend API integration pending
+* Company API v1.0 (Org Scope) — DONE ✅
+  * Backend: GET /api/company, PATCH /api/company, POST /api/company/logo, GET /api/company/cleaners, POST /api/company/cleaners
+  * Frontend: `/company/profile`, `/company/team` (ready for backend integration)
+  * RBAC: Owner/Manager only (Staff/Cleaner → 403 FORBIDDEN)
+  * Error format: `{code, message, fields?}` standardized
+  * Verification script: `backend/verify_company_api.sh`
+  * Documentation: API_CONTRACTS.md section 10
 
 ---
 
