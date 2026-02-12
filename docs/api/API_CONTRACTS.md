@@ -1,7 +1,7 @@
 # API_CONTRACTS — CleanProof
 
 Status: ACTIVE
-Version: 1.8.1
+Version: 1.9.0
 Last updated: 2026-02-12
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
@@ -27,6 +27,15 @@ Last updated: 2026-02-12
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.9.0 — 2026-02-12
+
+- NEW: Cleaner Access Lifecycle (Reset Access System) — управляемый reset доступа клинера.
+- NEW: `POST /api/company/cleaners/{id}/reset-access/` — генерация временного пароля для клинера (Owner/Manager).
+- NEW: `must_change_password` field в модели User — флаг обязательной смены пароля.
+- CHANGED: Login flow (все endpoints: `/auth/login/`, `/auth/cleaner-login/`, `/manager/auth/login/`) — блокировка login до смены пароля.
+- CHANGED: Login возвращает `403 PASSWORD_CHANGE_REQUIRED` если `must_change_password = True`.
+- CHANGED: `POST /api/me/change-password/` — сбрасывает флаг `must_change_password` после успешной смены пароля.
 
 ### 1.8.1 — 2026-02-12
 
@@ -250,6 +259,15 @@ Content-Type: application/json
 
   ```json
   { "detail": "Invalid credentials" }
+  ```
+
+* `403` — требуется смена пароля:
+
+  ```json
+  {
+    "code": "PASSWORD_CHANGE_REQUIRED",
+    "message": "Password change required."
+  }
   ```
 
 ### 1.2. Логин менеджера
@@ -2263,6 +2281,11 @@ Content-Type: application/json
 - `current_password`: must match current password
 - `new_password`: min 8 chars, must contain uppercase, lowercase, number, special char
 
+**Behavior:**
+- Sets new password
+- Resets `must_change_password` flag to `false`
+- Allows login without password change requirement
+
 **Response 200:**
 ```json
 {
@@ -2873,7 +2896,58 @@ Content-Type: application/json
 
 ---
 
-### 10.6. Company API Error Format (Standardized)
+### 10.6. Reset Cleaner Access — POST /api/company/cleaners/{id}/reset-access/
+
+**Purpose:** Reset cleaner access (generate temporary password).
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+POST /api/company/cleaners/23/reset-access/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "temp_password": "aB3dE7fG9hJ2kL",
+  "must_change_password": true
+}
+```
+
+**Fields:**
+- `temp_password`: Generated temporary password (12-16 characters, alphanumeric)
+- `must_change_password`: Always `true` after reset
+
+**Behavior:**
+- Generates random password (12-16 characters)
+- Sets `must_change_password = true`
+- Old password no longer works
+- User must change password on next login
+
+**Errors:**
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "access_denied",
+    "message": "Access reset is restricted to administrators"
+  }
+  ```
+- 404: Cleaner not found
+  ```json
+  {
+    "code": "not_found",
+    "message": "Not found."
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 10.7. Company API Error Format (Standardized)
 
 All Company API endpoints use a standardized error response format:
 

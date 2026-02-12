@@ -1,8 +1,24 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.5)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.6)
 
 Обновлено: 2026-02-12
 
 ## Changelog
+
+### v7.6 — 2026-02-12
+
+**NEW:**
+- Cleaner Access Lifecycle (Reset Access System) — DONE ✅
+- POST /api/company/cleaners/{id}/reset-access/ — генерация временного пароля (12-16 символов)
+- User.must_change_password field — флаг обязательной смены пароля
+- Login enforcement — блокировка login с 403 PASSWORD_CHANGE_REQUIRED до смены пароля
+
+**CHANGED:**
+- Login flow (все endpoints) — проверка must_change_password перед выдачей токена
+- POST /api/me/change-password/ — сбрасывает must_change_password после успешной смены
+
+**ARCHITECTURE:**
+- Полноценный lifecycle управления доступом клинера (не просто "сброс пароля")
+- Deterministic error format с кодом PASSWORD_CHANGE_REQUIRED
 
 ### v7.5 — 2026-02-12
 

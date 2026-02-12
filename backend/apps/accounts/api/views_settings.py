@@ -95,8 +95,9 @@ class ChangePasswordView(APIView):
 
         # Set new password
         user.set_password(serializer.validated_data['new_password'])
+        user.must_change_password = False
         user.updated_at = timezone.now()
-        user.save(update_fields=['password', 'updated_at'])
+        user.save(update_fields=['password', 'must_change_password', 'updated_at'])
 
         return Response(
             {"detail": "Password updated successfully"},

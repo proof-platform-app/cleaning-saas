@@ -8,8 +8,10 @@ Error format: {code, message, fields?}
 """
 
 import random
+import string
 
 from django.contrib.auth.hashers import make_password
+from django.shortcuts import get_object_or_404
 
 from rest_framework import status
 from rest_framework.authentication import TokenAuthentication
@@ -367,3 +369,64 @@ class CompanyCleanersView(APIView):
             "is_active": cleaner.is_active,
         }
         return Response(data, status=status.HTTP_201_CREATED)
+
+
+class CompanyCleanerResetAccessView(APIView):
+    """
+    Reset cleaner access (generate temporary password).
+
+    POST /api/company/cleaners/{id}/reset-access/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        user = request.user
+        role = getattr(user, "role", None)
+
+        # RBAC: only Owner and Manager allowed
+        if role not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Access reset is restricted to administrators",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {
+                    "code": "company_not_found",
+                    "message": "Company not found for this user",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get cleaner from same company
+        cleaner = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role=User.ROLE_CLEANER,
+        )
+
+        # Generate temporary password (12-16 characters)
+        password_length = random.randint(12, 16)
+        characters = string.ascii_letters + string.digits
+        temp_password = "".join(random.choice(characters) for _ in range(password_length))
+
+        # Set password and must_change_password flag
+        cleaner.set_password(temp_password)
+        cleaner.must_change_password = True
+        cleaner.save(update_fields=["password", "must_change_password"])
+
+        return Response(
+            {
+                "temp_password": temp_password,
+                "must_change_password": True,
+            },
+            status=status.HTTP_200_OK,
+        )

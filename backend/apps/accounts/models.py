@@ -321,6 +321,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text="User notification settings: email_notifications, job_assignment_alerts, weekly_summary"
     )
 
+    # Password reset lifecycle
+    must_change_password = models.BooleanField(
+        default=False,
+        help_text="User must change password on next login (set after reset-access)"
+    )
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 

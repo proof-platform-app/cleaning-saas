@@ -46,6 +46,16 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Check if user must change password
+        if user.must_change_password:
+            return Response(
+                {
+                    "code": "PASSWORD_CHANGE_REQUIRED",
+                    "message": "Password change required.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         token, _ = Token.objects.get_or_create(user=user)
 
         return Response(
@@ -103,6 +113,16 @@ class CleanerPinLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Check if user must change password
+        if user.must_change_password:
+            return Response(
+                {
+                    "code": "PASSWORD_CHANGE_REQUIRED",
+                    "message": "Password change required.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         token, _ = Token.objects.get_or_create(user=user)
 
         return Response(
@@ -151,6 +171,16 @@ class ManagerLoginView(APIView):
             return Response(
                 {"detail": "Invalid credentials"},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Check if user must change password
+        if user.must_change_password:
+            return Response(
+                {
+                    "code": "PASSWORD_CHANGE_REQUIRED",
+                    "message": "Password change required.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         token, _ = Token.objects.get_or_create(user=user)
