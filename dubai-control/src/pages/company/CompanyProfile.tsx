@@ -278,18 +278,36 @@ export default function CompanyProfile() {
       </Link>
 
       {/* Page Header */}
-      <div className="mb-8 flex items-center gap-4">
+      <div className="mb-6 flex items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
           <Building2 className="h-6 w-6 text-muted-foreground" />
         </div>
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Company Profile
+            Company
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your company information and branding
+            Manage your company information and team
           </p>
         </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="mb-8 border-b border-border">
+        <nav className="flex gap-8">
+          <Link
+            to="/company/profile"
+            className="border-b-2 border-primary pb-3 text-sm font-medium text-foreground"
+          >
+            Profile
+          </Link>
+          <Link
+            to="/company/team"
+            className="border-b-2 border-transparent pb-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Team
+          </Link>
+        </nav>
       </div>
 
       {/* Company Info Section */}

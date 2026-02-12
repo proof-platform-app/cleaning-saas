@@ -149,17 +149,17 @@ export default function CompanyTeam() {
       </Link>
 
       {/* Page Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
             <Users className="h-6 w-6 text-muted-foreground" />
           </div>
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              Team & Cleaners
+              Company
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage your team members and cleaner staff
+              Manage your company information and team
             </p>
           </div>
         </div>
@@ -168,6 +168,24 @@ export default function CompanyTeam() {
           <Plus className="mr-2 h-4 w-4" />
           Add cleaner
         </Button>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="mb-8 border-b border-border">
+        <nav className="flex gap-8">
+          <Link
+            to="/company/profile"
+            className="border-b-2 border-transparent pb-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Profile
+          </Link>
+          <Link
+            to="/company/team"
+            className="border-b-2 border-primary pb-3 text-sm font-medium text-foreground"
+          >
+            Team
+          </Link>
+        </nav>
       </div>
 
       {/* Cleaners List */}
