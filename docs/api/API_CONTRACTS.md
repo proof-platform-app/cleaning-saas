@@ -2206,7 +2206,16 @@ Content-Type: application/json
 ```
 
 **Errors:**
-- 400: Validation error (field errors structured)
+- 400: Validation error
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "fields": {
+      "phone": ["Invalid phone number format"]
+    }
+  }
+  ```
 - 401: Unauthorized
 
 ---
@@ -2244,7 +2253,22 @@ Content-Type: application/json
 
 **Errors:**
 - 400: Current password incorrect or new password weak
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "fields": {
+      "current_password": ["Current password is incorrect"]
+    }
+  }
+  ```
 - 403: SSO users cannot change password
+  ```json
+  {
+    "code": "FORBIDDEN",
+    "message": "Password change not allowed for SSO users"
+  }
+  ```
 - 401: Unauthorized
 
 ---
@@ -2311,6 +2335,15 @@ Content-Type: application/json
 
 **Errors:**
 - 400: Validation error
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "fields": {
+      "email_notifications": ["This field must be a boolean"]
+    }
+  }
+  ```
 - 401: Unauthorized
 
 ---
@@ -2367,7 +2400,13 @@ Authorization: Token <token>
 - `invoices`: empty array for MVP (no Stripe integration)
 
 **Errors:**
-- 403: Staff/Cleaner role (Billing access restricted to administrators)
+- 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "FORBIDDEN",
+    "message": "Billing access restricted to administrators"
+  }
+  ```
 - 401: Unauthorized
 
 ---
@@ -2391,14 +2430,81 @@ Authorization: Token <token>
 **Response 501:**
 ```json
 {
-  "detail": "Invoice download not available yet. This feature requires payment processor integration."
+  "code": "NOT_IMPLEMENTED",
+  "message": "Invoice download is not available yet"
 }
 ```
 
 **Errors:**
 - 501: Not Implemented (no Stripe integration)
+  ```json
+  {
+    "code": "NOT_IMPLEMENTED",
+    "message": "Invoice download is not available yet"
+  }
+  ```
 - 403: Staff/Cleaner role
+  ```json
+  {
+    "code": "FORBIDDEN",
+    "message": "Billing access restricted to administrators"
+  }
+  ```
 - 401: Unauthorized
+
+---
+
+### 9.8. Settings API Error Format (Standardized)
+
+Settings API v1.1 endpoints use a standardized error response format:
+
+#### 400 Validation Error
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Validation failed",
+  "fields": {
+    "full_name": ["This field is required"],
+    "phone": ["Invalid phone number format"]
+  }
+}
+```
+
+#### 403 Forbidden (RBAC)
+```json
+{
+  "code": "FORBIDDEN",
+  "message": "Billing access restricted to administrators"
+}
+```
+
+#### 403 Forbidden (SSO)
+```json
+{
+  "code": "FORBIDDEN",
+  "message": "Password change not allowed for SSO users"
+}
+```
+
+#### 501 Not Implemented
+```json
+{
+  "code": "NOT_IMPLEMENTED",
+  "message": "Invoice download is not available yet"
+}
+```
+
+**Rules:**
+- All error responses include `code` and `message` fields
+- Validation errors additionally include `fields` object with field-specific errors
+- Content-Type is always `application/json`
+- HTTP status codes strictly follow REST conventions
+
+**RBAC Documentation:** For complete role-based access control matrix and testing examples, see `backend/docs/api/SETTINGS_API_RBAC.md`
+
+**Deterministic Payloads:** All endpoints return consistent JSON structures with all keys present. For example, GET `/api/settings/billing/` always includes all keys (`can_manage`, `plan`, `status`, `trial_expires_at`, `next_billing_date`, `usage_summary`, `payment_method`, `invoices`) even if values are `null` or `[]`.
+
+**UX Specification:** Settings API implementation is based on `docs/ux/SETTINGS_ACCOUNT_BILLING_UX_v1.1.md`
 
 ---
 

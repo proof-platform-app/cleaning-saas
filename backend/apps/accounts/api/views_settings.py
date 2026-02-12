@@ -16,6 +16,11 @@ from .serializers import (
     NotificationPreferencesSerializer,
     BillingSummarySerializer,
 )
+from .error_responses import (
+    validation_error,
+    forbidden_error,
+    not_implemented_error,
+)
 
 User = get_user_model()
 
@@ -42,7 +47,7 @@ class CurrentUserView(APIView):
             serializer.save(updated_at=timezone.now())
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return validation_error(serializer.errors)
 
 
 class UpdateProfileView(APIView):
@@ -63,7 +68,7 @@ class UpdateProfileView(APIView):
             serializer.save(updated_at=timezone.now())
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return validation_error(serializer.errors)
 
 
 class ChangePasswordView(APIView):
@@ -77,22 +82,16 @@ class ChangePasswordView(APIView):
 
         # Check if user is SSO
         if user.auth_type == User.AUTH_TYPE_SSO:
-            return Response(
-                {"detail": "Password change not allowed for SSO users"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return forbidden_error("Password change not allowed for SSO users")
 
         serializer = ChangePasswordSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return validation_error(serializer.errors)
 
         # Verify current password
         if not user.check_password(serializer.validated_data['current_password']):
-            return Response(
-                {"current_password": ["Current password is incorrect"]},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return validation_error({"current_password": ["Current password is incorrect"]})
 
         # Set new password
         user.set_password(serializer.validated_data['new_password'])
@@ -120,7 +119,7 @@ class NotificationPreferencesView(APIView):
         serializer = NotificationPreferencesSerializer(data=request.data, partial=True)
 
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return validation_error(serializer.errors)
 
         # Update preferences
         request.user.update_notification_preferences(**serializer.validated_data)
@@ -143,10 +142,7 @@ class BillingSummaryView(APIView):
 
         # RBAC: Staff users cannot access billing
         if role == User.ROLE_STAFF or role == User.ROLE_CLEANER:
-            return Response(
-                {"detail": "Billing access restricted to administrators"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return forbidden_error("Billing access restricted to administrators")
 
         company: Company = user.company
 
@@ -240,13 +236,7 @@ class InvoiceDownloadView(APIView):
 
         # RBAC: Staff users cannot access billing
         if role == User.ROLE_STAFF or role == User.ROLE_CLEANER:
-            return Response(
-                {"detail": "Billing access restricted to administrators"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return forbidden_error("Billing access restricted to administrators")
 
         # Not implemented yet (no Stripe integration)
-        return Response(
-            {"detail": "Invoice download not available yet. This feature requires payment processor integration."},
-            status=status.HTTP_501_NOT_IMPLEMENTED
-        )
+        return not_implemented_error("Invoice download is not available yet")
