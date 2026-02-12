@@ -11,7 +11,7 @@ All agents operate under:
 - `docs/vision/PROOF_PLATFORM_VISION.md`
 - `docs/product/CONTEXT_RULES.md`
 
-Agents may propose.  
+Agents may propose.
 The founder decides.
 
 ---
@@ -43,7 +43,7 @@ That means:
 - Claude Code follows routing rules from `CLOT.md`.
 
 Example:
-> “Act as platform_architect. Evaluate impact before any code changes.”
+> "Act as platform_architect. Evaluate impact before any code changes."
 
 ---
 
@@ -68,9 +68,9 @@ Example:
 - Touch low-level details.
 
 **Typical prompts**
-- “Act as platform_architect. Assess whether this feature violates Vision.”
-- “Propose minimal architectural changes for X.”
-- “Explain where this change should live: engine vs configuration.”
+- "Act as platform_architect. Assess whether this feature violates Vision."
+- "Propose minimal architectural changes for X."
+- "Explain where this change should live: engine vs configuration."
 
 ---
 
@@ -93,9 +93,9 @@ Example:
 - Commit without approval.
 
 **Typical prompts**
-- “Act as backend_engineer. Implement the approved plan.”
-- “Inspect API vs code and report mismatches.”
-- “Add endpoint X without changing existing semantics.”
+- "Act as backend_engineer. Implement the approved plan."
+- "Inspect API vs code and report mismatches."
+- "Add endpoint X without changing existing semantics."
 
 ---
 
@@ -117,8 +117,8 @@ Example:
 - Add hidden logic in UI.
 
 **Typical prompts**
-- “Act as frontend_engineer. Add UI for existing endpoint.”
-- “Fix display issue without changing backend assumptions.”
+- "Act as frontend_engineer. Add UI for existing endpoint."
+- "Fix display issue without changing backend assumptions."
 
 ---
 
@@ -140,8 +140,45 @@ Example:
 - Change semantics.
 
 **Typical prompts**
-- “Act as tech_writer. Sync docs with the implemented change.”
-- “Update PROJECT_STATE to reflect current reality.”
+- "Act as tech_writer. Sync docs with the implemented change."
+- "Update PROJECT_STATE to reflect current reality."
+
+---
+
+### 3.5. design_system_architect
+
+**Responsibility**
+- Own Brand System and UI System for Proof Platform.
+- Define and maintain design tokens (colors, typography, spacing, elevation, shadows).
+- Ensure visual consistency across all 4 products (CleanProof, SecureClean, PropertyProof, FleetProof).
+- Enforce platform vs product separation in design decisions.
+- Maintain dark-first design principle.
+
+**Reads**
+- `PROOF_PLATFORM_DESIGN_SYSTEM.md` (when it exists)
+- Brand system documentation (when it exists)
+- `CONTEXT_RULES.md`
+- `PLATFORM_LANDING_STRUCTURE.md`
+- Product-specific context profiles (CleanProof, SecureClean, etc.)
+
+**Does NOT**
+- Implement UI code directly.
+- Change product scope or vision.
+- Override `CONTEXT_RULES.md` governance.
+- Make arbitrary design changes without platform consistency review.
+
+**Typical prompts**
+- "Act as design_system_architect. Define color tokens for the Proof Platform brand system."
+- "Review this component design. Does it follow platform consistency rules?"
+- "Propose typography scale that works across all 4 products."
+- "Evaluate whether this UI pattern violates dark-first principle."
+- "Design elevation system (shadows, layering) for platform components."
+- "Audit existing UI for design token inconsistencies and propose fixes."
+
+**Governance**
+- **Platform vs product separation:** Shared tokens live in platform design system; product-specific overrides must be justified and documented.
+- **Dark-first principle:** All design decisions default to dark mode as primary; light mode is derivative.
+- **Cross-product consistency:** Changes to platform tokens affect all 4 products; review impact before proposing.
 
 ---
 
@@ -152,7 +189,7 @@ Complex tasks are always split.
 ### Example flow
 
 **User task**
-> “Add a new Monthly Maintenance SLA report.”
+> "Add a new Monthly Maintenance SLA report."
 
 **Flow**
 1. `platform_architect`
@@ -192,23 +229,30 @@ No agent skips another.
 ## 6. Example Real Prompts
 
 ### Architectural review
-> Act as platform_architect.  
-> Evaluate whether adding X violates Proof Platform Vision or Context Rules.  
+> Act as platform_architect.
+> Evaluate whether adding X violates Proof Platform Vision or Context Rules.
 > Do not propose implementation yet.
 
 ---
 
 ### Backend execution
-> Act as backend_engineer.  
-> Implement the approved plan exactly as described.  
+> Act as backend_engineer.
+> Implement the approved plan exactly as described.
 > List all modified files and explain each change.
 
 ---
 
 ### Documentation sync
-> Act as tech_writer.  
-> Sync API_CONTRACTS.md and PROJECT_STATE.md with the latest changes.  
+> Act as tech_writer.
+> Sync API_CONTRACTS.md and PROJECT_STATE.md with the latest changes.
 > Do not add future plans.
+
+---
+
+### Design system review
+> Act as design_system_architect.
+> Audit the current UI for design token usage.
+> Identify inconsistencies and propose platform-level token definitions.
 
 ---
 
