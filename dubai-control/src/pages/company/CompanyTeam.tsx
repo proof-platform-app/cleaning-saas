@@ -364,6 +364,7 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
     phone: "",
     email: "",
     pin: "",
+    is_active: true,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -432,7 +433,7 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
       phone: formData.phone,
       email: formData.email || null,
       pin: formData.pin,
-      is_active: true,
+      is_active: formData.is_active,
     });
   };
 
@@ -477,6 +478,9 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
               disabled={createMutation.isPending}
             />
             {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
+            <p className="text-xs text-muted-foreground">
+              Required for contact and internal reference
+            </p>
           </div>
 
           {/* Email (Optional) */}
@@ -491,6 +495,9 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
               disabled={createMutation.isPending}
             />
             {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+            <p className="text-xs text-muted-foreground">
+              Optional. Used for notifications and reports
+            </p>
           </div>
 
           {/* PIN */}
@@ -527,6 +534,23 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-muted-foreground">
               PIN will be used for mobile app login
             </p>
+          </div>
+
+          {/* Active Status */}
+          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-4">
+            <div className="flex-1">
+              <label className="text-sm font-medium text-foreground">Active</label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cleaner can log in and be assigned to jobs
+              </p>
+            </div>
+            <Switch
+              checked={formData.is_active}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, is_active: checked })
+              }
+              disabled={createMutation.isPending}
+            />
           </div>
 
           {/* Actions */}
