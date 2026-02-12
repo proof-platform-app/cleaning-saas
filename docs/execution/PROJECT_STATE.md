@@ -1,8 +1,21 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.4)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.5)
 
 Обновлено: 2026-02-12
 
 ## Changelog
+
+### v7.5 — 2026-02-12
+
+**NEW:**
+- Company Logo Upload с валидацией (max 2MB, PNG/JPG/JPEG/WEBP) — DONE ✅
+
+**CHANGED:**
+- Company logo теперь сохраняется в ImageField (`company.logo`) с персистентным хранением в `media/company_logos/`
+- GET /api/company/ и PATCH /api/company/ возвращают `logo_url: null` вместо пустой строки, если логотип не загружен
+- POST /api/company/logo/ валидирует размер файла (max 2MB) и формат (PNG/JPG/JPEG/WEBP)
+
+**FIXED:**
+- Логотип теперь сохраняется после перезапуска сервера (ImageField вместо текстового поля)
 
 ### v7.4 — 2026-02-12
 

@@ -1,7 +1,7 @@
 # API_CONTRACTS — CleanProof
 
 Status: ACTIVE
-Version: 1.8.0
+Version: 1.8.1
 Last updated: 2026-02-12
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
@@ -27,6 +27,13 @@ Last updated: 2026-02-12
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.8.1 — 2026-02-12
+
+- CHANGED: `POST /api/company/logo/` — добавлена валидация файлов (max 2MB, форматы: PNG/JPG/JPEG/WEBP).
+- CHANGED: Company logo теперь сохраняется в ImageField (`company.logo`), не в текстовое поле `logo_url`.
+- CHANGED: `GET /api/company/` и `PATCH /api/company/` возвращают `logo_url: null` вместо пустой строки, если логотип не загружен.
+- FIXED: Логотип теперь персистентен и сохраняется в `media/company_logos/` с корректным абсолютным URL.
 
 ### 1.8.0 — 2026-02-12
 
@@ -2565,7 +2572,7 @@ Authorization: Token <token>
 
 **Fields:**
 - All string fields return empty string "" if null
-- `logo_url`: Full URL to company logo or empty string
+- `logo_url`: Full absolute URL to company logo (or null if no logo)
 
 **Errors:**
 - 403: Staff/Cleaner role
@@ -2663,14 +2670,22 @@ file: <binary data>
 ```
 
 **Form Fields:**
-- `file`: Image file (PNG, JPG)
+- `file`: Image file (PNG, JPG, JPEG, WEBP)
+
+**Validation:**
+- Max file size: 2MB
+- Allowed formats: PNG, JPG, JPEG, WEBP
+- File is saved to `media/company_logos/`
 
 **Response 200:**
 ```json
 {
-  "logo_url": "https://cdn.example.com/logos/company-logo-new.png"
+  "logo_url": "http://127.0.0.1:8001/media/company_logos/company-logo.png"
 }
 ```
+
+**Fields:**
+- `logo_url`: Full absolute URL to uploaded logo (or null if no logo)
 
 **Errors:**
 - 400: No file provided
@@ -2678,6 +2693,20 @@ file: <binary data>
   {
     "code": "validation_error",
     "message": "No file provided"
+  }
+  ```
+- 400: File too large
+  ```json
+  {
+    "code": "validation_error",
+    "message": "File size exceeds 2MB limit"
+  }
+  ```
+- 400: Invalid file type
+  ```json
+  {
+    "code": "validation_error",
+    "message": "Invalid file type. Allowed types: PNG, JPG, JPEG, WEBP"
   }
   ```
 - 403: Staff/Cleaner role

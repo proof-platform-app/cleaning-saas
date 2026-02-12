@@ -9,8 +9,6 @@ Error format: {code, message, fields?}
 
 import random
 
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from django.contrib.auth.hashers import make_password
 
 from rest_framework import status
@@ -67,12 +65,17 @@ class CompanyView(APIView):
         if error_response is not None:
             return error_response
 
+        # Build absolute URL for logo
+        logo_url = None
+        if company.logo:
+            logo_url = request.build_absolute_uri(company.logo.url)
+
         data = {
             "id": company.id,
             "name": company.name,
             "contact_email": company.contact_email or "",
             "contact_phone": company.contact_phone or "",
-            "logo_url": company.logo_url or "",
+            "logo_url": logo_url,
         }
         return Response(data, status=status.HTTP_200_OK)
 
@@ -104,12 +107,17 @@ class CompanyView(APIView):
         company.contact_phone = contact_phone
         company.save(update_fields=["name", "contact_email", "contact_phone"])
 
+        # Build absolute URL for logo
+        logo_url = None
+        if company.logo:
+            logo_url = request.build_absolute_uri(company.logo.url)
+
         data = {
             "id": company.id,
             "name": company.name,
             "contact_email": company.contact_email or "",
             "contact_phone": company.contact_phone or "",
-            "logo_url": company.logo_url or "",
+            "logo_url": logo_url,
         }
         return Response(data, status=status.HTTP_200_OK)
 
@@ -160,15 +168,34 @@ class CompanyLogoUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Save file to storage
-        file_name = file_obj.name
-        path = f"company_logos/{company.id}/{file_name}"
-        saved_path = default_storage.save(path, ContentFile(file_obj.read()))
-        logo_url = default_storage.url(saved_path)
+        # Validate file size (max 2MB)
+        MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
+        if file_obj.size > MAX_FILE_SIZE:
+            return Response(
+                {
+                    "code": "validation_error",
+                    "message": "File size exceeds 2MB limit",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Update company
-        company.logo_url = logo_url
-        company.save(update_fields=["logo_url"])
+        # Validate file type
+        ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"]
+        if file_obj.content_type not in ALLOWED_TYPES:
+            return Response(
+                {
+                    "code": "validation_error",
+                    "message": "Invalid file type. Allowed types: PNG, JPG, JPEG, WEBP",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Save file to ImageField
+        company.logo = file_obj
+        company.save(update_fields=["logo"])
+
+        # Return URL
+        logo_url = request.build_absolute_uri(company.logo.url) if company.logo else None
 
         return Response({"logo_url": logo_url}, status=status.HTTP_200_OK)
 
