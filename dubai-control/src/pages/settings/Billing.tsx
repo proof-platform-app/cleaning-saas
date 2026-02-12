@@ -416,6 +416,64 @@ export default function Billing() {
         </div>
       )}
 
+      {/* Trial Urgency Banner (Top Priority) */}
+      {trialStatus && (
+        <div
+          className={`mb-6 rounded-xl border p-6 shadow-sm ${
+            trialStatus.expired
+              ? "border-status-flagged bg-status-flagged-bg"
+              : "border-blue-200 bg-blue-50"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <Clock
+              className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
+                trialStatus.expired ? "text-status-flagged" : "text-blue-700"
+              }`}
+            />
+            <div className="flex-1">
+              <h3
+                className={`text-base font-semibold ${
+                  trialStatus.expired ? "text-status-flagged" : "text-blue-900"
+                }`}
+              >
+                {trialStatus.message}
+              </h3>
+              <p
+                className={`mt-1 text-sm ${
+                  trialStatus.expired ? "text-status-flagged" : "text-blue-800"
+                }`}
+              >
+                {trialStatus.expired
+                  ? "You can still access existing data. Creating new jobs may be restricted until your plan is activated."
+                  : "Upgrade to keep creating new jobs and stay within limits."}
+              </p>
+
+              {/* CTA */}
+              <div className="mt-4">
+                {isOwner ? (
+                  <Button
+                    asChild
+                    className="bg-accent-primary text-white hover:bg-accent-primary/90"
+                  >
+                    <Link to="/cleanproof/contact">Contact us to upgrade</Link>
+                  </Button>
+                ) : (
+                  <div>
+                    <Button disabled className="opacity-50">
+                      Contact us to upgrade
+                    </Button>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Only account owner can upgrade
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sections */}
       <div className="space-y-6">
         {/* Section A: Current Plan */}
@@ -448,32 +506,6 @@ export default function Billing() {
               </span>
             </div>
 
-            {/* Trial Countdown */}
-            {trialStatus && (
-              <div
-                className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
-                  trialStatus.expired
-                    ? "border-status-flagged bg-status-flagged-bg"
-                    : "border-blue-200 bg-blue-50"
-                }`}
-              >
-                <Clock
-                  className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
-                    trialStatus.expired ? "text-status-flagged" : "text-blue-700"
-                  }`}
-                />
-                <div>
-                  <p
-                    className={`text-sm font-medium ${
-                      trialStatus.expired ? "text-status-flagged" : "text-blue-900"
-                    }`}
-                  >
-                    {trialStatus.message}
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Next Billing Date */}
             <p className="text-sm text-muted-foreground">
               Next billing date: {plan.nextBillingDate}
@@ -497,32 +529,11 @@ export default function Billing() {
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>• You can still access existing jobs, reports, and proof history.</p>
               <p>• Creating new jobs may be restricted until your plan is activated.</p>
-              <p>• Contact us to upgrade.</p>
+              <p>• Usage limits will remain active until you upgrade.</p>
             </div>
-
-            {/* Upgrade CTA - Owner Only */}
-            {isOwner && (
-              <div className="mt-4 pt-2">
-                <Button
-                  asChild
-                  className="bg-accent-primary text-white hover:bg-accent-primary/90"
-                >
-                  <Link to="/cleanproof/contact">Contact us to upgrade</Link>
-                </Button>
-              </div>
-            )}
-
-            {/* Manager - CTA disabled */}
-            {isManager && (
-              <div className="mt-4 pt-2">
-                <Button disabled className="opacity-50">
-                  Contact us to upgrade
-                </Button>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Only account owner can upgrade
-                </p>
-              </div>
-            )}
+            <p className="mt-3 text-sm font-medium text-foreground">
+              Need a paid plan? Contact us to upgrade.
+            </p>
           </div>
         )}
 
@@ -561,20 +572,30 @@ export default function Billing() {
                     </div>
                   )}
 
-                  {/* Helper Text */}
-                  <p
-                    className={`text-xs ${
-                      percentage >= 100
-                        ? "font-medium text-status-failed"
-                        : percentage >= 80
-                          ? "font-medium text-status-flagged"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    {percentage >= 100 && "❌ "}
-                    {percentage >= 80 && percentage < 100 && "⚠ "}
-                    {metric.helperText}
-                  </p>
+                  {/* Helper Text with Warning/Error States */}
+                  <div className="flex items-center gap-2">
+                    <p
+                      className={`text-xs ${
+                        percentage >= 100
+                          ? "font-medium text-status-failed"
+                          : percentage >= 80
+                            ? "font-medium text-status-flagged"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {metric.helperText}
+                    </p>
+                    {percentage >= 100 && (
+                      <span className="text-xs font-semibold text-status-failed">
+                        • Limit reached
+                      </span>
+                    )}
+                    {percentage >= 80 && percentage < 100 && (
+                      <span className="text-xs font-semibold text-status-flagged">
+                        • Approaching limit
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -609,11 +630,18 @@ export default function Billing() {
               )}
             </div>
           ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">No payment method on file</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">No payment method on file.</p>
+              <p className="text-sm text-foreground">
+                {isOwner
+                  ? "To activate a paid plan, contact us."
+                  : "Only account owner can upgrade."}
+              </p>
               {isOwner && (
-                <div className="pt-2">
-                  <Button variant="outline">Add payment method</Button>
+                <div className="pt-1">
+                  <Button asChild variant="outline">
+                    <Link to="/cleanproof/contact">Contact us</Link>
+                  </Button>
                 </div>
               )}
             </div>
@@ -685,7 +713,7 @@ export default function Billing() {
               </div>
               <h3 className="text-lg font-semibold text-foreground">No invoices yet</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                You'll see your billing history here
+                Invoices appear after a paid plan is activated.
               </p>
             </div>
           )}
