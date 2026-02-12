@@ -627,22 +627,68 @@ Backend engineer, platform architect.
 
 ---
 
-## 16. Остальные документы
+## 16. Billing & Trial Management
+
+All billing and trial-related documentation is located in `docs/billing/`.
+
+### `docs/billing/TRIAL_FLOW.md`
+
+**Роль:**
+Complete technical specification of 7-day trial lifecycle and upgrade flow.
+Documents trial signup, auto-start, expiration detection, and upgrade to active plan.
+
+**Кому:**
+Platform architect, backend engineer, frontend engineer, product.
+
+**Когда использовать:**
+
+- при реализации trial signup flow;
+- при debugging trial auto-start или expiration logic;
+- при integration биллинга (Stripe);
+- при тестировании trial lifecycle;
+- при планировании trial restart protection.
+
+**Что внутри:**
+
+- Trial model (database fields, status logic, limits);
+- User journey (6 steps: Pricing → Signup → Auto-start → Active → Expired → Upgrade);
+- API endpoints (3 endpoints: start trial, usage summary, upgrade to active);
+- Trial limits (hard limits: 2 cleaners, 10 jobs; soft limits: warning thresholds);
+- Frontend logic (Pricing page CTA states, Dashboard banner, auto-start);
+- Testing (manual checklist + 11 automated tests);
+- Production considerations (billing integration, email notifications, analytics).
+
+**Ключевые компоненты:**
+
+- **Backend:** `Company.plan` field, trial status methods, 3 API endpoints;
+- **Frontend:** Pricing page mode detection, Dashboard auto-start, upgrade flow;
+- **Tests:** 11 passing tests covering all trial states and transitions.
+
+**Как менять:**
+
+- update after billing integration (Stripe checkout);
+- update after adding trial restart protection;
+- update after implementing email notifications;
+- версию/дату фиксировать в changelog.
+
+---
+
+## 17. Остальные документы
 
 Если будут добавляться новые `.md`-файлы (например, PRD по конкретным фичам):
 
-- **PRD_*:**  
+- **PRD_*:**
   - чётко маркировать в названии: `PRD_CHECKLIST_V2.md`, `PRD_OFFLINE_EXECUTION.md` и т.п.;
-  - в начале файла указывать связь:  
-    - “Базируется на: CLEANPROOF_V2_SCOPE.md, раздел 2.5”.
+  - в начале файла указывать связь:
+    - "Базируется на: CLEANPROOF_V2_SCOPE.md, раздел 2.5".
 
-- **README / ONBOARDING:**  
+- **README / ONBOARDING:**
   - для совсем новых людей;
   - могут ссылаться на этот `DOCS_INDEX.md` как на карту.
 
 ---
 
-## 17. Как пользоваться всей системой документов
+## 18. Как пользоваться всей системой документов
 
 Ниже — типовые ситуации и **какой документ открывать в первую очередь**.
 Это не иерархия важности, а **карта навигации**, чтобы не читать всё подряд.
@@ -815,6 +861,7 @@ Backend engineer, platform architect.
 * Готовишься к демо клиенту → `DEMO_SCRIPT_v1.md`.
 * Анализируешь риски и security gaps → `docs/audit/BACKEND_EXECUTION_AUDIT_2026-02-11.md`.
 * Проверяешь, что audit fixes применены корректно → `docs/audit/POST_FIX_INTEGRITY_VERIFICATION.md` + `docs/audit/INTEGRITY_VERIFICATION_EXECUTIVE_SUMMARY.md`.
+* Работаешь с trial/billing flow → `docs/billing/TRIAL_FLOW.md`.
 
 Если не укладывается никуда — лучше сначала придумать, **к какому слою это относится**, а уже потом писать документ.
 
