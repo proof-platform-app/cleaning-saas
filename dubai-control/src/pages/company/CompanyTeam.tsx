@@ -15,6 +15,7 @@ import {
   Key,
   UserX,
   UserCheck,
+  Shuffle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -424,6 +425,12 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
     },
   });
 
+  const generateRandomPin = () => {
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    setFormData({ ...formData, pin });
+    setErrors({ ...errors, pin: "" }); // Clear PIN error
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -525,18 +532,31 @@ function AddCleanerModal({ onClose }: { onClose: () => void }) {
             <label className="text-sm font-medium text-foreground">
               4-digit PIN <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              maxLength={4}
-              value={formData.pin}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "");
-                setFormData({ ...formData, pin: value });
-              }}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="1234"
-              disabled={createMutation.isPending}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                maxLength={4}
+                value={formData.pin}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+                  setFormData({ ...formData, pin: value });
+                }}
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="1234"
+                disabled={createMutation.isPending}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={generateRandomPin}
+                disabled={createMutation.isPending}
+                className="shrink-0"
+              >
+                <Shuffle className="mr-2 h-4 w-4" />
+                Generate
+              </Button>
+            </div>
             {errors.pin && <p className="text-xs text-red-500">{errors.pin}</p>}
             <p className="text-xs text-muted-foreground">
               PIN will be used for mobile app login
