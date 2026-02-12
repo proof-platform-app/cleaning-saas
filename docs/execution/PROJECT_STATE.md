@@ -8,7 +8,7 @@
 
 **NEW:**
 - Cleaner Access Lifecycle (Reset Access System) — DONE ✅
-- POST /api/company/cleaners/{id}/reset-access/ — генерация временного пароля (12-16 символов)
+- POST /api/company/cleaners/{id}/reset-access/ — генерация временного 4-значного PIN (consistent с регистрацией)
 - User.must_change_password field — флаг обязательной смены пароля
 - Login enforcement — блокировка login с 403 PASSWORD_CHANGE_REQUIRED до смены пароля
 

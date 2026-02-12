@@ -2913,19 +2913,19 @@ Authorization: Token <token>
 **Response 200:**
 ```json
 {
-  "temp_password": "aB3dE7fG9hJ2kL",
+  "temp_password": "1234",
   "must_change_password": true
 }
 ```
 
 **Fields:**
-- `temp_password`: Generated temporary password (12-16 characters, alphanumeric)
+- `temp_password`: Generated temporary 4-digit PIN (consistent with cleaner registration)
 - `must_change_password`: Always `true` after reset
 
 **Behavior:**
-- Generates random password (12-16 characters)
+- Generates random 4-digit PIN
 - Sets `must_change_password = true`
-- Old password no longer works
+- Old PIN/password no longer works
 - User must change password on next login
 
 **Errors:**
