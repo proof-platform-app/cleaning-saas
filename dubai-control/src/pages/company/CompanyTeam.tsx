@@ -8,23 +8,13 @@ import {
   Plus,
   Mail,
   Phone,
-  CheckCircle2,
-  XCircle,
-  MoreVertical,
   Loader2,
   Key,
-  UserX,
-  UserCheck,
   Shuffle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
 import {
@@ -262,51 +252,27 @@ export default function CompanyTeam() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {cleaner.is_active ? (
-                        <div className="flex items-center gap-2 text-sm font-medium text-status-completed">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Active
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm font-medium text-status-flagged">
-                          <XCircle className="h-4 w-4" />
-                          Inactive
-                        </div>
-                      )}
+                      <div className="flex items-center gap-3">
+                        <Switch
+                          checked={cleaner.is_active}
+                          onCheckedChange={() => handleToggleActive(cleaner)}
+                          disabled={updateCleanerMutation.isPending}
+                        />
+                        <span className="text-sm font-medium text-foreground">
+                          {cleaner.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleResetAccess(cleaner)}
-                            disabled={resetAccessMutation.isPending}
-                          >
-                            <Key className="mr-2 h-4 w-4" />
-                            Reset access
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleToggleActive(cleaner)}
-                            disabled={updateCleanerMutation.isPending}
-                          >
-                            {cleaner.is_active ? (
-                              <>
-                                <UserX className="mr-2 h-4 w-4" />
-                                Deactivate
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck className="mr-2 h-4 w-4" />
-                                Activate
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleResetAccess(cleaner)}
+                        disabled={resetAccessMutation.isPending}
+                      >
+                        <Key className="mr-2 h-4 w-4" />
+                        Reset access
+                      </Button>
                     </td>
                   </tr>
                 ))}
