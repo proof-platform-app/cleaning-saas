@@ -6,6 +6,12 @@ import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
 import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
@@ -17,6 +23,7 @@ import type {
   PlanningJobStatus,
 } from "@/types/planning";
 import { fetchPlanningJobs } from "@/api/planning";
+import { getBillingSummary, type BillingSummary } from "@/api/client";
 
 export default function JobPlanning() {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -41,6 +48,14 @@ export default function JobPlanning() {
     enabled: !!filters.date,
   });
 
+  // Fetch billing summary to check trial status
+  const { data: billingSummary } = useQuery<BillingSummary, Error>({
+    queryKey: ["billing-summary"],
+    queryFn: getBillingSummary,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: false,
+  });
+
   const jobs: PlanningJob[] = planningJobs ?? [];
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
@@ -51,6 +66,22 @@ export default function JobPlanning() {
   const [trialExpired, setTrialExpired] = useState<null | { detail: string }>(
     null,
   );
+
+  // Check if trial has expired based on billing summary
+  const isTrialExpired = useMemo(() => {
+    if (!billingSummary) return false;
+
+    const isTrial = billingSummary.status === "trial" || billingSummary.plan === "trial";
+    if (!isTrial || !billingSummary.trial_expires_at) return false;
+
+    try {
+      const now = new Date();
+      const expiresAt = new Date(billingSummary.trial_expires_at);
+      return expiresAt.getTime() <= now.getTime();
+    } catch {
+      return false;
+    }
+  }, [billingSummary]);
 
   const loadError = isPlanningError
     ? planningError?.message || "Failed to load jobs. Please try again."
@@ -113,10 +144,27 @@ export default function JobPlanning() {
                 Plan and manage jobs for cleaners
               </p>
             </div>
-            <Button onClick={() => setCreateDrawerOpen(true)} size="lg">
-              <Plus className="w-4 h-4 mr-2" />
-              Create job
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      onClick={() => !isTrialExpired && setCreateDrawerOpen(true)}
+                      size="lg"
+                      disabled={isTrialExpired}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create job
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {isTrialExpired && (
+                  <TooltipContent>
+                    <p>Upgrade required</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </div>

@@ -616,10 +616,12 @@ export function CreateJobDrawer({
                   </div>
                 )}
 
-                {/* generic error (без raw дубля для company_blocked) */}
-                {submitError && submitErrorCode !== "company_blocked" && (
-                  <p className="text-sm text-destructive">{submitError}</p>
-                )}
+                {/* generic error (excluding company_blocked and trial_expired) */}
+                {submitError &&
+                  submitErrorCode !== "company_blocked" &&
+                  submitErrorCode !== "trial_expired" && (
+                    <p className="text-sm text-destructive">{submitError}</p>
+                  )}
 
                 <div className="flex gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={handleClose}>
