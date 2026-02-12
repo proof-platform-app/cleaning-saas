@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, Download, Info, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, CreditCard, Download, Info, AlertCircle, Loader2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling, canModifyBilling } from "@/hooks/useUserRole";
@@ -101,6 +101,39 @@ export default function Billing() {
       mounted = false;
     };
   }, [canAccess, navigate, toast]);
+
+  // Trial countdown logic
+  const getTrialStatus = (): { daysRemaining: number; expired: boolean; message: string } | null => {
+    if (!billingData) return null;
+
+    // Only show trial countdown if status is "trial" or plan is "trial"
+    const isTrial = billingData.status === "trial" || billingData.plan === "trial";
+    if (!isTrial || !billingData.trial_expires_at) return null;
+
+    try {
+      const now = new Date();
+      const expiresAt = new Date(billingData.trial_expires_at);
+      const diffMs = expiresAt.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) {
+        return {
+          daysRemaining: 0,
+          expired: true,
+          message: "Trial expired",
+        };
+      }
+
+      return {
+        daysRemaining: diffDays,
+        expired: false,
+        message: `Trial expires in ${diffDays} ${diffDays === 1 ? "day" : "days"}`,
+      };
+    } catch (error) {
+      console.error("Failed to parse trial_expires_at:", error);
+      return null;
+    }
+  };
 
   // Usage progress bar color based on percentage
   const getUsageColor = (percentage: number): string => {
@@ -297,6 +330,8 @@ export default function Billing() {
     nextBillingDate: formatNextBillingDate(billingData.next_billing_date),
   };
 
+  const trialStatus = getTrialStatus();
+
   const usage: UsageMetric[] = [
     {
       label: "Active Users",
@@ -413,6 +448,32 @@ export default function Billing() {
               </span>
             </div>
 
+            {/* Trial Countdown */}
+            {trialStatus && (
+              <div
+                className={`flex items-start gap-2 rounded-lg border px-3 py-2 ${
+                  trialStatus.expired
+                    ? "border-status-flagged bg-status-flagged-bg"
+                    : "border-blue-200 bg-blue-50"
+                }`}
+              >
+                <Clock
+                  className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
+                    trialStatus.expired ? "text-status-flagged" : "text-blue-700"
+                  }`}
+                />
+                <div>
+                  <p
+                    className={`text-sm font-medium ${
+                      trialStatus.expired ? "text-status-flagged" : "text-blue-900"
+                    }`}
+                  >
+                    {trialStatus.message}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Next Billing Date */}
             <p className="text-sm text-muted-foreground">
               Next billing date: {plan.nextBillingDate}
@@ -428,6 +489,42 @@ export default function Billing() {
             )}
           </div>
         </div>
+
+        {/* Section A2: After Trial (Trial users only) */}
+        {trialStatus && (
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="mb-4 text-base font-semibold text-foreground">After trial</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>• You can still access existing jobs, reports, and proof history.</p>
+              <p>• Creating new jobs may be restricted until your plan is activated.</p>
+              <p>• Contact us to upgrade.</p>
+            </div>
+
+            {/* Upgrade CTA - Owner Only */}
+            {isOwner && (
+              <div className="mt-4 pt-2">
+                <Button
+                  asChild
+                  className="bg-accent-primary text-white hover:bg-accent-primary/90"
+                >
+                  <Link to="/cleanproof/contact">Contact us to upgrade</Link>
+                </Button>
+              </div>
+            )}
+
+            {/* Manager - CTA disabled */}
+            {isManager && (
+              <div className="mt-4 pt-2">
+                <Button disabled className="opacity-50">
+                  Contact us to upgrade
+                </Button>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Only account owner can upgrade
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Section B: Usage Summary */}
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
