@@ -1,19 +1,9 @@
-// dubai-control/src/pages/Locations.tsx
+// dubai-control/src/pages/LocationsNew.tsx
 
 import { useState } from "react";
-import { format } from "date-fns";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { LocationForm } from "@/components/locations/LocationForm";
-import { useLocations } from "@/contexts/LocationsContext";
-import { type Location as ApiLocation } from "@/api/client";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -22,569 +12,353 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Plus,
-  ArrowLeft,
-  ArrowUpDown,
-  ChevronUp,
-  ChevronDown,
+  Search,
+  MapPin,
+  Loader2,
+  Edit,
+  X,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
-
-type ViewMode = "list" | "create" | "edit";
-
-// UI-тип: backend Location + опциональный createdAt в camelCase
-type UILocation = ApiLocation & {
-  createdAt?: string | null;
-};
+import {
+  getLocations,
+  createLocation,
+  updateLocation,
+  type Location,
+} from "@/api/client";
+import { LocationForm } from "@/components/locations/LocationForm";
 
 type StatusFilter = "all" | "active" | "inactive";
-type SortKey = "name" | "status" | "created";
-type SortDirection = "asc" | "desc";
 
-// Данные, которые реально приходят из формы
-type LocationFormData = {
-  name: string;
-  address?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  // is_active пробрасывается через LocationForm как часть ApiLocation
-};
+export default function LocationsNew() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-function getMapsUrl(loc: ApiLocation): string | null {
-  const hasCoords =
-    typeof loc.latitude === "number" &&
-    typeof loc.longitude === "number";
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showModal, setShowModal] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
 
-  if (hasCoords) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(
-      `${loc.latitude},${loc.longitude}`,
-    )}`;
-  }
+  // Fetch locations
+  const { data: locations = [], isLoading } = useQuery({
+    queryKey: ["locations"],
+    queryFn: getLocations,
+  });
 
-  if (loc.address) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(
-      loc.address,
-    )}`;
-  }
+  // Create location mutation
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<Location>) => createLocation(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      toast({
+        title: "Success",
+        description: "Location created successfully",
+      });
+      setShowModal(false);
+      setEditingLocation(null);
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Failed to create location";
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: message,
+      });
+    },
+  });
 
-  return null;
-}
+  // Update location mutation (for both toggle and edit)
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Location> }) =>
+      updateLocation(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
 
-export default function Locations() {
-  const { locations, addLocation, updateLocation } = useLocations();
-  const [searchParams, setSearchParams] = useSearchParams();
+      // If editing in modal, close it
+      if (showModal) {
+        setShowModal(false);
+        setEditingLocation(null);
+      }
 
-  // --- начальные значения из URL ---
-  const initialSearch = searchParams.get("q") ?? "";
+      toast({
+        title: "Success",
+        description: "Location updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || "Failed to update location";
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: message,
+      });
+    },
+  });
 
-  const rawStatus = (searchParams.get("status") as StatusFilter) ?? "all";
-  const initialStatus: StatusFilter =
-    rawStatus === "active" || rawStatus === "inactive" || rawStatus === "all"
-      ? rawStatus
-      : "all";
-
-  const rawSortKey = searchParams.get("sort") as SortKey | null;
-  const initialSortKey: SortKey =
-    rawSortKey === "name" ||
-    rawSortKey === "status" ||
-    rawSortKey === "created"
-      ? rawSortKey
-      : "created";
-
-  const rawDir = searchParams.get("dir") as SortDirection | null;
-  const initialDir: SortDirection =
-    rawDir === "asc" || rawDir === "desc" ? rawDir : "desc";
-
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [selectedLocation, setSelectedLocation] =
-    useState<UILocation | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-  const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>(initialStatus);
-  const [sortKey, setSortKey] = useState<SortKey>(initialSortKey);
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>(initialDir);
-
-  const handleRowClick = (location: UILocation) => {
-    setSelectedLocation(location);
-    setApiError(null);
-    setViewMode("edit");
+  const handleToggleActive = (location: Location) => {
+    updateMutation.mutate({
+      id: location.id,
+      data: { is_active: !location.is_active },
+    });
   };
 
   const handleAddNew = () => {
-    setSelectedLocation(null);
-    setApiError(null);
-    setViewMode("create");
+    setEditingLocation(null);
+    setShowModal(true);
+  };
+
+  const handleEdit = (location: Location) => {
+    setEditingLocation(location);
+    setShowModal(true);
+  };
+
+  const handleSave = async (data: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    is_active?: boolean;
+  }) => {
+    if (editingLocation) {
+      // Update existing location
+      updateMutation.mutate({
+        id: editingLocation.id,
+        data: {
+          name: data.name,
+          address: data.address,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          is_active: data.is_active,
+        },
+      });
+    } else {
+      // Create new location
+      createMutation.mutate({
+        name: data.name,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        is_active: data.is_active ?? true,
+      });
+    }
   };
 
   const handleCancel = () => {
-    setViewMode("list");
-    setSelectedLocation(null);
-    setApiError(null);
+    setShowModal(false);
+    setEditingLocation(null);
   };
 
-  const handleSave = async (data: LocationFormData) => {
-    setIsLoading(true);
-    setApiError(null);
+  // Filter locations
+  const filteredLocations = locations.filter((location) => {
+    // Status filter
+    const isActive = location.is_active ?? true;
+    if (statusFilter === "active" && !isActive) return false;
+    if (statusFilter === "inactive" && isActive) return false;
 
-    try {
-      if (viewMode === "create") {
-        await addLocation(data);
-      } else if (viewMode === "edit" && selectedLocation) {
-        await updateLocation(selectedLocation.id, data);
-      }
-      setViewMode("list");
-      setSelectedLocation(null);
-    } catch (error) {
-      console.error("[Locations] save error", error);
-      setApiError("Failed to save location. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    // Search filter
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    const name = (location.name || "").toLowerCase();
+    const address = (location.address || "").toLowerCase();
+    return name.includes(search) || address.includes(search);
+  });
 
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    const params = new URLSearchParams(searchParams);
-    const trimmed = value.trim();
-    if (trimmed) {
-      params.set("q", trimmed);
-    } else {
-      params.delete("q");
-    }
-    setSearchParams(params, { replace: true });
-  };
-
-  const handleStatusFilterChange = (value: StatusFilter) => {
-    setStatusFilter(value);
-    const params = new URLSearchParams(searchParams);
-    if (value !== "all") {
-      params.set("status", value);
-    } else {
-      params.delete("status");
-    }
-    setSearchParams(params, { replace: true });
-  };
-
-  const handleSortChange = (key: SortKey) => {
-    const nextDirection: SortDirection =
-      sortKey === key && sortDirection === "asc" ? "desc" : "asc";
-
-    setSortKey(key);
-    setSortDirection(nextDirection);
-
-    const params = new URLSearchParams(searchParams);
-    // значение по умолчанию не тащим в URL
-    if (key === "created" && nextDirection === "desc") {
-      params.delete("sort");
-      params.delete("dir");
-    } else {
-      params.set("sort", key);
-      params.set("dir", nextDirection);
-    }
-    setSearchParams(params, { replace: true });
-  };
-
-  const handleClearFilters = () => {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setSortKey("created");
-    setSortDirection("desc");
-
-    const params = new URLSearchParams(searchParams);
-    params.delete("q");
-    params.delete("status");
-    params.delete("sort");
-    params.delete("dir");
-    setSearchParams(params, { replace: true });
-  };
-
-  const renderSortIcon = (key: SortKey) => {
-    if (sortKey !== key) {
-      return (
-        <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/60" />
-      );
-    }
-    if (sortDirection === "asc") {
-      return <ChevronUp className="ml-1 h-3 w-3" />;
-    }
-    return <ChevronDown className="ml-1 h-3 w-3" />;
-  };
-
-  const normalizeSearch = searchTerm.trim().toLowerCase();
-
-  const getCreatedTimestamp = (loc: UILocation): number => {
-    const raw = loc.createdAt ?? (loc as ApiLocation).created_at;
-    if (!raw) return 0;
-    const d = new Date(raw as any);
-    const ts = d.getTime();
-    return Number.isNaN(ts) ? 0 : ts;
-  };
-
-  const filteredAndSortedLocations: UILocation[] = [...locations]
-    .filter((loc) => {
-      const uiLoc = loc as UILocation;
-
-      // фильтр по статусу
-      const isActive = uiLoc.is_active ?? true;
-      if (statusFilter === "active" && !isActive) return false;
-      if (statusFilter === "inactive" && isActive) return false;
-
-      // поиск по имени и адресу
-      if (!normalizeSearch) return true;
-      const name = (loc.name ?? "").toString().toLowerCase();
-      const address = (loc.address ?? "").toString().toLowerCase();
-
-      return (
-        name.includes(normalizeSearch) ||
-        address.includes(normalizeSearch)
-      );
-    })
-    .sort((a, b) => {
-      const uiA = a as UILocation;
-      const uiB = b as UILocation;
-
-      let aVal: string | number = 0;
-      let bVal: string | number = 0;
-
-      switch (sortKey) {
-        case "name":
-          aVal = (uiA.name ?? "").toLowerCase();
-          bVal = (uiB.name ?? "").toLowerCase();
-          break;
-        case "status": {
-          const aActive = uiA.is_active ?? true;
-          const bActive = uiB.is_active ?? true;
-          // active выше inactive
-          aVal = aActive ? 1 : 0;
-          bVal = bActive ? 1 : 0;
-          break;
-        }
-        case "created":
-        default:
-          aVal = getCreatedTimestamp(uiA);
-          bVal = getCreatedTimestamp(uiB);
-          break;
-      }
-
-      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-
-  // --- Edit/Create view ---
-  if (viewMode === "create" || viewMode === "edit") {
-    const isEditing = viewMode === "edit";
-    const isActive =
-      (selectedLocation as UILocation | null)?.is_active ?? true;
-
+  if (isLoading) {
     return (
-      <div className="p-8 animate-fade-in">
-        <div className="max-w-2xl">
-          <button
-            onClick={handleCancel}
-            className="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Locations
-          </button>
-
-          <h1 className="mb-4 text-2xl font-semibold tracking-tight text-foreground">
-            {isEditing ? "Edit Location" : "Add Location"}
-          </h1>
-
-          {isEditing && (
-            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <div className="mb-1 font-semibold">
-                Before you deactivate this location
-              </div>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  Deactivating will{" "}
-                  <strong>remove this location</strong> from job
-                  planning and dropdowns for new jobs.
-                </li>
-                <li>
-                  All existing jobs, history, PDF reports and analytics
-                  will <strong>keep pointing</strong> to this location.
-                </li>
-                <li>
-                  Locations with job history{" "}
-                  <strong>cannot be deleted</strong>; they can only be
-                  deactivated / reactivated.
-                </li>
-              </ul>
-              {!isActive && (
-                <p className="mt-2 text-xs">
-                  This location is currently marked as{" "}
-                  <span className="font-semibold">Inactive</span>. You
-                  can reactivate it later if the client comes back.
-                </p>
-              )}
-            </div>
-          )}
-
-          <LocationForm
-            location={selectedLocation}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            isLoading={isLoading}
-            apiError={apiError}
-          />
-        </div>
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  // --- List view ---
-  const hasInactiveLocations = locations.some(
-    (loc) => (loc as UILocation).is_active === false,
-  );
-
-  const hasAnyLocations = locations.length > 0;
-  const hasFilteredLocations = filteredAndSortedLocations.length > 0;
-  const hasNonDefaultFilters =
-    searchTerm.trim().length > 0 ||
-    statusFilter !== "all" ||
-    sortKey !== "created" ||
-    sortDirection !== "desc";
-
   return (
-    <div className="p-8 animate-fade-in">
+    <div className="mx-auto max-w-6xl p-8">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
             Locations
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your work locations for cleaning jobs.
+            Manage your work locations for cleaning jobs
           </p>
         </div>
         <Button onClick={handleAddNew}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Location
+          Add location
         </Button>
       </div>
 
-      {/* Info about Active / Inactive semantics */}
-      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-        <div className="mb-1 font-semibold text-slate-900">
-          Active vs Inactive locations
-        </div>
-        <ul className="list-disc space-y-1 pl-5">
-          <li>
-            <span className="font-medium">Active</span> locations appear
-            in job planning and can be used for new jobs.
-          </li>
-          <li>
-            <span className="font-medium">Inactive</span> locations stay
-            in job history and reports, but{" "}
-            <span className="font-medium">are hidden</span> from planning
-            and dropdowns.
-          </li>
-          <li>
-            Locations with job history{" "}
-            <span className="font-medium">cannot be deleted</span>; use
-            deactivation instead.
-          </li>
+      {/* Info Banner */}
+      <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <p className="font-medium">💡 About location status</p>
+        <ul className="mt-2 space-y-1 text-xs">
+          <li>• <strong>Active</strong> locations appear in job planning and can be assigned to new jobs</li>
+          <li>• <strong>Inactive</strong> locations are hidden from planning but remain in history and reports</li>
+          <li>• Locations with job history cannot be deleted, only deactivated</li>
         </ul>
-        {hasInactiveLocations && (
-          <p className="mt-2 text-[11px] text-slate-600">
-            Some locations are already inactive — they remain in reports
-            but are not available for new jobs.
+      </div>
+
+      {/* Search and Filters */}
+      <div className="mb-6 flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name or address..."
+            className="pl-10"
+          />
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All locations</SelectItem>
+            <SelectItem value="active">Active only</SelectItem>
+            <SelectItem value="inactive">Inactive only</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Locations List */}
+      <div className="rounded-xl border border-border bg-card shadow-sm">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold text-foreground">Locations</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {filteredLocations.length}{" "}
+            {filteredLocations.length === 1 ? "location" : "locations"}
           </p>
+        </div>
+
+        {filteredLocations.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            <MapPin className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold text-foreground">
+              {searchTerm || statusFilter !== "all"
+                ? "No locations found"
+                : "No locations yet"}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {searchTerm || statusFilter !== "all"
+                ? "Try adjusting your search or filters"
+                : "Get started by adding your first location"}
+            </p>
+            {!searchTerm && statusFilter === "all" && (
+              <Button onClick={handleAddNew} className="mt-4">
+                <Plus className="mr-2 h-4 w-4" />
+                Add location
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-border bg-muted/50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Address
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {filteredLocations.map((location) => {
+                  const isActive = location.is_active ?? true;
+                  return (
+                    <tr key={location.id} className="transition-colors hover:bg-muted/30">
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-foreground">{location.name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-muted-foreground">
+                          {location.address || "—"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={isActive}
+                            onCheckedChange={() => handleToggleActive(location)}
+                            disabled={updateMutation.isPending}
+                          />
+                          <span className="text-sm font-medium text-foreground">
+                            {isActive ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(location)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* Filters row */}
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Input
-          value={searchTerm}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search by name or address…"
-          className="max-w-sm"
-        />
-        <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Status</span>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) =>
-                handleStatusFilterChange(value as StatusFilter)
-              }
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="active">Active only</SelectItem>
-                <SelectItem value="inactive">Inactive only</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* Add/Edit Location Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
+            {/* Modal Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {editingLocation ? "Edit Location" : "Add Location"}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {editingLocation
+                    ? "Update location details and coordinates"
+                    : "Add a new location for cleaning jobs"}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                disabled={createMutation.isPending || updateMutation.isPending}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Modal Body with Form */}
+            <div className="p-6">
+              <LocationForm
+                location={editingLocation}
+                onSave={handleSave}
+                onCancel={handleCancel}
+                isLoading={createMutation.isPending || updateMutation.isPending}
+              />
+            </div>
           </div>
-
-          {hasNonDefaultFilters && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={handleClearFilters}
-            >
-              Clear filters
-            </Button>
-          )}
         </div>
-      </div>
-
-      {/* Locations Table */}
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead>
-                <button
-                  type="button"
-                  onClick={() => handleSortChange("name")}
-                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground"
-                >
-                  <span>Name</span>
-                  {renderSortIcon("name")}
-                </button>
-              </TableHead>
-              <TableHead>
-                <button
-                  type="button"
-                  onClick={() => handleSortChange("status")}
-                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground"
-                >
-                  <span>Status</span>
-                  {renderSortIcon("status")}
-                </button>
-              </TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead>Latitude</TableHead>
-              <TableHead>Longitude</TableHead>
-              <TableHead>
-                <button
-                  type="button"
-                  onClick={() => handleSortChange("created")}
-                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground"
-                >
-                  <span>Created</span>
-                  {renderSortIcon("created")}
-                </button>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {hasFilteredLocations ? (
-              filteredAndSortedLocations.map((location) => {
-                const lat =
-                  typeof location.latitude === "number"
-                    ? location.latitude.toFixed(6)
-                    : "—";
-                const lng =
-                  typeof location.longitude === "number"
-                    ? location.longitude.toFixed(6)
-                    : "—";
-
-                const createdRaw =
-                  (location as UILocation).createdAt ??
-                  location.created_at;
-                const createdLabel = createdRaw
-                  ? format(new Date(createdRaw), "MMM d, yyyy")
-                  : "—";
-
-                const isActive =
-                  (location as UILocation).is_active ?? true;
-
-                const statusLabel = isActive
-                  ? "Active"
-                  : "Inactive";
-                const statusClasses = isActive
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                  : "bg-slate-50 text-slate-500 border border-slate-200";
-
-                const mapsUrl = getMapsUrl(location);
-
-                return (
-                  <TableRow
-                    key={location.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() =>
-                      handleRowClick(location as UILocation)
-                    }
-                  >
-                    <TableCell className="font-medium">
-                      {location.name}
-                    </TableCell>
-
-                    {/* Status */}
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClasses}`}
-                      >
-                        {statusLabel}
-                      </span>
-                    </TableCell>
-
-                    <TableCell className="max-w-xs text-muted-foreground">
-                      <div className="flex flex-col gap-1">
-                        <span className="line-clamp-2 whitespace-pre-line">
-                          {location.address}
-                        </span>
-                        {mapsUrl && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(
-                                mapsUrl,
-                                "_blank",
-                                "noopener,noreferrer",
-                              );
-                            }}
-                            className="inline-flex w-fit text-[11px] font-medium text-primary hover:underline"
-                          >
-                            View on map
-                          </button>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {lat}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {lng}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {createdLabel}
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  {hasAnyLocations
-                    ? "No locations match your search or filters."
-                    : "No locations added yet."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      )}
     </div>
   );
 }
