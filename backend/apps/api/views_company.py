@@ -413,10 +413,8 @@ class CompanyCleanerResetAccessView(APIView):
             role=User.ROLE_CLEANER,
         )
 
-        # Generate temporary password (12-16 characters)
-        password_length = random.randint(12, 16)
-        characters = string.ascii_letters + string.digits
-        temp_password = "".join(random.choice(characters) for _ in range(password_length))
+        # Generate temporary 4-digit PIN (consistent with cleaner registration)
+        temp_password = "".join(random.choice(string.digits) for _ in range(4))
 
         # Set password and must_change_password flag
         cleaner.set_password(temp_password)
