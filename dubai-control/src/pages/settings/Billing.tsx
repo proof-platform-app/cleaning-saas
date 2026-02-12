@@ -453,12 +453,12 @@ export default function Billing() {
               <div className="mt-4">
                 <Button
                   asChild
-                  className="bg-accent-primary text-white hover:bg-accent-primary/90"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                 >
                   <Link to="/cleanproof/pricing">View plans & upgrade</Link>
                 </Button>
                 {!isOwner && (
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs text-blue-700">
                     Only account owner can complete the upgrade
                   </p>
                 )}
