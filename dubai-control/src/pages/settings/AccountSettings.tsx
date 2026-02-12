@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Settings, Shield, Info, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Settings, Shield, Info, Loader2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,8 @@ interface NotificationPreferences {
 
 type PasswordStrength = "weak" | "medium" | "strong";
 
+type NotificationSaveState = "idle" | "saving" | "saved";
+
 export default function AccountSettings() {
   const user = useUserRole();
   const { toast } = useToast();
@@ -82,7 +84,13 @@ export default function AccountSettings() {
     weeklySummary: false,
   });
 
-  const [savingNotificationId, setSavingNotificationId] = useState<string | null>(null);
+  const [notificationSaveStates, setNotificationSaveStates] = useState<
+    Record<string, NotificationSaveState>
+  >({
+    emailNotifications: "idle",
+    jobAssignmentAlerts: "idle",
+    weeklySummary: "idle",
+  });
 
   // Fetch initial data
   useEffect(() => {
@@ -153,6 +161,14 @@ export default function AccountSettings() {
 
   const handleProfileChange = (field: keyof ProfileFormData, value: string) => {
     setProfileData((prev) => ({ ...prev, [field]: value }));
+    // Clear field-specific errors when user starts typing
+    if (profileFieldErrors[field]) {
+      setProfileFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
   };
 
   const handleProfileCancel = () => {
@@ -161,6 +177,7 @@ export default function AccountSettings() {
       if (!confirmed) return;
     }
     setProfileData(initialProfile);
+    setProfileFieldErrors({});
   };
 
   const handleProfileSave = async () => {
@@ -217,7 +234,7 @@ export default function AccountSettings() {
 
       toast({
         title: "Profile updated",
-        description: "Your profile information has been saved.",
+        description: "Your changes have been saved successfully.",
       });
     } catch (error: any) {
       console.error("Failed to update profile:", error);
@@ -236,7 +253,7 @@ export default function AccountSettings() {
       } else {
         toast({
           variant: "destructive",
-          title: "Error",
+          title: "Failed to save",
           description: getErrorMessage(error),
         });
       }
@@ -265,14 +282,23 @@ export default function AccountSettings() {
 
   const handlePasswordChange = (field: keyof PasswordFormData, value: string) => {
     setPasswordData((prev) => ({ ...prev, [field]: value }));
+    // Clear field-specific errors when user starts typing
+    if (passwordFieldErrors[field === "currentPassword" ? "current_password" : field === "newPassword" ? "new_password" : field]) {
+      setPasswordFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field === "currentPassword" ? "current_password" : field === "newPassword" ? "new_password" : field];
+        return next;
+      });
+    }
   };
 
-  const handlePasswordCancel = () => {
+  const handlePasswordClear = () => {
     setPasswordData({
       currentPassword: "",
       newPassword: "",
       confirmPassword: "",
     });
+    setPasswordFieldErrors({});
   };
 
   const handlePasswordSave = async () => {
@@ -333,11 +359,12 @@ export default function AccountSettings() {
 
       await changePassword(payload);
 
-      handlePasswordCancel();
+      // Clear all password fields on success
+      handlePasswordClear();
 
       toast({
-        title: "Password updated",
-        description: "Your password has been changed successfully.",
+        title: "Password updated successfully",
+        description: "Your new password is now active.",
       });
     } catch (error: any) {
       console.error("Failed to change password:", error);
@@ -356,13 +383,13 @@ export default function AccountSettings() {
 
         toast({
           variant: "destructive",
-          title: "Error",
+          title: "Validation error",
           description: apiError.message,
         });
       } else {
         toast({
           variant: "destructive",
-          title: "Error",
+          title: "Failed to update password",
           description: getErrorMessage(error),
         });
       }
@@ -391,7 +418,8 @@ export default function AccountSettings() {
       setNotifications((prev) => ({ ...prev, [key]: value }));
     }
 
-    setSavingNotificationId(key);
+    // Set saving state
+    setNotificationSaveStates((prev) => ({ ...prev, [key]: "saving" }));
 
     try {
       // Map camelCase to snake_case for API
@@ -412,19 +440,24 @@ export default function AccountSettings() {
         jobAssignmentAlerts: response.job_assignment_alerts,
         weeklySummary: response.weekly_summary,
       });
+
+      // Show saved state briefly
+      setNotificationSaveStates((prev) => ({ ...prev, [key]: "saved" }));
+      setTimeout(() => {
+        setNotificationSaveStates((prev) => ({ ...prev, [key]: "idle" }));
+      }, 2000);
     } catch (error: any) {
       console.error("Failed to save notification preferences:", error);
 
       // Revert on error
       setNotifications(oldNotifications);
+      setNotificationSaveStates((prev) => ({ ...prev, [key]: "idle" }));
 
       toast({
         variant: "destructive",
         title: "Failed to save",
         description: "Could not update notification preferences. Please try again.",
       });
-    } finally {
-      setSavingNotificationId(null);
     }
   };
 
@@ -450,7 +483,7 @@ export default function AccountSettings() {
               Account Settings
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage your profile and access preferences
+              Manage your profile and preferences
             </p>
           </div>
         </div>
@@ -484,7 +517,7 @@ export default function AccountSettings() {
               Account Settings
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage your profile and access preferences
+              Manage your profile and preferences
             </p>
           </div>
         </div>
@@ -530,7 +563,7 @@ export default function AccountSettings() {
             Account Settings
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your profile and access preferences
+            Manage your profile and preferences
           </p>
         </div>
       </div>
@@ -554,6 +587,7 @@ export default function AccountSettings() {
                 type="text"
                 value={profileData.fullName}
                 onChange={(e) => handleProfileChange("fullName", e.target.value)}
+                disabled={isSavingProfile}
                 className="h-11"
               />
               {profileFieldErrors.full_name && (
@@ -571,7 +605,7 @@ export default function AccountSettings() {
                 type="email"
                 value={profileData.email}
                 onChange={(e) => handleProfileChange("email", e.target.value)}
-                disabled={isSSO}
+                disabled={isSSO || isSavingProfile}
                 className="h-11"
               />
               {profileFieldErrors.email && (
@@ -596,6 +630,7 @@ export default function AccountSettings() {
                 placeholder="+971 50 123 4567"
                 value={profileData.phone}
                 onChange={(e) => handleProfileChange("phone", e.target.value)}
+                disabled={isSavingProfile}
                 className="h-11"
               />
               {profileFieldErrors.phone && (
@@ -617,7 +652,14 @@ export default function AccountSettings() {
                 disabled={!isProfileDirty || isSavingProfile}
                 className="bg-accent-primary text-white hover:bg-accent-primary/90"
               >
-                {isSavingProfile ? "Saving..." : "Save changes"}
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save changes"
+                )}
               </Button>
             </div>
           </div>
@@ -648,6 +690,7 @@ export default function AccountSettings() {
                   onChange={(e) =>
                     handlePasswordChange("currentPassword", e.target.value)
                   }
+                  disabled={isSavingPassword}
                   className="h-11"
                 />
                 {passwordFieldErrors.current_password && (
@@ -667,6 +710,7 @@ export default function AccountSettings() {
                   type="password"
                   value={passwordData.newPassword}
                   onChange={(e) => handlePasswordChange("newPassword", e.target.value)}
+                  disabled={isSavingPassword}
                   className="h-11"
                 />
                 {passwordFieldErrors.new_password && (
@@ -725,6 +769,7 @@ export default function AccountSettings() {
                   onChange={(e) =>
                     handlePasswordChange("confirmPassword", e.target.value)
                   }
+                  disabled={isSavingPassword}
                   className="h-11"
                 />
               </div>
@@ -733,7 +778,7 @@ export default function AccountSettings() {
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="outline"
-                  onClick={handlePasswordCancel}
+                  onClick={handlePasswordClear}
                   disabled={isSavingPassword}
                 >
                   Cancel
@@ -748,7 +793,14 @@ export default function AccountSettings() {
                   }
                   className="bg-accent-primary text-white hover:bg-accent-primary/90"
                 >
-                  {isSavingPassword ? "Updating..." : "Update password"}
+                  {isSavingPassword ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    "Update password"
+                  )}
                 </Button>
               </div>
             </div>
@@ -766,7 +818,7 @@ export default function AccountSettings() {
                 <Shield className="h-8 w-8 text-muted-foreground" />
               </div>
               <p className="text-sm font-medium text-foreground">
-                Authentication managed by your organization
+                Password managed by your authentication provider
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 Contact your IT administrator for help
@@ -795,14 +847,25 @@ export default function AccountSettings() {
                   Receive updates and alerts via email
                 </p>
               </div>
-              <Switch
-                id="emailNotifications"
-                checked={notifications.emailNotifications}
-                onCheckedChange={(checked) =>
-                  handleNotificationToggle("emailNotifications", checked)
-                }
-                disabled={savingNotificationId === "emailNotifications"}
-              />
+              <div className="flex items-center gap-2">
+                {notificationSaveStates.emailNotifications === "saving" && (
+                  <span className="text-xs text-muted-foreground">Saving...</span>
+                )}
+                {notificationSaveStates.emailNotifications === "saved" && (
+                  <span className="flex items-center gap-1 text-xs text-status-completed">
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </span>
+                )}
+                <Switch
+                  id="emailNotifications"
+                  checked={notifications.emailNotifications}
+                  onCheckedChange={(checked) =>
+                    handleNotificationToggle("emailNotifications", checked)
+                  }
+                  disabled={notificationSaveStates.emailNotifications === "saving"}
+                />
+              </div>
             </div>
 
             {/* Job Assignment Alerts */}
@@ -818,17 +881,28 @@ export default function AccountSettings() {
                   Get notified when assigned to a new job
                 </p>
               </div>
-              <Switch
-                id="jobAssignmentAlerts"
-                checked={notifications.jobAssignmentAlerts}
-                onCheckedChange={(checked) =>
-                  handleNotificationToggle("jobAssignmentAlerts", checked)
-                }
-                disabled={
-                  !notifications.emailNotifications ||
-                  savingNotificationId === "jobAssignmentAlerts"
-                }
-              />
+              <div className="flex items-center gap-2">
+                {notificationSaveStates.jobAssignmentAlerts === "saving" && (
+                  <span className="text-xs text-muted-foreground">Saving...</span>
+                )}
+                {notificationSaveStates.jobAssignmentAlerts === "saved" && (
+                  <span className="flex items-center gap-1 text-xs text-status-completed">
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </span>
+                )}
+                <Switch
+                  id="jobAssignmentAlerts"
+                  checked={notifications.jobAssignmentAlerts}
+                  onCheckedChange={(checked) =>
+                    handleNotificationToggle("jobAssignmentAlerts", checked)
+                  }
+                  disabled={
+                    !notifications.emailNotifications ||
+                    notificationSaveStates.jobAssignmentAlerts === "saving"
+                  }
+                />
+              </div>
             </div>
 
             {/* Weekly Summary */}
@@ -844,17 +918,28 @@ export default function AccountSettings() {
                   Receive a weekly summary of your activity
                 </p>
               </div>
-              <Switch
-                id="weeklySummary"
-                checked={notifications.weeklySummary}
-                onCheckedChange={(checked) =>
-                  handleNotificationToggle("weeklySummary", checked)
-                }
-                disabled={
-                  !notifications.emailNotifications ||
-                  savingNotificationId === "weeklySummary"
-                }
-              />
+              <div className="flex items-center gap-2">
+                {notificationSaveStates.weeklySummary === "saving" && (
+                  <span className="text-xs text-muted-foreground">Saving...</span>
+                )}
+                {notificationSaveStates.weeklySummary === "saved" && (
+                  <span className="flex items-center gap-1 text-xs text-status-completed">
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </span>
+                )}
+                <Switch
+                  id="weeklySummary"
+                  checked={notifications.weeklySummary}
+                  onCheckedChange={(checked) =>
+                    handleNotificationToggle("weeklySummary", checked)
+                  }
+                  disabled={
+                    !notifications.emailNotifications ||
+                    notificationSaveStates.weeklySummary === "saving"
+                  }
+                />
+              </div>
             </div>
 
             {/* Helper Text */}
