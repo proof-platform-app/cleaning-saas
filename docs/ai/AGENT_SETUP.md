@@ -150,16 +150,19 @@ Example:
 **Responsibility**
 - Own Brand System and UI System for Proof Platform.
 - Define and maintain design tokens (colors, typography, spacing, elevation, shadows).
-- Ensure visual consistency across all 4 products (CleanProof, SecureClean, PropertyProof, FleetProof).
+- Ensure visual consistency across all 4 products (CleanProof, MaintainProof, PropertyProof, FitOutProof).
 - Enforce platform vs product separation in design decisions.
 - Maintain dark-first design principle.
 
 **Reads**
-- `PROOF_PLATFORM_DESIGN_SYSTEM.md` (when it exists)
-- Brand system documentation (when it exists)
+- `docs/design-system/README.md` (design system overview)
+- `docs/design-system/CHANGELOG.md` (version history)
+- `docs/design-system/01_TOKENS.md` (all design tokens)
+- `docs/design-system/02_COLOR_AND_THEMING.md` (color system, product accents)
+- `docs/design-system/06_BRAND_HIERARCHY_AND_PRODUCTS.md` (platform vs product)
+- `docs/design-system/08_GOVERNANCE_AND_VALIDATION.md` (validation rules)
 - `CONTEXT_RULES.md`
-- `PLATFORM_LANDING_STRUCTURE.md`
-- Product-specific context profiles (CleanProof, SecureClean, etc.)
+- Product-specific context profiles (cleaning, maintenance, property, fitout only)
 
 **Does NOT**
 - Implement UI code directly.
