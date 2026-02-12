@@ -16,6 +16,12 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from "@/api/client";
+import {
+  extractAPIError,
+  getErrorMessage,
+  isValidationError,
+  isForbiddenError,
+} from "@/utils/apiErrors";
 
 interface ProfileFormData {
   fullName: string;
@@ -216,25 +222,22 @@ export default function AccountSettings() {
     } catch (error: any) {
       console.error("Failed to update profile:", error);
 
-      // Handle validation errors from API
-      if (error.response?.status === 400 && error.response?.data?.code === "VALIDATION_ERROR") {
-        const fields = error.response.data.fields || {};
-        setProfileFieldErrors(fields);
+      const apiError = extractAPIError(error);
 
-        // Show first error in toast
-        const firstError = Object.values(fields)[0];
-        if (Array.isArray(firstError) && firstError.length > 0) {
-          toast({
-            variant: "destructive",
-            title: "Validation error",
-            description: firstError[0],
-          });
-        }
+      // Handle validation errors from API
+      if (isValidationError(error)) {
+        setProfileFieldErrors(apiError.fields || {});
+
+        toast({
+          variant: "destructive",
+          title: "Validation error",
+          description: apiError.message,
+        });
       } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to update profile. Please try again.",
+          description: getErrorMessage(error),
         });
       }
     } finally {
@@ -339,31 +342,28 @@ export default function AccountSettings() {
     } catch (error: any) {
       console.error("Failed to change password:", error);
 
+      const apiError = extractAPIError(error);
+
       // Handle different error types
-      if (error.response?.status === 403 && error.response?.data?.code === "FORBIDDEN") {
+      if (isForbiddenError(error)) {
         toast({
           variant: "destructive",
           title: "Not allowed",
-          description: error.response.data.message || "Password change not allowed for SSO users",
+          description: apiError.message,
         });
-      } else if (error.response?.status === 400 && error.response?.data?.code === "VALIDATION_ERROR") {
-        const fields = error.response.data.fields || {};
-        setPasswordFieldErrors(fields);
+      } else if (isValidationError(error)) {
+        setPasswordFieldErrors(apiError.fields || {});
 
-        // Show first error in toast
-        const firstError = Object.values(fields)[0];
-        if (Array.isArray(firstError) && firstError.length > 0) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: firstError[0],
-          });
-        }
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: apiError.message,
+        });
       } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to update password. Please try again.",
+          description: getErrorMessage(error),
         });
       }
     } finally {

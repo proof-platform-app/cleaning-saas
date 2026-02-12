@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling, canModifyBilling } from "@/hooks/useUserRole";
 import { getBillingSummary, downloadInvoice, type BillingSummary } from "@/api/client";
+import {
+  extractAPIError,
+  getErrorMessage,
+  isForbiddenError,
+  isNotImplementedError,
+} from "@/utils/apiErrors";
 
 interface UsageMetric {
   label: string;
@@ -69,16 +75,18 @@ export default function Billing() {
 
         if (!mounted) return;
 
+        const apiError = extractAPIError(error);
+
         // Handle 403 specifically (shouldn't happen if RBAC is correct, but just in case)
-        if (error.response?.status === 403) {
+        if (isForbiddenError(error)) {
           toast({
             variant: "destructive",
             title: "Access restricted",
-            description: error.response.data.message || "Billing access restricted to administrators",
+            description: apiError.message,
           });
           navigate("/settings", { replace: true });
         } else {
-          setLoadError("Failed to load billing information. Please try again.");
+          setLoadError(getErrorMessage(error));
         }
       } finally {
         if (mounted) {
@@ -130,18 +138,26 @@ export default function Billing() {
     } catch (error: any) {
       console.error("Failed to download invoice:", error);
 
+      const apiError = extractAPIError(error);
+
       // Handle 501 (not implemented)
-      if (error.response?.status === 501) {
+      if (isNotImplementedError(error)) {
         toast({
           variant: "destructive",
           title: "Not available yet",
-          description: error.response.data.message || "Invoice download is not available yet",
+          description: apiError.message,
+        });
+      } else if (isForbiddenError(error)) {
+        toast({
+          variant: "destructive",
+          title: "Access denied",
+          description: apiError.message,
         });
       } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to download invoice. Please try again.",
+          description: getErrorMessage(error),
         });
       }
     } finally {
