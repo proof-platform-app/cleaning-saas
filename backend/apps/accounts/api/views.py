@@ -138,3 +138,38 @@ class UsageSummaryView(APIView):
         }
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+class UpgradeToActiveView(APIView):
+    """
+    Апгрейд с trial на active (платный) план.
+
+    URL: POST /api/cleanproof/upgrade-to-active/
+    Требует: авторизацию.
+
+    Назначение:
+    - Переключает company.plan с "trial" на "active"
+    - Идемпотентно: если уже active — ничего не делаем
+    - Возвращает обновлённый статус компании
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        company: Company = user.company
+
+        # Переводим в active plan
+        company.upgrade_to_active()
+
+        # Возвращаем обновлённый статус
+        data = {
+            "plan": company.plan,
+            "trial_started_at": company.trial_started_at,
+            "trial_expires_at": company.trial_expires_at,
+            "is_trial_active": company.is_trial_active,
+            "is_trial_expired": company.is_trial_expired(),
+            "days_left": company.trial_days_left(),
+        }
+
+        return Response(data, status=status.HTTP_200_OK)

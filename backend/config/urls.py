@@ -6,7 +6,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 # cleanproof trial endpoint + usage summary
-from apps.accounts.api.views import StartStandardTrialView, UsageSummaryView
+from apps.accounts.api.views import (
+    StartStandardTrialView,
+    UsageSummaryView,
+    UpgradeToActiveView,
+)
 
 
 urlpatterns = [
@@ -21,6 +25,12 @@ urlpatterns = [
         "api/cleanproof/usage-summary/",
         UsageSummaryView.as_view(),
         name="cleanproof-usage-summary",
+    ),
+    # CleanProof upgrade to active plan
+    path(
+        "api/cleanproof/upgrade-to-active/",
+        UpgradeToActiveView.as_view(),
+        name="cleanproof-upgrade-to-active",
     ),
 
     path("admin/", admin.site.urls),

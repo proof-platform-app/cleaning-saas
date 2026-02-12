@@ -637,6 +637,13 @@ export async function getUsageSummary(): Promise<UsageSummary> {
   return apiFetch<UsageSummary>("/api/cleanproof/usage-summary/");
 }
 
+export async function upgradeToActive(): Promise<UsageSummary> {
+  await loginManager();
+  return apiFetch<UsageSummary>("/api/cleanproof/upgrade-to-active/", {
+    method: "POST",
+  });
+}
+
 // ---------- Jobs: today ----------
 
 export async function getManagerTodayJobs(): Promise<ManagerJobSummary[]> {

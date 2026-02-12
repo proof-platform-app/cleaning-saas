@@ -1,9 +1,10 @@
 // dubai-control/src/components/pricing/PricingPlansSection.tsx
 import { motion, useInView } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import type { PricingMode } from "@/pages/PricingPage";
+import { upgradeToActive } from "@/api/client";
 
 const plans = [
   {
@@ -52,19 +53,53 @@ const PricingPlansSection = ({ mode }: Props) => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
   const navigate = useNavigate();
+  const [isUpgrading, setIsUpgrading] = useState(false);
 
   // CTA для Standard-плана в зависимости от режима
-  const standardCta =
-    mode === "trial_expired"
-      ? {
-          label: "Request upgrade",
-          note:
-            "Your 7-day free trial has ended. We’ll enable in-app upgrades as soon as billing is connected.",
-        }
-      : {
+  const getStandardCta = () => {
+    switch (mode) {
+      case "trial_active":
+        return {
+          label: "Current plan",
+          note: "Trial active",
+          disabled: true,
+        };
+      case "trial_expired":
+        return {
+          label: "Upgrade to Standard",
+          note: "Continue with full access",
+          disabled: false,
+        };
+      case "other":
+        return {
+          label: "Current plan",
+          note: "Active subscription",
+          disabled: true,
+        };
+      default: // "anonymous"
+        return {
           label: "Start 7-day trial",
           note: "No credit card required.",
+          disabled: false,
         };
+    }
+  };
+
+  const standardCta = getStandardCta();
+
+  const handleUpgrade = async () => {
+    setIsUpgrading(true);
+    try {
+      await upgradeToActive();
+      // После успешного апгрейда перенаправляем на dashboard
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Upgrade failed:", error);
+      alert("Failed to upgrade. Please try again or contact support.");
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
 
   return (
     <section
@@ -180,16 +215,18 @@ const PricingPlansSection = ({ mode }: Props) => {
                     ) : (
                       <Button
                         size="lg"
+                        disabled={isStandard ? standardCta.disabled || isUpgrading : false}
                         onClick={
                           isStandard
                             ? () => {
                                 if (mode === "trial_expired") {
-                                  // trial закончился → ведём на контакт
-                                  navigate("/cleanproof/contact");
-                                } else {
-                                  // гость или активный trial → в триал-флоу
+                                  // trial закончился → апгрейд
+                                  handleUpgrade();
+                                } else if (mode === "anonymous") {
+                                  // гость → в триал-флоу
                                   navigate("/?trial=standard");
                                 }
+                                // trial_active или other → кнопка disabled
                               }
                             : undefined
                         }
@@ -199,7 +236,7 @@ const PricingPlansSection = ({ mode }: Props) => {
                             : "bg-primary-foreground/90 text-foreground hover:bg-primary-foreground"
                         }`}
                       >
-                        {ctaText}
+                        {isStandard && isUpgrading ? "Upgrading..." : ctaText}
                       </Button>
                     )}
                     {/* Note space - fixed height */}

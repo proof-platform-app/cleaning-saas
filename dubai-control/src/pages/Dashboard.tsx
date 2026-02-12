@@ -11,7 +11,7 @@ import {
   Plus,
   ArrowRight,
 } from "lucide-react";
-import { getManagerTodayJobs, getUsageSummary } from "@/api/client";
+import { getManagerTodayJobs, getUsageSummary, API_BASE_URL } from "@/api/client";
 
 type ApiJob = {
   id: number;
@@ -120,6 +120,39 @@ export default function Dashboard() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [companyBlocked, setCompanyBlocked] = useState(false);
+
+  // Auto-start trial if user came from pricing page with trial flow
+  useEffect(() => {
+    const trialEntry = localStorage.getItem("cleanproof_trial_entry");
+
+    if (trialEntry === "standard") {
+      // Remove flag immediately to prevent re-triggering
+      localStorage.removeItem("cleanproof_trial_entry");
+
+      // Call trial start endpoint
+      const token = localStorage.getItem("authToken") || localStorage.getItem("auth_token");
+
+      if (token) {
+        fetch(`${API_BASE_URL}/api/cleanproof/trials/start/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Token ${token}`,
+          },
+        })
+          .then(async (resp) => {
+            if (resp.ok) {
+              console.log("Trial started successfully");
+            } else {
+              console.warn("Failed to start trial:", resp.status);
+            }
+          })
+          .catch((err) => {
+            console.error("Error starting trial:", err);
+          });
+      }
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

@@ -194,6 +194,17 @@ class Company(models.Model):
         self.trial_expires_at = now + timedelta(days=days)
         self.save(update_fields=["plan", "trial_started_at", "trial_expires_at"])
 
+    def upgrade_to_active(self) -> None:
+        """
+        Апгрейд с trial на active (платный) план.
+        Идёмпотентно: если уже active — ничего не делаем.
+        """
+        if self.plan == self.PLAN_ACTIVE:
+            return
+
+        self.plan = self.PLAN_ACTIVE
+        self.save(update_fields=["plan"])
+
     # --- Suspension helpers ---
 
     def suspend(self, reason: str = ""):
