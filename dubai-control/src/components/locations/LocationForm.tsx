@@ -229,7 +229,7 @@ export function LocationForm({
   // Fullscreen layout with map on the right
   if (fullscreenMap) {
     return (
-      <form onSubmit={handleSubmit} className="flex h-full gap-6">
+      <form onSubmit={handleSubmit} className="flex h-full gap-6 min-h-0">
         {/* Left column: Form fields */}
         <div className="flex w-[40%] flex-col space-y-6 overflow-y-auto pr-4">
           {apiError && (
@@ -400,16 +400,20 @@ export function LocationForm({
         </div>
 
         {/* Right column: Large map */}
-        <div className="flex w-[60%] flex-col">
+        <div className="flex w-[60%] flex-col min-h-0">
           <Label className="mb-2 text-sm font-medium">Location on map</Label>
-          <div className="flex-1">
+          <div className="flex-1 min-h-0 overflow-hidden rounded-md border border-border bg-muted/40">
             <LocationMap
               latitude={validLat}
               longitude={validLng}
               onLocationChange={handleMapLocationChange}
               height="100%"
+              noWrapper={true}
             />
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Drag the pin to fine-tune the exact entrance or building. Coordinates will be updated automatically.
+          </p>
         </div>
       </form>
     );

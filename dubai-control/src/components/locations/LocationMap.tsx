@@ -23,6 +23,11 @@ type LocationMapProps = {
    * Можно переопределить из формы, по умолчанию — чуть выше базового.
    */
   height?: string;
+  /**
+   * Если true, карта рендерится без внешних отступов и обертки
+   * (для fullscreen режима)
+   */
+  noWrapper?: boolean;
 };
 
 const DEFAULT_CENTER = {
@@ -49,6 +54,7 @@ export function LocationMap({
   onLocationChange,
   defaultCenter = DEFAULT_CENTER,
   height = "360px",
+  noWrapper = false,
 }: LocationMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as
     | string
@@ -137,6 +143,35 @@ export function LocationMap({
     );
   }
 
+  // Fullscreen mode - no wrapper
+  if (noWrapper) {
+    return (
+      <div style={{ height, width: "100%" }}>
+        <GoogleMap
+          mapContainerStyle={MAP_CONTAINER_STYLE}
+          center={center}
+          zoom={zoom}
+          options={{
+            disableDefaultUI: false,
+            zoomControl: true,
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: false,
+          }}
+        >
+          {hasPoint && (
+            <Marker
+              position={center}
+              draggable={true}
+              onDragEnd={handleMarkerDragEnd}
+            />
+          )}
+        </GoogleMap>
+      </div>
+    );
+  }
+
+  // Regular mode with wrapper
   return (
     <div className="mt-4 overflow-hidden rounded-md border border-border bg-muted/40">
       <div style={{ height }}>
