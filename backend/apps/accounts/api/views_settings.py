@@ -23,6 +23,7 @@ User = get_user_model()
 class CurrentUserView(APIView):
     """
     GET /api/me - Get current authenticated user
+    PATCH /api/me - Update current user profile
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -30,9 +31,23 @@ class CurrentUserView(APIView):
         serializer = CurrentUserSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def patch(self, request):
+        serializer = UpdateProfileSerializer(
+            request.user,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save(updated_at=timezone.now())
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class UpdateProfileView(APIView):
     """
+    DEPRECATED: Use CurrentUserView instead
     PATCH /api/me - Update current user profile
     """
     permission_classes = [permissions.IsAuthenticated]
@@ -149,10 +164,7 @@ class BillingSummaryView(APIView):
             plan_status = "cancelled"
 
         # Usage summary
-        from django.contrib.auth import get_user_model
         from apps.jobs.models import Job
-
-        User = get_user_model()
 
         # Count active users (managers/staff, excluding cleaners)
         users_count = User.objects.filter(

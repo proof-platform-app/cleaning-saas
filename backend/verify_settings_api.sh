@@ -28,7 +28,7 @@ trap cleanup EXIT
 # Get auth token
 echo ""
 echo "[2] Getting auth token..."
-TOKEN_RESPONSE=$(curl -s -X POST http://127.0.0.1:8001/manager/auth/login/ \
+TOKEN_RESPONSE=$(curl -s -X POST http://127.0.0.1:8001/api/manager/auth/login/ \
     -H "Content-Type: application/json" \
     -d '{"email":"owner@test.com","password":"testpass123!"}')
 

@@ -47,12 +47,7 @@ urlpatterns = [
     path(
         "api/me/",
         CurrentUserView.as_view(),
-        name="api-current-user-get",
-    ),
-    path(
-        "api/me/",
-        UpdateProfileView.as_view(),
-        name="api-current-user-patch",
+        name="api-current-user",
     ),
     path(
         "api/me/change-password/",

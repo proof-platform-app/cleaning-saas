@@ -138,7 +138,7 @@ class ManagerLoginView(APIView):
         try:
             user = User.objects.get(
                 email__iexact=email,
-                role=User.ROLE_MANAGER,
+                role__in=[User.ROLE_OWNER, User.ROLE_MANAGER],
                 is_active=True,
             )
         except User.DoesNotExist:
