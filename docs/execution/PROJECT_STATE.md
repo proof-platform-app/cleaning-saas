@@ -4,6 +4,25 @@
 
 ## Changelog
 
+### v7.3 — 2026-02-12
+
+**NEW:**
+- Settings API v1.1 (Account & Billing MVP) — DONE ✅
+- Account Settings: profile management, password change (password-auth only), notification preferences
+- Billing page: plan summary, usage metrics, payment method stub, RBAC (Owner/Manager/Staff)
+- Standardized error format: `{code, message, fields?}` across all Settings API endpoints
+- RBAC enforcement: Owner (full access), Manager (read-only billing), Staff/Cleaner (403 blocked)
+- Frontend Settings integration: AccountSettings.tsx, Billing.tsx wired to backend API
+- Verification checklist: `docs/settings/VERIFICATION_CHECKLIST.md`
+- Backend verification script: `backend/verify_rbac.sh`
+
+**CHANGED:**
+- User model extended: roles (owner/manager/staff/cleaner), auth_type (password/sso), notification_preferences (JSONField)
+- AccountDropdown: Billing link hidden for Staff role
+
+**FIXED:**
+- Settings API documentation consolidated in API_CONTRACTS.md (section 9)
+
 ### v7.2 — 2026-02-12
 
 **NEW:**
@@ -335,6 +354,11 @@ Status: ✅ enforced
 
 * Manager Portal стабилен ✅
 * Planning / History / Reports / Analytics работают ✅
+* Settings v1.1 (Account & Billing MVP) — DONE ✅
+  * Account Settings (profile, password, notifications)
+  * Billing (plan summary, usage, RBAC enforcement)
+  * Frontend integration complete
+  * Verification checklist: `docs/settings/VERIFICATION_CHECKLIST.md`
 
 ---
 
@@ -342,7 +366,11 @@ Status: ✅ enforced
 
 * Trial lifecycle ✅
 * Usage limits (jobs / cleaners) ✅
-* Billing ⛔
+* Settings API v1.1 (Account & Billing MVP) ✅
+  * Billing page UI (plan, status, usage, RBAC)
+  * Payment method stub (ready for Stripe)
+  * Invoice download stub (501 Not Implemented)
+* Stripe integration ⛔ (planned for v1.2)
 
 ---
 
@@ -388,12 +416,13 @@ Status: ✅ enforced
 * SLA + Performance — DONE ✅
 * Reports v2 — DONE ✅
 * Analytics — DONE ✅
-* Product = **операционный SaaS без биллинга**  
+* Settings v1.1 (Account & Billing MVP) — DONE ✅
+* Product = **операционный SaaS с базовыми настройками и billing-инфраструктурой**
   с реальной управленческой ценностью и audit trail.
 
 **Статусы слоёв:**
 * Слой 0 — DONE ✅
 * Слой 1 — MVP 🟡
 * Слой 2 — DONE ✅
-* Слой 3 — готов к биллингу
+* Слой 3 — готов к Stripe-интеграции (Settings v1.1 готова)
 * Слои 4–5 — заделы

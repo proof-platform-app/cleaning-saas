@@ -2506,6 +2506,9 @@ Settings API v1.1 endpoints use a standardized error response format:
 
 **UX Specification:** Settings API implementation is based on `docs/ux/SETTINGS_ACCOUNT_BILLING_UX_v1.1.md`
 
+**Verification:** Manual QA checklist and verification procedures: `docs/settings/VERIFICATION_CHECKLIST.md`
+Backend RBAC verification script: `backend/verify_rbac.sh`
+
 ---
 
 ## 10. Ошибки — общий паттерн

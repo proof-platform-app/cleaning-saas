@@ -32,6 +32,20 @@ Last reviewed: 2026-02-04
 - DEPRECATED: (опционально) что объявлено устаревшим, но ещё поддерживается.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения в правилах.
 
+### 1.6.0 — 2026-02-12
+- NEW: Settings API (Account & Billing MVP v1.1) — полный CRUD для профиля пользователя, смены пароля, настроек уведомлений, биллинга.
+- NEW: `GET/PATCH /api/me` — профиль текущего пользователя (full_name, email, phone).
+- NEW: `POST /api/me/change-password` — смена пароля (только для password-auth, SSO → 403).
+- NEW: `GET/PATCH /api/me/notification-preferences` — настройки уведомлений (auto-save).
+- NEW: `GET /api/settings/billing` — биллинг-сводка (RBAC: Owner full, Manager read-only, Staff/Cleaner blocked).
+- NEW: `GET /api/settings/billing/invoices/:id/download` — stub (501 Not Implemented).
+- NEW: Standardized error format: `{code, message, fields?}` для всех Settings API endpoints.
+- NEW: RBAC матрица: Owner/Manager/Staff/Cleaner роли с явными разрешениями.
+- NEW: Frontend Settings pages (Account, Billing) полностью подключены к backend API.
+- NEW: Verification checklist (`docs/settings/VERIFICATION_CHECKLIST.md`) — ручной QA-гайд для Settings v1.1.
+- CHANGED: User model расширен: роли (owner/manager/staff/cleaner), auth_type (password/sso), notification_preferences (JSONField).
+- FIXED: Unified Settings API docs в `API_CONTRACTS.md` (section 9), `SETTINGS_API_RBAC.md`, `VERIFICATION_CHECKLIST.md`.
+
 ### 1.5.0 — 2026-02-12
 - NEW: Hybrid Verified Model — `completed` (verified) vs `completed_unverified` (force-completed, excluded from KPIs).
 - NEW: Job status `completed_unverified` for manager-overridden jobs.
@@ -2307,5 +2321,139 @@ Layout:
 
 Frontend получает уже нормализованные данные и не содержит бизнес-логики расчётов.
 Аналитика строится строго на `completed` jobs, с использованием `actual_start_time` / `actual_end_time` и существующего SLA engine.
+
+---
+
+## Settings API v1.1 (Account & Billing MVP)
+
+### Статус
+
+✅ DONE — backend API + frontend integration + verification checklist
+
+### Scope
+
+Settings v1.1 реализует базовые настройки пользователя и биллинга без Stripe-интеграции:
+
+**Account Settings (`/settings/account`)**
+* Profile management (GET/PATCH /api/me)
+* Password change (password-auth only, SSO blocked)
+* Notification preferences (auto-save)
+
+**Billing (`/settings/billing`)**
+* Billing summary (plan, status, usage, payment method stub, invoices stub)
+* RBAC: Owner (full access), Manager (read-only), Staff/Cleaner (403 blocked)
+* Invoice download stub (501 Not Implemented)
+
+### Backend
+
+**Views:** `backend/apps/accounts/api/views_settings.py`
+**Error handling:** `backend/apps/accounts/api/error_responses.py`
+**Test fixtures:** `backend/setup_test_users.py`
+**Verification script:** `backend/verify_rbac.sh`
+
+**Endpoints:**
+* `GET /api/me` — current user data
+* `PATCH /api/me` — update profile
+* `POST /api/me/change-password` — change password (password-auth only)
+* `GET /api/me/notification-preferences` — get notification settings
+* `PATCH /api/me/notification-preferences` — update notification settings
+* `GET /api/settings/billing` — billing summary (RBAC enforced)
+* `GET /api/settings/billing/invoices/:id/download` — invoice download stub (501)
+
+**Error format (standardized):**
+```json
+{
+  "code": "VALIDATION_ERROR|FORBIDDEN|NOT_IMPLEMENTED|UNAUTHENTICATED",
+  "message": "Human-readable message",
+  "fields": { "field_name": ["error message"] }  // optional, validation errors only
+}
+```
+
+**RBAC rules:**
+* Owner: full billing access (can_manage=true)
+* Manager: read-only billing (can_manage=false)
+* Staff/Cleaner: 403 blocked from billing
+* SSO users: 403 blocked from password change
+* Invoice download: 501 NOT_IMPLEMENTED (no Stripe yet)
+
+### Frontend
+
+**Pages:**
+* `dubai-control/src/pages/settings/AccountSettings.tsx`
+* `dubai-control/src/pages/settings/Billing.tsx`
+
+**API client:** `dubai-control/src/api/client.ts`
+**Error utilities:** `dubai-control/src/utils/apiErrors.ts`
+**User role hook:** `dubai-control/src/hooks/useUserRole.ts`
+
+**Features:**
+* Profile form with dirty state tracking
+* Password change with strength indicator (password-auth only)
+* Notifications auto-save with master toggle logic
+* Billing page with RBAC (owner/manager/staff enforcement)
+* Usage progress bars with color coding (≤79% accent, 80-99% warning, 100%+ error)
+* Invoice download with 501/403 handling
+* AccountDropdown hides "Billing" link for Staff
+
+### Verification
+
+**Verification checklist:** `docs/settings/VERIFICATION_CHECKLIST.md`
+
+Manual QA checklist covering:
+* Profile updates (success + validation errors)
+* Password change (success + wrong password + SSO block)
+* Notifications auto-save (master toggle + error rollback)
+* Billing RBAC (Owner/Manager/Staff access control)
+* Invoice download (501 for Owner/Manager, 403 for Staff)
+* AccountDropdown visibility (Billing link hidden for Staff)
+* Error handling (standardized format across all endpoints)
+* Loading and error states
+
+**Backend verification script:**
+```bash
+cd backend
+./verify_rbac.sh
+```
+
+Expected output:
+* ✓ Owner billing access (can_manage=true)
+* ✓ Manager billing access (can_manage=false)
+* ✓ Staff billing blocked (403 FORBIDDEN)
+* ✓ Invoice download 501 for Owner/Manager
+* ✓ Invoice download 403 for Staff
+* ✓ SSO user password change blocked (403 FORBIDDEN)
+* ✓ Validation error format standardized
+* ✓ Deterministic payload keys present
+
+### Documentation
+
+* `docs/api/API_CONTRACTS.md` — section 9 (Settings API v1.1)
+* `backend/docs/api/SETTINGS_API_RBAC.md` — RBAC matrix and examples
+* `docs/settings/VERIFICATION_CHECKLIST.md` — manual QA guide
+* `docs/ux/SETTINGS_ACCOUNT_BILLING_UX_v1.1.md` — UX specification
+
+### Commits
+
+* b0d966b - feat(api): settings account and billing endpoints v1.1
+* 2800c50 - fix(api): settings api endpoint fixes and owner role login support
+* f62c02c - chore(api): stabilize settings v1.1 errors and RBAC docs
+* d2184bb - feat(frontend): wire Settings v1.1 to backend API
+
+### Out of scope (MVP v1.1)
+
+* Stripe integration (payment method, invoices, subscriptions)
+* 2FA / MFA
+* Session management
+* Email verification
+* Password reset flow
+* Organization-level settings
+* Team invites
+
+### Next steps (future)
+
+* Settings v1.2: Stripe integration (payment method management, invoice download)
+* Settings v1.3: Team management (invite users, manage roles)
+* Settings v1.4: 2FA / MFA
+* Settings v2.0: Organization-level settings
 
 ```
