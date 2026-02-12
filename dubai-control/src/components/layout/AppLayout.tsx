@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
+import { AccountDropdown } from "./AccountDropdown";
+import { ProductSwitcher } from "./ProductSwitcher";
 import { cn } from "@/lib/utils";
 
 export function AppLayout() {
@@ -22,9 +24,23 @@ export function AppLayout() {
     <div className="min-h-screen bg-background">
       <AppSidebar collapsed={collapsed} onToggle={handleToggle} />
 
+      {/* App Header with Product Switcher and Account Dropdown */}
+      <header
+        className={cn(
+          "app-header fixed top-0 right-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6 transition-[left] duration-200 ease-out",
+          collapsed ? "left-16" : "left-64",
+        )}
+      >
+        {/* Left: Product Switcher */}
+        <ProductSwitcher />
+
+        {/* Right: Account Dropdown */}
+        <AccountDropdown userInitials="SC" userName="User" />
+      </header>
+
       <main
         className={cn(
-          "transition-[padding-left] duration-200 ease-out",
+          "pt-16 transition-[padding-left] duration-200 ease-out",
           collapsed ? "pl-16" : "pl-64",
         )}
       >

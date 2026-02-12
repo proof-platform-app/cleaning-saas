@@ -21,6 +21,7 @@ interface LocationFormProps {
   onCancel: () => void;
   isLoading?: boolean;
   apiError?: string | null;
+  fullscreenMap?: boolean;
 }
 
 interface FormErrors {
@@ -36,6 +37,7 @@ export function LocationForm({
   onCancel,
   isLoading,
   apiError,
+  fullscreenMap = false,
 }: LocationFormProps) {
   const [name, setName] = useState(location?.name || "");
   const [address, setAddress] = useState(location?.address || "");
@@ -224,6 +226,196 @@ export function LocationForm({
 
   const isEditing = !!location;
 
+  // Fullscreen layout with map on the right
+  if (fullscreenMap) {
+    return (
+      <form onSubmit={handleSubmit} className="flex h-full gap-6">
+        {/* Left column: Form fields */}
+        <div className="flex w-[40%] flex-col space-y-6 overflow-y-auto pr-4">
+          {apiError && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <p className="text-sm">{apiError}</p>
+            </div>
+          )}
+
+          {localError && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+              <AlertCircle className="h-5 w-5 flex-shrink-0" />
+              <p className="text-sm">{localError}</p>
+            </div>
+          )}
+
+          {/* Статус локации */}
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Location status</Label>
+                <p className="text-xs text-muted-foreground">
+                  Active locations are available for new jobs.
+                </p>
+                {isEditing && !isActive && (
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    This location is inactive.
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {isActive ? "Active" : "Inactive"}
+                  </span>
+                  <Switch
+                    checked={isActive}
+                    onCheckedChange={(value: boolean) => setIsActive(value)}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Step 1 — choose a building in{" "}
+            <span className="font-medium">Address search</span>. Step 2 — check
+            the address and coordinates. Step 3 — adjust the pin on the map.
+          </p>
+
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">
+              Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Marina Tower Residence"
+              maxLength={200}
+              className={errors.name ? "border-destructive" : ""}
+            />
+            {errors.name && (
+              <p className="text-sm text-destructive">{errors.name}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {name.length}/200 characters
+            </p>
+          </div>
+
+          {/* Поиск адреса */}
+          <div className="space-y-2">
+            <AddressAutocompleteInput
+              label="Address search"
+              placeholder="Start typing address or building name…"
+              initialAddress={address}
+              disabled={isLoading}
+              onSelect={handleAddressSelect}
+              onAddressChange={handleAddressChange}
+              error={errors.address || undefined}
+            />
+            <p className="text-xs text-muted-foreground">
+              Start typing and pick a suggestion.
+            </p>
+          </div>
+
+          {/* Текстовое поле адреса */}
+          <div className="space-y-2">
+            <Label htmlFor="address">
+              Address <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Full address including building, street, area..."
+              rows={3}
+              className={errors.address ? "border-destructive" : ""}
+            />
+            {errors.address && (
+              <p className="text-sm text-destructive">{errors.address}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Human-readable address for reports and PDFs.
+            </p>
+          </div>
+
+          {/* Координаты */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">
+                Latitude <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="latitude"
+                type="text"
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="e.g., 25.2048"
+                className={errors.latitude ? "border-destructive" : ""}
+              />
+              {errors.latitude && (
+                <p className="text-sm text-destructive">{errors.latitude}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="longitude">
+                Longitude <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="longitude"
+                type="text"
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="e.g., 55.2708"
+                className={errors.longitude ? "border-destructive" : ""}
+              />
+              {errors.longitude && (
+                <p className="text-sm text-destructive">{errors.longitude}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 pt-4">
+            <Button type="submit" disabled={isLoading || !isFormValid}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+
+        {/* Right column: Large map */}
+        <div className="flex w-[60%] flex-col">
+          <Label className="mb-2 text-sm font-medium">Location on map</Label>
+          <div className="flex-1">
+            <LocationMap
+              latitude={validLat}
+              longitude={validLng}
+              onLocationChange={handleMapLocationChange}
+              height="100%"
+            />
+          </div>
+        </div>
+      </form>
+    );
+  }
+
+  // Regular layout with map below fields
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {apiError && (

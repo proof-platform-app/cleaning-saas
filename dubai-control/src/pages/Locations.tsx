@@ -321,12 +321,12 @@ export default function LocationsNew() {
         )}
       </div>
 
-      {/* Add/Edit Location Modal */}
+      {/* Add/Edit Location Modal - Fullscreen with Large Map */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-[95vw] h-[95vh] flex flex-col rounded-xl border border-border bg-card shadow-xl">
             {/* Modal Header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-6 py-4">
+            <div className="flex items-center justify-between border-b border-border bg-card px-6 py-4">
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
                   {editingLocation ? "Edit Location" : "Add Location"}
@@ -347,13 +347,14 @@ export default function LocationsNew() {
               </Button>
             </div>
 
-            {/* Modal Body with Form */}
-            <div className="p-6">
+            {/* Modal Body with Form - Fullscreen Layout */}
+            <div className="flex-1 overflow-hidden p-6">
               <LocationForm
                 location={editingLocation}
                 onSave={handleSave}
                 onCancel={handleCancel}
                 isLoading={createMutation.isPending || updateMutation.isPending}
+                fullscreenMap={true}
               />
             </div>
           </div>

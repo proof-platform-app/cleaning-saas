@@ -1,5 +1,48 @@
 # Design System Changelog
 
+## v1.3.2 — 2026-02-12
+
+**New Additions:**
+- **Platform Shell Layout** (10_PLATFORM_SHELL_LAYOUT.md): Complete specification for platform shell structure
+  - Fixed header with product switcher (left) and account dropdown (right)
+  - Sidebar integration with collapse/expand states
+  - Accent containment rules: Shell always neutral, accent only in product pages
+  - App↔Marketing navigation rules: External links, new tab behavior
+  - RTL support: Alignment flipping, icon behavior
+  - Z-index hierarchy: Sidebar (40), Header (30), Dropdowns (50), Modals (100)
+  - Responsive behavior: Desktop, tablet, mobile breakpoints
+  - Accessibility: Keyboard navigation, ARIA attributes, focus management
+
+**Component Additions:**
+- ProductSwitcher component: Neutral button showing current product with dropdown for 4 products
+  - CleanProof (enabled), MaintainProof/PropertyProof/FitOutProof (coming soon)
+  - Neutral styling, no accent usage
+  - Keyboard accessible, click-outside-to-close, Escape key support
+
+**Route Additions:**
+- /settings/account placeholder page
+- /settings/billing placeholder page
+
+**Account Dropdown Improvements:**
+- Fixed paths: /updates → /cleanproof/updates, /contact → /cleanproof/contact, / → /cleanproof
+- Improved structure: Account section, Support section, Sign out
+- Renamed "Visit website" → "Company website"
+
+---
+
+## v1.3.1 — 2026-02-12
+
+**New Additions:**
+- **App-to-Marketing Navigation Pattern** (09_APP_MARKETING_NAVIGATION.md): Formal specification for navigation bridge between application UI and marketing website
+  - Architectural principle: Layer separation with app context as primary
+  - Navigation entry points: Defined allowed (account dropdown, trial banners, billing settings) and forbidden (sidebar nav, accent CTAs) locations
+  - Account dropdown specification: Structure, styling, and behavior rules
+  - Multi-product consideration: Product switcher behavior with neutral marketing links
+  - Visual rules: Token usage, accent containment, elevation, RTL, mobile behavior
+  - Governance rules: Validation for token enforcement, accent containment, external link requirements, visual stability
+
+---
+
 ## v1.3 — 2026-02-12
 
 **Documentation Refactor:**

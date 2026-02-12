@@ -1,6 +1,6 @@
 # Proof Platform Design System v1.3
 
-**Current Version:** 1.3
+**Current Version:** 1.3.2
 **Last Updated:** 2026-02-12
 **Status:** Production-ready
 
@@ -25,7 +25,7 @@ The design system defines:
 
 ## How to Use These Docs
 
-The v1.3 design system is organized into **8 focused documents** instead of a single monolithic file:
+The v1.3 design system is organized into **10 focused documents** instead of a single monolithic file:
 
 ### Document Map
 
@@ -39,6 +39,8 @@ The v1.3 design system is organized into **8 focused documents** instead of a si
 | **[06_BRAND_HIERARCHY_AND_PRODUCTS.md](./06_BRAND_HIERARCHY_AND_PRODUCTS.md)** | Platform vs product branding, header modes, multi-product context, product suite |
 | **[07_RTL_RULES.md](./07_RTL_RULES.md)** | Right-to-left language support rules for Arabic/Hebrew |
 | **[08_GOVERNANCE_AND_VALIDATION.md](./08_GOVERNANCE_AND_VALIDATION.md)** | Governance policies, validation rules, implementation checklist, maintenance |
+| **[09_APP_MARKETING_NAVIGATION.md](./09_APP_MARKETING_NAVIGATION.md)** | Navigation bridge between app UI and marketing website, account dropdown, trial banners |
+| **[10_PLATFORM_SHELL_LAYOUT.md](./10_PLATFORM_SHELL_LAYOUT.md)** | Platform shell structure, header with product switcher, sidebar integration, accent rules |
 | **[CHANGELOG.md](./CHANGELOG.md)** | Version history and change log |
 
 ---
@@ -57,6 +59,12 @@ The v1.3 design system is organized into **8 focused documents** instead of a si
 
 **For RTL support:**
 - See [07_RTL_RULES.md](./07_RTL_RULES.md) for implementation guidance
+
+**For app-to-marketing navigation:**
+- See [09_APP_MARKETING_NAVIGATION.md](./09_APP_MARKETING_NAVIGATION.md) for navigation patterns between app UI and marketing website
+
+**For platform shell:**
+- See [10_PLATFORM_SHELL_LAYOUT.md](./10_PLATFORM_SHELL_LAYOUT.md) for header structure, product switcher, sidebar integration, and accent rules
 
 ---
 
@@ -93,7 +101,21 @@ The v1.3 design system is organized into **8 focused documents** instead of a si
 
 See [CHANGELOG.md](./CHANGELOG.md) for complete version history.
 
-**Current version (v1.3):**
+**Current version (v1.3.2):**
+- Platform Shell Layout specification (10_PLATFORM_SHELL_LAYOUT.md)
+- Product Switcher component with 4 products
+- Fixed account dropdown navigation (no 404 errors)
+- Improved dropdown structure (Account / Support sections)
+- Settings placeholder pages (/settings/account, /settings/billing)
+
+**Previous version (v1.3.1):**
+- App-to-Marketing Navigation Pattern (09_APP_MARKETING_NAVIGATION.md)
+- Architectural principle for layer separation
+- Account dropdown specification
+- Trial and billing banner patterns
+- Governance rules for navigation stability
+
+**Previous version (v1.3):**
 - Reserved semantic colors to prevent product accent collisions
 - Fixed cleaning and property accent colors
 - Landing token namespace separation
