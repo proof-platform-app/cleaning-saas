@@ -758,7 +758,37 @@ Frontend engineer, product, design system architect.
 
 ---
 
-## 20. Как пользоваться всей системой документов
+## 20. Company (Org Scope)
+
+**Роль:**
+Company pages provide org-level management separate from user-scope Settings (Account/Billing).
+
+**Кому:**
+Owner and Manager roles only (RBAC enforced).
+
+**Когда использовать:**
+
+- при управлении информацией компании (название, лого, контакты);
+- при управлении командой и клинерами;
+- НЕ путать с Settings (user scope) — это organization scope.
+
+**Что внутри:**
+
+- `/company/profile` — Company Profile (name, logo, contact email, contact phone);
+- `/company/team` — Team & Cleaners list (preview with mock data);
+- RBAC: Owner/Manager see menu, Staff/Cleaner blocked with redirect;
+- Backend integration: 🟡 partial (UI ready, backend API not connected yet).
+
+**Как менять:**
+
+- Frontend changes only (UI/UX);
+- Backend integration planned but not included in v1;
+- Follow same design system as Settings pages;
+- Update PROJECT_STATE.md when backend integration is added.
+
+---
+
+## 21. Как пользоваться всей системой документов
 
 Ниже — типовые ситуации и **какой документ открывать в первую очередь**.
 Это не иерархия важности, а **карта навигации**, чтобы не читать всё подряд.

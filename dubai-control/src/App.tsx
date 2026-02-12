@@ -17,6 +17,8 @@ import History from "./pages/History";
 import SettingsHome from "./pages/settings/SettingsHome";
 import AccountSettings from "./pages/settings/AccountSettings";
 import Billing from "./pages/settings/Billing";
+import CompanyProfile from "./pages/company/CompanyProfile";
+import CompanyTeam from "./pages/company/CompanyTeam";
 import CleanerJob from "./pages/CleanerJob";
 import NotFound from "./pages/NotFound";
 import JobPlanning from "./pages/JobPlanning";
@@ -100,6 +102,8 @@ const App = () => (
               <Route path="/locations" element={<Locations />} />
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />
+              <Route path="/company/profile" element={<CompanyProfile />} />
+              <Route path="/company/team" element={<CompanyTeam />} />
               <Route path="/settings" element={<SettingsHome />} />
               <Route path="/settings/account" element={<AccountSettings />} />
               <Route path="/settings/billing" element={<Billing />} />

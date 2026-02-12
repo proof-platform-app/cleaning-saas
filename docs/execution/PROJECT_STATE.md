@@ -362,6 +362,11 @@ Status: ✅ enforced
   * Billing (plan summary, usage, RBAC enforcement)
   * Frontend integration complete
   * Verification checklist: `docs/settings/VERIFICATION_CHECKLIST.md`
+* Company (Org Scope) — Frontend DONE, Backend NOT CONNECTED 🟡
+  * `/company/profile` — Company profile management (name, logo, contacts)
+  * `/company/team` — Team & Cleaners list (preview with mock data)
+  * RBAC: Owner/Manager only (Staff/Cleaner blocked with redirect)
+  * Backend API integration pending
 
 ---
 

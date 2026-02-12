@@ -14,19 +14,9 @@ import {
   FileText,
   ChevronLeft,
   ChevronRight,
+  Building2,
 } from "lucide-react";
-
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Jobs", href: "/jobs", icon: Briefcase },
-  { name: "Job Planning", href: "/planning", icon: CalendarDays },
-  { name: "Job History", href: "/history", icon: Clock3 },
-  { name: "Performance", href: "/performance", icon: BarChart3 },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Reports", href: "/reports", icon: FileText },
-  { name: "Locations", href: "/locations", icon: MapPin },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
+import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
 
 type AppSidebarProps = {
   collapsed: boolean;
@@ -35,6 +25,23 @@ type AppSidebarProps = {
 
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
+  const user = useUserRole();
+  const canSeeCompany = canAccessBilling(user.role); // Owner/Manager only
+
+  const navigation = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Jobs", href: "/jobs", icon: Briefcase },
+    { name: "Job Planning", href: "/planning", icon: CalendarDays },
+    { name: "Job History", href: "/history", icon: Clock3 },
+    { name: "Performance", href: "/performance", icon: BarChart3 },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
+    { name: "Reports", href: "/reports", icon: FileText },
+    { name: "Locations", href: "/locations", icon: MapPin },
+    ...(canSeeCompany
+      ? [{ name: "Company", href: "/company/profile", icon: Building2 }]
+      : []),
+    { name: "Settings", href: "/settings", icon: Settings },
+  ];
 
   return (
     <aside
