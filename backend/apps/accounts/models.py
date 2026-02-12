@@ -262,12 +262,24 @@ class User(AbstractBaseUser, PermissionsMixin):
     Таблица users.
     """
 
+    ROLE_OWNER = "owner"
     ROLE_MANAGER = "manager"
+    ROLE_STAFF = "staff"
     ROLE_CLEANER = "cleaner"
 
     ROLE_CHOICES = [
+        (ROLE_OWNER, "Owner"),
         (ROLE_MANAGER, "Manager"),
+        (ROLE_STAFF, "Staff"),
         (ROLE_CLEANER, "Cleaner"),
+    ]
+
+    AUTH_TYPE_PASSWORD = "password"
+    AUTH_TYPE_SSO = "sso"
+
+    AUTH_TYPE_CHOICES = [
+        (AUTH_TYPE_PASSWORD, "Password"),
+        (AUTH_TYPE_SSO, "SSO"),
     ]
 
     company = models.ForeignKey(
@@ -294,6 +306,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=100)
     photo_url = models.TextField(null=True, blank=True)
 
+    # Auth type: password or SSO
+    auth_type = models.CharField(
+        max_length=20,
+        choices=AUTH_TYPE_CHOICES,
+        default=AUTH_TYPE_PASSWORD,
+        help_text="Authentication method: password or SSO"
+    )
+
+    # Notification preferences (user-scope)
+    notification_preferences = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="User notification settings: email_notifications, job_assignment_alerts, weekly_summary"
+    )
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 
@@ -309,10 +336,32 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = "users"
         constraints = [
             models.CheckConstraint(
-                check=models.Q(role__in=["manager", "cleaner"]),
+                check=models.Q(role__in=["owner", "manager", "staff", "cleaner"]),
                 name="users_role_valid",
             ),
         ]
 
     def __str__(self) -> str:
         return self.full_name or (self.email or self.phone or f"User {self.pk}")
+
+    def get_notification_preferences(self):
+        """
+        Get notification preferences with defaults.
+        """
+        defaults = {
+            "email_notifications": True,
+            "job_assignment_alerts": True,
+            "weekly_summary": False,
+        }
+        if not self.notification_preferences:
+            return defaults
+        return {**defaults, **self.notification_preferences}
+
+    def update_notification_preferences(self, **kwargs):
+        """
+        Update notification preferences.
+        """
+        current = self.get_notification_preferences()
+        current.update(kwargs)
+        self.notification_preferences = current
+        self.save(update_fields=["notification_preferences", "updated_at"])

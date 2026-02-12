@@ -1,15 +1,15 @@
 # API_CONTRACTS — CleanProof
 
-Status: ACTIVE  
-Version: 1.1.0  
-Last updated: 2026-02-04
+Status: ACTIVE
+Version: 1.7.0
+Last updated: 2026-02-12
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
 
 - Manager Portal (React + Vite)
 - Mobile Cleaner App (Expo + React Native)
 
-Это **единственный источник правды** для фронтов и мобилки.  
+Это **единственный источник правды** для фронтов и мобилки.
 Любые ломающие изменения сначала фиксируются здесь, затем реализуются в коде.
 
 ---
@@ -27,6 +27,24 @@ Last updated: 2026-02-04
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.7.0 — 2026-02-12
+
+- NEW: Settings API (Account & Billing MVP v1.1) — добавлены endpoints для управления профилем пользователя и биллингом.
+- NEW: `GET /api/me` — получение данных текущего пользователя (id, full_name, email, phone, auth_type, role, company_id).
+- NEW: `PATCH /api/me` — обновление профиля пользователя (full_name, email, phone). Email доступен для изменения только для password-auth пользователей.
+- NEW: `POST /api/me/change-password` — смена пароля (только для password-auth пользователей, SSO → 403).
+- NEW: `GET /api/me/notification-preferences` — получение настроек уведомлений (email_notifications, job_assignment_alerts, weekly_summary).
+- NEW: `PATCH /api/me/notification-preferences` — обновление настроек уведомлений (user-scope, auto-save).
+- NEW: `GET /api/settings/billing` — получение сводки биллинга (org-scope).
+  - RBAC: Owner (full access), Manager (read-only), Staff/Cleaner (403 Forbidden).
+  - Возвращает: can_manage, plan, status, trial_expires_at, next_billing_date, usage_summary, payment_method, invoices.
+- NEW: `GET /api/settings/billing/invoices/<id>/download` — скачивание инвойса (stub, возвращает 501 Not Implemented до интеграции Stripe).
+  - RBAC: Owner/Manager (501), Staff/Cleaner (403).
+- CHANGED: User model — добавлены роли Owner/Manager/Staff/Cleaner (ранее только Manager/Cleaner).
+- CHANGED: User model — добавлено поле `auth_type` (password/sso) для определения типа аутентификации.
+- CHANGED: User model — добавлено поле `notification_preferences` (JSONField) для хранения настроек уведомлений.
+- BREAKING: Constraint `users_role_valid` обновлен для поддержки новых ролей (owner, manager, staff, cleaner).
 
 ### 1.1.0 — 2026-02-04
 - NEW: `/api/manager/jobs/active/` — добавлены флаги `has_before_photo`, `has_after_photo`.
@@ -2114,7 +2132,277 @@ Backend задаёт порядок, фронт не переупорядочи�
 
 ---
 
-## 9. Ошибки — общий паттерн
+## 9. Settings API (Account & Billing MVP v1.1)
+
+### 9.1. Current User — GET /api/me
+
+**Purpose:** Get current authenticated user data.
+
+**Auth:** Required (Token).
+
+**RBAC:** All authenticated users (Owner, Manager, Staff, Cleaner).
+
+**Request:**
+```http
+GET /api/me HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "id": 1,
+  "full_name": "Admin User",
+  "email": "admin@cleanproof.com",
+  "phone": "+971 50 123 4567",
+  "auth_type": "password",
+  "role": "owner",
+  "company_id": 1
+}
+```
+
+**Fields:**
+- `auth_type`: "password" или "sso"
+- `role`: "owner", "manager", "staff", или "cleaner"
+
+**Errors:**
+- 401: Unauthorized
+
+---
+
+### 9.2. Update Profile — PATCH /api/me
+
+**Purpose:** Update current user profile.
+
+**Auth:** Required (Token).
+
+**RBAC:** All authenticated users.
+
+**Request:**
+```http
+PATCH /api/me HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "full_name": "John Doe",
+  "email": "john@cleanproof.com",
+  "phone": "+971 50 999 8888"
+}
+```
+
+**Fields:**
+- `full_name`: required, min 2 chars, max 100 chars
+- `email`: email format. Editable only for password-auth users. SSO users cannot change email (400 error).
+- `phone`: optional, valid phone format
+
+**Response 200:**
+```json
+{
+  "full_name": "John Doe",
+  "email": "john@cleanproof.com",
+  "phone": "+971 50 999 8888"
+}
+```
+
+**Errors:**
+- 400: Validation error (field errors structured)
+- 401: Unauthorized
+
+---
+
+### 9.3. Change Password — POST /api/me/change-password
+
+**Purpose:** Change user password (password-auth only).
+
+**Auth:** Required (Token).
+
+**RBAC:** All authenticated users with auth_type="password".
+
+**Request:**
+```http
+POST /api/me/change-password HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "current_password": "oldpass123!",
+  "new_password": "NewPass456@"
+}
+```
+
+**Validation:**
+- `current_password`: must match current password
+- `new_password`: min 8 chars, must contain uppercase, lowercase, number, special char
+
+**Response 200:**
+```json
+{
+  "detail": "Password updated successfully"
+}
+```
+
+**Errors:**
+- 400: Current password incorrect or new password weak
+- 403: SSO users cannot change password
+- 401: Unauthorized
+
+---
+
+### 9.4. Notification Preferences — GET /api/me/notification-preferences
+
+**Purpose:** Get user notification settings.
+
+**Auth:** Required (Token).
+
+**RBAC:** All authenticated users.
+
+**Request:**
+```http
+GET /api/me/notification-preferences HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "email_notifications": true,
+  "job_assignment_alerts": true,
+  "weekly_summary": false
+}
+```
+
+**Errors:**
+- 401: Unauthorized
+
+---
+
+### 9.5. Notification Preferences — PATCH /api/me/notification-preferences
+
+**Purpose:** Update user notification settings (auto-save).
+
+**Auth:** Required (Token).
+
+**RBAC:** All authenticated users.
+
+**Request:**
+```http
+PATCH /api/me/notification-preferences HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "email_notifications": false
+}
+```
+
+**Behavior:**
+- Auto-save (no explicit save button)
+- If `email_notifications` is off, sub-toggles are implicitly disabled
+
+**Response 200:**
+```json
+{
+  "email_notifications": false,
+  "job_assignment_alerts": false,
+  "weekly_summary": false
+}
+```
+
+**Errors:**
+- 400: Validation error
+- 401: Unauthorized
+
+---
+
+### 9.6. Billing Summary — GET /api/settings/billing
+
+**Purpose:** Get billing summary for organization.
+
+**Auth:** Required (Token).
+
+**RBAC:**
+- Owner: full access, can_manage=true
+- Manager: read-only, can_manage=false
+- Staff/Cleaner: 403 Forbidden
+
+**Request:**
+```http
+GET /api/settings/billing HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "can_manage": true,
+  "plan": "trial",
+  "status": "active",
+  "trial_expires_at": "2026-02-19T12:00:00Z",
+  "next_billing_date": null,
+  "usage_summary": {
+    "users_count": 8,
+    "users_limit": 10,
+    "locations_count": 12,
+    "locations_limit": 30,
+    "jobs_month_count": 145,
+    "jobs_month_limit": 200
+  },
+  "payment_method": {
+    "exists": true,
+    "brand": "Visa",
+    "last4": "4242",
+    "exp_month": 12,
+    "exp_year": 2026
+  },
+  "invoices": []
+}
+```
+
+**Fields:**
+- `plan`: "trial", "active", "blocked"
+- `status`: "trial", "active", "past_due", "cancelled"
+- `usage_summary.users_limit`: null for unlimited (active plan)
+- `payment_method`: null if no payment method on file
+- `invoices`: empty array for MVP (no Stripe integration)
+
+**Errors:**
+- 403: Staff/Cleaner role (Billing access restricted to administrators)
+- 401: Unauthorized
+
+---
+
+### 9.7. Invoice Download — GET /api/settings/billing/invoices/:id/download
+
+**Purpose:** Download invoice PDF (stub for MVP).
+
+**Auth:** Required (Token).
+
+**RBAC:**
+- Owner/Manager: 501 Not Implemented
+- Staff/Cleaner: 403 Forbidden
+
+**Request:**
+```http
+GET /api/settings/billing/invoices/123/download HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 501:**
+```json
+{
+  "detail": "Invoice download not available yet. This feature requires payment processor integration."
+}
+```
+
+**Errors:**
+- 501: Not Implemented (no Stripe integration)
+- 403: Staff/Cleaner role
+- 401: Unauthorized
+
+---
+
+## 10. Ошибки — общий паттерн
 
 Все эндпоинты возвращают ошибки в виде:
 
@@ -2149,7 +2437,7 @@ Backend задаёт порядок, фронт не переупорядочи�
 
 ---
 
-## 10. Backend implementation modules (для разработчиков)
+## 11. Backend implementation modules (для разработчиков)
 
 Внутреннее разбиение views (не влияет на контракт):
 
@@ -2171,9 +2459,12 @@ Backend задаёт порядок, фронт не переупорядочи�
 * `backend/apps/api/views_reports.py`
   job report email, weekly/monthly JSON+PDF, owner overview, report email log, weekly/monthly email.
 
+* `backend/apps/accounts/api/views_settings.py`
+  Settings API (Account & Billing MVP v1.1): current user, profile update, password change, notification preferences, billing summary, invoice download.
+
 ---
 
-## 11. Итоговое правило
+## 12. Итоговое правило
 
 Любая новая функциональность:
 

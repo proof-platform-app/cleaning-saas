@@ -12,6 +12,16 @@ from apps.accounts.api.views import (
     UpgradeToActiveView,
 )
 
+# Settings API (Account & Billing MVP v1.1)
+from apps.accounts.api.views_settings import (
+    CurrentUserView,
+    UpdateProfileView,
+    ChangePasswordView,
+    NotificationPreferencesView,
+    BillingSummaryView,
+    InvoiceDownloadView,
+)
+
 
 urlpatterns = [
     # CleanProof trial start (must be BEFORE generic api include)
@@ -31,6 +41,40 @@ urlpatterns = [
         "api/cleanproof/upgrade-to-active/",
         UpgradeToActiveView.as_view(),
         name="cleanproof-upgrade-to-active",
+    ),
+
+    # Settings API: Account (MVP v1.1)
+    path(
+        "api/me/",
+        CurrentUserView.as_view(),
+        name="api-current-user-get",
+    ),
+    path(
+        "api/me/",
+        UpdateProfileView.as_view(),
+        name="api-current-user-patch",
+    ),
+    path(
+        "api/me/change-password/",
+        ChangePasswordView.as_view(),
+        name="api-change-password",
+    ),
+    path(
+        "api/me/notification-preferences/",
+        NotificationPreferencesView.as_view(),
+        name="api-notification-preferences",
+    ),
+
+    # Settings API: Billing (MVP v1.1)
+    path(
+        "api/settings/billing/",
+        BillingSummaryView.as_view(),
+        name="api-billing-summary",
+    ),
+    path(
+        "api/settings/billing/invoices/<int:invoice_id>/download/",
+        InvoiceDownloadView.as_view(),
+        name="api-invoice-download",
     ),
 
     path("admin/", admin.site.urls),
