@@ -89,18 +89,88 @@ export default function CompanyProfile() {
     });
   };
 
-  const handleLogoUpload = async (file: File) => {
-    // Validate file size (max 2MB)
-    const maxSize = 2 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast({
-        variant: "destructive",
-        title: "File too large",
-        description: "Logo must be under 2MB",
-      });
-      return;
+  // Compress image to fit under 2MB
+  const compressImage = async (file: File): Promise<File> => {
+    const maxSize = 2 * 1024 * 1024; // 2MB
+
+    // If file is already small enough, return as is
+    if (file.size <= maxSize) {
+      return file;
     }
 
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions (max 1200px on longest side)
+          const maxDimension = 1200;
+          if (width > height && width > maxDimension) {
+            height = (height * maxDimension) / width;
+            width = maxDimension;
+          } else if (height > maxDimension) {
+            width = (width * maxDimension) / height;
+            height = maxDimension;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Try different quality levels until file is small enough
+          let quality = 0.9;
+          const tryCompress = () => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error("Failed to compress image"));
+                  return;
+                }
+
+                // If still too large and quality can be reduced, try again
+                if (blob.size > maxSize && quality > 0.5) {
+                  quality -= 0.1;
+                  tryCompress();
+                  return;
+                }
+
+                // Create new file from blob
+                const compressedFile = new File([blob], file.name, {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+
+                resolve(compressedFile);
+              },
+              "image/jpeg",
+              quality
+            );
+          };
+
+          tryCompress();
+        };
+
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = e.target?.result as string;
+      };
+
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleLogoUpload = async (file: File) => {
     // Validate file type
     const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
     if (!allowedTypes.includes(file.type)) {
@@ -115,7 +185,22 @@ export default function CompanyProfile() {
     setIsUploadingLogo(true);
 
     try {
-      const result = await uploadCompanyLogo(file);
+      // Compress image if needed
+      const compressedFile = await compressImage(file);
+
+      // Final size check (should always pass after compression)
+      const maxSize = 2 * 1024 * 1024;
+      if (compressedFile.size > maxSize) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: "Unable to compress image below 2MB. Please use a smaller image.",
+        });
+        setIsUploadingLogo(false);
+        return;
+      }
+
+      const result = await uploadCompanyLogo(compressedFile);
 
       // Update cache with new logo_url
       queryClient.setQueryData(["company-profile"], (old: any) => ({
