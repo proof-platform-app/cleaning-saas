@@ -2,13 +2,20 @@
 
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Settings, Shield, Info } from "lucide-react";
+import { ArrowLeft, Settings, Shield, Info, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, isPasswordAuth } from "@/hooks/useUserRole";
+import {
+  getCurrentUser,
+  updateProfile,
+  changePassword,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from "@/api/client";
 
 interface ProfileFormData {
   fullName: string;
@@ -37,15 +44,20 @@ export default function AccountSettings() {
   const isPasswordAuthUser = isPasswordAuth(user);
   const isSSO = !isPasswordAuthUser;
 
+  // Loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Profile state
   const [profileData, setProfileData] = useState<ProfileFormData>({
-    fullName: user.name,
-    email: user.email,
-    phone: "+971 50 123 4567",
+    fullName: "",
+    email: "",
+    phone: "",
   });
 
   const [initialProfile, setInitialProfile] = useState<ProfileFormData>(profileData);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileFieldErrors, setProfileFieldErrors] = useState<Record<string, string[]>>({});
 
   // Password state
   const [passwordData, setPasswordData] = useState<PasswordFormData>({
@@ -55,6 +67,7 @@ export default function AccountSettings() {
   });
 
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [passwordFieldErrors, setPasswordFieldErrors] = useState<Record<string, string[]>>({});
 
   // Notifications state
   const [notifications, setNotifications] = useState<NotificationPreferences>({
@@ -64,6 +77,57 @@ export default function AccountSettings() {
   });
 
   const [savingNotificationId, setSavingNotificationId] = useState<string | null>(null);
+
+  // Fetch initial data
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+
+        // Fetch current user and notification preferences in parallel
+        const [userData, notifData] = await Promise.all([
+          getCurrentUser(),
+          getNotificationPreferences(),
+        ]);
+
+        if (!mounted) return;
+
+        // Set profile data
+        const profileDataFromAPI = {
+          fullName: userData.full_name,
+          email: userData.email,
+          phone: userData.phone || "",
+        };
+        setProfileData(profileDataFromAPI);
+        setInitialProfile(profileDataFromAPI);
+
+        // Set notifications data
+        setNotifications({
+          emailNotifications: notifData.email_notifications,
+          jobAssignmentAlerts: notifData.job_assignment_alerts,
+          weeklySummary: notifData.weekly_summary,
+        });
+      } catch (error: any) {
+        console.error("Failed to fetch account settings:", error);
+        if (mounted) {
+          setLoadError("Failed to load account settings. Please try again.");
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Scroll to section if hash present
   useEffect(() => {
@@ -94,7 +158,10 @@ export default function AccountSettings() {
   };
 
   const handleProfileSave = async () => {
-    // Validation
+    // Clear previous errors
+    setProfileFieldErrors({});
+
+    // Client-side validation
     if (profileData.fullName.trim().length < 2) {
       toast({
         variant: "destructive",
@@ -125,21 +192,51 @@ export default function AccountSettings() {
     setIsSavingProfile(true);
 
     try {
-      // TODO: API call to save profile
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const payload = {
+        full_name: profileData.fullName,
+        email: profileData.email,
+        phone: profileData.phone || null,
+      };
 
-      setInitialProfile(profileData);
+      const response = await updateProfile(payload);
+
+      // Update state with response data
+      const updatedProfile = {
+        fullName: response.full_name,
+        email: response.email,
+        phone: response.phone || "",
+      };
+      setProfileData(updatedProfile);
+      setInitialProfile(updatedProfile);
 
       toast({
-        title: "✓ Profile updated successfully",
+        title: "Profile updated",
         description: "Your profile information has been saved.",
       });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
-      });
+    } catch (error: any) {
+      console.error("Failed to update profile:", error);
+
+      // Handle validation errors from API
+      if (error.response?.status === 400 && error.response?.data?.code === "VALIDATION_ERROR") {
+        const fields = error.response.data.fields || {};
+        setProfileFieldErrors(fields);
+
+        // Show first error in toast
+        const firstError = Object.values(fields)[0];
+        if (Array.isArray(firstError) && firstError.length > 0) {
+          toast({
+            variant: "destructive",
+            title: "Validation error",
+            description: firstError[0],
+          });
+        }
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to update profile. Please try again.",
+        });
+      }
     } finally {
       setIsSavingProfile(false);
     }
@@ -176,7 +273,10 @@ export default function AccountSettings() {
   };
 
   const handlePasswordSave = async () => {
-    // Validation
+    // Clear previous errors
+    setPasswordFieldErrors({});
+
+    // Client-side validation
     if (!passwordData.currentPassword) {
       toast({
         variant: "destructive",
@@ -223,21 +323,49 @@ export default function AccountSettings() {
     setIsSavingPassword(true);
 
     try {
-      // TODO: API call to change password
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const payload = {
+        current_password: passwordData.currentPassword,
+        new_password: passwordData.newPassword,
+      };
+
+      await changePassword(payload);
 
       handlePasswordCancel();
 
       toast({
-        title: "✓ Password updated successfully",
-        description: "Your password has been changed.",
+        title: "Password updated",
+        description: "Your password has been changed successfully.",
       });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Current password is incorrect",
-      });
+    } catch (error: any) {
+      console.error("Failed to change password:", error);
+
+      // Handle different error types
+      if (error.response?.status === 403 && error.response?.data?.code === "FORBIDDEN") {
+        toast({
+          variant: "destructive",
+          title: "Not allowed",
+          description: error.response.data.message || "Password change not allowed for SSO users",
+        });
+      } else if (error.response?.status === 400 && error.response?.data?.code === "VALIDATION_ERROR") {
+        const fields = error.response.data.fields || {};
+        setPasswordFieldErrors(fields);
+
+        // Show first error in toast
+        const firstError = Object.values(fields)[0];
+        if (Array.isArray(firstError) && firstError.length > 0) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: firstError[0],
+          });
+        }
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to update password. Please try again.",
+        });
+      }
     } finally {
       setIsSavingPassword(false);
     }
@@ -248,8 +376,12 @@ export default function AccountSettings() {
     key: keyof NotificationPreferences,
     value: boolean
   ) => {
-    // If turning off master toggle, disable all sub-toggles
+    // Store old value for rollback
+    const oldNotifications = { ...notifications };
+
+    // Optimistically update UI
     if (key === "emailNotifications" && !value) {
+      // If turning off master toggle, disable all sub-toggles
       setNotifications({
         emailNotifications: false,
         jobAssignmentAlerts: false,
@@ -262,16 +394,34 @@ export default function AccountSettings() {
     setSavingNotificationId(key);
 
     try {
-      // TODO: API call to save notification preference
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } catch (error) {
+      // Map camelCase to snake_case for API
+      const apiKey = key === "emailNotifications"
+        ? "email_notifications"
+        : key === "jobAssignmentAlerts"
+          ? "job_assignment_alerts"
+          : "weekly_summary";
+
+      const payload = { [apiKey]: value };
+
+      // API will handle the logic of disabling sub-toggles when master is off
+      const response = await updateNotificationPreferences(payload);
+
+      // Update state with response to ensure consistency
+      setNotifications({
+        emailNotifications: response.email_notifications,
+        jobAssignmentAlerts: response.job_assignment_alerts,
+        weeklySummary: response.weekly_summary,
+      });
+    } catch (error: any) {
+      console.error("Failed to save notification preferences:", error);
+
       // Revert on error
-      setNotifications((prev) => ({ ...prev, [key]: !value }));
+      setNotifications(oldNotifications);
 
       toast({
         variant: "destructive",
-        title: "Failed to save notification preferences",
-        description: "Please try again",
+        title: "Failed to save",
+        description: "Could not update notification preferences. Please try again.",
       });
     } finally {
       setSavingNotificationId(null);
@@ -286,6 +436,78 @@ export default function AccountSettings() {
   const isValidPhone = (phone: string): boolean => {
     return /^\+?[0-9\s-]{10,}$/.test(phone);
   };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl p-8">
+        <div className="mb-8 flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+            <Settings className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Account Settings
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage your profile and access preferences
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <div className="mb-6 h-6 w-48 animate-pulse rounded bg-muted" />
+              <div className="space-y-4">
+                <div className="h-11 w-full animate-pulse rounded bg-muted" />
+                <div className="h-11 w-full animate-pulse rounded bg-muted" />
+                <div className="h-11 w-full animate-pulse rounded bg-muted" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-4xl p-8">
+        <div className="mb-8 flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+            <Settings className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Account Settings
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage your profile and access preferences
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-status-failed bg-status-failed-bg p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-status-failed" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-status-failed">Failed to load settings</h3>
+              <p className="mt-1 text-sm text-status-failed">{loadError}</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl p-8">
@@ -334,6 +556,9 @@ export default function AccountSettings() {
                 onChange={(e) => handleProfileChange("fullName", e.target.value)}
                 className="h-11"
               />
+              {profileFieldErrors.full_name && (
+                <p className="text-sm text-status-failed">{profileFieldErrors.full_name[0]}</p>
+              )}
             </div>
 
             {/* Email Address */}
@@ -349,7 +574,10 @@ export default function AccountSettings() {
                 disabled={isSSO}
                 className="h-11"
               />
-              {isSSO && (
+              {profileFieldErrors.email && (
+                <p className="text-sm text-status-failed">{profileFieldErrors.email[0]}</p>
+              )}
+              {isSSO && !profileFieldErrors.email && (
                 <div className="flex items-start gap-2 text-sm text-muted-foreground">
                   <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
                   <span>Email managed by your organization</span>
@@ -370,6 +598,9 @@ export default function AccountSettings() {
                 onChange={(e) => handleProfileChange("phone", e.target.value)}
                 className="h-11"
               />
+              {profileFieldErrors.phone && (
+                <p className="text-sm text-status-failed">{profileFieldErrors.phone[0]}</p>
+              )}
             </div>
 
             {/* Actions */}
@@ -419,6 +650,11 @@ export default function AccountSettings() {
                   }
                   className="h-11"
                 />
+                {passwordFieldErrors.current_password && (
+                  <p className="text-sm text-status-failed">
+                    {passwordFieldErrors.current_password[0]}
+                  </p>
+                )}
               </div>
 
               {/* New Password */}
@@ -433,6 +669,11 @@ export default function AccountSettings() {
                   onChange={(e) => handlePasswordChange("newPassword", e.target.value)}
                   className="h-11"
                 />
+                {passwordFieldErrors.new_password && (
+                  <p className="text-sm text-status-failed">
+                    {passwordFieldErrors.new_password[0]}
+                  </p>
+                )}
 
                 {/* Password Strength Indicator */}
                 {passwordData.newPassword && (

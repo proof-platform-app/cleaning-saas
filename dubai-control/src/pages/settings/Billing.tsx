@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, Download, Info, AlertCircle } from "lucide-react";
+import { ArrowLeft, CreditCard, Download, Info, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling, canModifyBilling } from "@/hooks/useUserRole";
+import { getBillingSummary, downloadInvoice, type BillingSummary } from "@/api/client";
 
 interface UsageMetric {
   label: string;
@@ -30,6 +31,12 @@ export default function Billing() {
   const isOwner = canModifyBilling(user.role);
   const isManager = user.role === "manager";
 
+  // State
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [billingData, setBillingData] = useState<BillingSummary | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState<number | null>(null);
+
   // Redirect Staff users
   useEffect(() => {
     if (!canAccess) {
@@ -42,47 +49,50 @@ export default function Billing() {
     }
   }, [canAccess, navigate, toast]);
 
-  // Mock data
-  const [plan] = useState({
-    name: "Pro Plan",
-    status: "active" as "trial" | "active" | "past_due" | "cancelled",
-    nextBillingDate: "March 15, 2026",
-  });
+  // Fetch billing data
+  useEffect(() => {
+    let mounted = true;
 
-  const [usage] = useState<UsageMetric[]>([
-    {
-      label: "Active Users",
-      current: 8,
-      limit: 10,
-      helperText: "2 more users available",
-    },
-    {
-      label: "Locations",
-      current: 12,
-      limit: 30,
-      helperText: "18 locations remaining",
-    },
-    {
-      label: "Job Volume (Current Month)",
-      current: 145,
-      limit: 200,
-      helperText: "Resets on March 1",
-    },
-  ]);
+    const fetchData = async () => {
+      if (!canAccess) return;
 
-  const [paymentMethod] = useState({
-    type: "Visa",
-    last4: "4242",
-    expiry: "12/2026",
-  });
+      try {
+        setIsLoading(true);
+        setLoadError(null);
 
-  const [invoices] = useState<Invoice[]>([
-    { id: "inv_1", date: "Feb 1 2026", amount: 199.0, status: "paid" },
-    { id: "inv_2", date: "Jan 1 2026", amount: 199.0, status: "paid" },
-    { id: "inv_3", date: "Dec 1 2025", amount: 199.0, status: "failed" },
-  ]);
+        const data = await getBillingSummary();
 
-  const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
+        if (!mounted) return;
+        setBillingData(data);
+      } catch (error: any) {
+        console.error("Failed to fetch billing data:", error);
+
+        if (!mounted) return;
+
+        // Handle 403 specifically (shouldn't happen if RBAC is correct, but just in case)
+        if (error.response?.status === 403) {
+          toast({
+            variant: "destructive",
+            title: "Access restricted",
+            description: error.response.data.message || "Billing access restricted to administrators",
+          });
+          navigate("/settings", { replace: true });
+        } else {
+          setLoadError("Failed to load billing information. Please try again.");
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [canAccess, navigate, toast]);
 
   // Usage progress bar color based on percentage
   const getUsageColor = (percentage: number): string => {
@@ -97,26 +107,70 @@ export default function Billing() {
     return "text-foreground";
   };
 
-  const handleDownloadInvoice = async (invoiceId: string) => {
+  const handleDownloadInvoice = async (invoiceId: number) => {
     setDownloadingInvoice(invoiceId);
 
     try {
-      // TODO: API call to download invoice
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const blob = await downloadInvoice(invoiceId);
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${invoiceId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
 
       toast({
         title: "Invoice downloaded",
         description: "Your invoice has been downloaded successfully.",
       });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to download invoice",
-      });
+    } catch (error: any) {
+      console.error("Failed to download invoice:", error);
+
+      // Handle 501 (not implemented)
+      if (error.response?.status === 501) {
+        toast({
+          variant: "destructive",
+          title: "Not available yet",
+          description: error.response.data.message || "Invoice download is not available yet",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to download invoice. Please try again.",
+        });
+      }
     } finally {
       setDownloadingInvoice(null);
     }
+  };
+
+  // Helper functions to format API data
+  const formatPlanName = (plan: string): string => {
+    const planMap: Record<string, string> = {
+      trial: "Trial Plan",
+      active: "Pro Plan",
+      blocked: "Suspended",
+    };
+    return planMap[plan] || plan;
+  };
+
+  const formatNextBillingDate = (date: string | null): string => {
+    if (!date) return "N/A";
+    const d = new Date(date);
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  };
+
+  const getUsageHelperText = (current: number, limit: number | null, label: string): string => {
+    if (limit === null) return "Unlimited";
+    const remaining = limit - current;
+    if (remaining <= 0) return `Limit reached`;
+    if (label.includes("Job")) return "Resets monthly";
+    return `${remaining} remaining`;
   };
 
   const getStatusBadgeClasses = (status: Invoice["status"]): string => {
@@ -138,6 +192,142 @@ export default function Billing() {
   if (!canAccess) {
     return null;
   }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl p-8">
+        <div className="mb-8 flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+            <CreditCard className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Billing
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage your subscription and payment methods
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-6 shadow-sm">
+              <div className="mb-6 h-6 w-48 animate-pulse rounded bg-muted" />
+              <div className="space-y-4">
+                <div className="h-11 w-full animate-pulse rounded bg-muted" />
+                <div className="h-11 w-full animate-pulse rounded bg-muted" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (loadError || !billingData) {
+    return (
+      <div className="mx-auto max-w-4xl p-8">
+        <Link
+          to="/settings"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground md:hidden"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Settings
+        </Link>
+
+        <div className="mb-8 flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
+            <CreditCard className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              Billing
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage your subscription and payment methods
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-status-failed bg-status-failed-bg p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-status-failed" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-status-failed">Failed to load billing information</h3>
+              <p className="mt-1 text-sm text-status-failed">
+                {loadError || "Could not retrieve billing data"}
+              </p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Prepare data for rendering
+  const plan = {
+    name: formatPlanName(billingData.plan),
+    status: billingData.status,
+    nextBillingDate: formatNextBillingDate(billingData.next_billing_date),
+  };
+
+  const usage: UsageMetric[] = [
+    {
+      label: "Active Users",
+      current: billingData.usage_summary.users_count,
+      limit: billingData.usage_summary.users_limit || 999999,
+      helperText: getUsageHelperText(
+        billingData.usage_summary.users_count,
+        billingData.usage_summary.users_limit,
+        "Users"
+      ),
+    },
+    {
+      label: "Locations",
+      current: billingData.usage_summary.locations_count,
+      limit: billingData.usage_summary.locations_limit || 999999,
+      helperText: getUsageHelperText(
+        billingData.usage_summary.locations_count,
+        billingData.usage_summary.locations_limit,
+        "Locations"
+      ),
+    },
+    {
+      label: "Job Volume (Current Month)",
+      current: billingData.usage_summary.jobs_month_count,
+      limit: billingData.usage_summary.jobs_month_limit || 999999,
+      helperText: getUsageHelperText(
+        billingData.usage_summary.jobs_month_count,
+        billingData.usage_summary.jobs_month_limit,
+        "Jobs"
+      ),
+    },
+  ];
+
+  const paymentMethod = billingData.payment_method
+    ? {
+        type: billingData.payment_method.brand,
+        last4: billingData.payment_method.last4,
+        expiry: `${billingData.payment_method.exp_month}/${billingData.payment_method.exp_year}`,
+      }
+    : null;
+
+  const invoices: Invoice[] = billingData.invoices.map((inv: any) => ({
+    id: String(inv.id),
+    date: inv.date || "N/A",
+    amount: inv.amount || 0,
+    status: inv.status || "pending",
+  }));
 
   return (
     <div className="mx-auto max-w-4xl p-8">
@@ -229,7 +419,11 @@ export default function Billing() {
 
           <div className="space-y-6">
             {usage.map((metric) => {
-              const percentage = Math.round((metric.current / metric.limit) * 100);
+              // Handle unlimited (null limit)
+              const isUnlimited = metric.limit >= 999999;
+              const percentage = isUnlimited
+                ? 0
+                : Math.round((metric.current / metric.limit) * 100);
               const progressColor = getUsageColor(percentage);
               const textColor = getUsageTextColor(percentage);
 
@@ -240,17 +434,19 @@ export default function Billing() {
                       {metric.label}
                     </span>
                     <span className={`text-sm font-medium ${textColor}`}>
-                      {metric.current} of {metric.limit}
+                      {metric.current} {isUnlimited ? "" : `of ${metric.limit}`}
                     </span>
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full transition-all duration-300 ${progressColor}`}
-                      style={{ width: `${Math.min(percentage, 100)}%` }}
-                    />
-                  </div>
+                  {!isUnlimited && (
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full transition-all duration-300 ${progressColor}`}
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      />
+                    </div>
+                  )}
 
                   {/* Helper Text */}
                   <p
@@ -276,28 +472,39 @@ export default function Billing() {
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-6 text-lg font-semibold text-foreground">Payment Method</h2>
 
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                <CreditCard className="h-5 w-5 text-muted-foreground" />
+          {paymentMethod ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                  <CreditCard className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {paymentMethod.type} ending in {paymentMethod.last4}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Expires {paymentMethod.expiry}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  {paymentMethod.type} ending in {paymentMethod.last4}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Expires {paymentMethod.expiry}
-                </p>
-              </div>
-            </div>
 
-            {/* Change Payment Method Button - Owner Only */}
-            {isOwner && (
-              <div className="pt-2">
-                <Button variant="outline">Change payment method</Button>
-              </div>
-            )}
-          </div>
+              {/* Change Payment Method Button - Owner Only */}
+              {isOwner && (
+                <div className="pt-2">
+                  <Button variant="outline">Change payment method</Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">No payment method on file</p>
+              {isOwner && (
+                <div className="pt-2">
+                  <Button variant="outline">Add payment method</Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Section D: Invoices */}
@@ -341,12 +548,12 @@ export default function Billing() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
-                          onClick={() => handleDownloadInvoice(invoice.id)}
-                          disabled={downloadingInvoice === invoice.id}
+                          onClick={() => handleDownloadInvoice(Number(invoice.id))}
+                          disabled={downloadingInvoice === Number(invoice.id)}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                           title="Download invoice"
                         >
-                          {downloadingInvoice === invoice.id ? (
+                          {downloadingInvoice === Number(invoice.id) ? (
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                           ) : (
                             <Download className="h-4 w-4" />

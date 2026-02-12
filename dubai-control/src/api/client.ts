@@ -1354,3 +1354,114 @@ export async function getOwnerOverview(days?: number): Promise<OwnerOverview> {
   );
   return res.data;
 }
+
+// ---------- Settings API (Account & Billing MVP v1.1) ----------
+
+export interface CurrentUser {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  auth_type: "password" | "sso";
+  role: "owner" | "manager" | "staff" | "cleaner";
+  company_id: number;
+}
+
+export interface UpdateProfilePayload {
+  full_name?: string;
+  email?: string;
+  phone?: string | null;
+}
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+export interface NotificationPreferences {
+  email_notifications: boolean;
+  job_assignment_alerts: boolean;
+  weekly_summary: boolean;
+}
+
+export interface BillingSummary {
+  can_manage: boolean;
+  plan: string;
+  status: "trial" | "active" | "past_due" | "cancelled";
+  trial_expires_at: string | null;
+  next_billing_date: string | null;
+  usage_summary: {
+    users_count: number;
+    users_limit: number | null;
+    locations_count: number;
+    locations_limit: number | null;
+    jobs_month_count: number;
+    jobs_month_limit: number | null;
+  };
+  payment_method: {
+    exists: boolean;
+    brand: string;
+    last4: string;
+    exp_month: number;
+    exp_year: number;
+  } | null;
+  invoices: any[];
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  await loginManager();
+  return apiFetch<CurrentUser>("/api/me/");
+}
+
+export async function updateProfile(
+  payload: UpdateProfilePayload
+): Promise<{ full_name: string; email: string; phone: string | null }> {
+  await loginManager();
+  return apiFetch<{ full_name: string; email: string; phone: string | null }>(
+    "/api/me/",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function changePassword(
+  payload: ChangePasswordPayload
+): Promise<{ detail: string }> {
+  await loginManager();
+  return apiFetch<{ detail: string }>("/api/me/change-password/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getNotificationPreferences(): Promise<NotificationPreferences> {
+  await loginManager();
+  return apiFetch<NotificationPreferences>("/api/me/notification-preferences/");
+}
+
+export async function updateNotificationPreferences(
+  payload: Partial<NotificationPreferences>
+): Promise<NotificationPreferences> {
+  await loginManager();
+  return apiFetch<NotificationPreferences>(
+    "/api/me/notification-preferences/",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function getBillingSummary(): Promise<BillingSummary> {
+  await loginManager();
+  return apiFetch<BillingSummary>("/api/settings/billing/");
+}
+
+export async function downloadInvoice(invoiceId: number): Promise<Blob> {
+  await loginManager();
+  return apiFetchBlob(`/api/settings/billing/invoices/${invoiceId}/download/`, {
+    method: "GET",
+  });
+}
