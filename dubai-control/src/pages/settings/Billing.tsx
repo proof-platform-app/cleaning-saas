@@ -451,22 +451,16 @@ export default function Billing() {
 
               {/* CTA */}
               <div className="mt-4">
-                {isOwner ? (
-                  <Button
-                    asChild
-                    className="bg-accent-primary text-white hover:bg-accent-primary/90"
-                  >
-                    <Link to="/cleanproof/contact">Contact us to upgrade</Link>
-                  </Button>
-                ) : (
-                  <div>
-                    <Button disabled className="opacity-50">
-                      Contact us to upgrade
-                    </Button>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Only account owner can upgrade
-                    </p>
-                  </div>
+                <Button
+                  asChild
+                  className="bg-accent-primary text-white hover:bg-accent-primary/90"
+                >
+                  <Link to="/cleanproof/pricing">View plans & upgrade</Link>
+                </Button>
+                {!isOwner && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Only account owner can complete the upgrade
+                  </p>
                 )}
               </div>
             </div>
