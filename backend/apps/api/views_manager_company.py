@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Company, User
+from apps.api.models import AccessAuditLog
 
 
 class ManagerCompanyView(APIView):
@@ -344,6 +345,9 @@ class ManagerCleanerDetailView(APIView):
         if error_response is not None:
             return error_response
 
+        # Store old status for audit log
+        old_is_active = cleaner.is_active
+
         full_name = request.data.get("full_name", cleaner.full_name)
         email = request.data.get("email", cleaner.email)
         phone = request.data.get("phone", cleaner.phone)
@@ -376,6 +380,16 @@ class ManagerCleanerDetailView(APIView):
         cleaner.phone = phone
         cleaner.is_active = bool(is_active)
         cleaner.save(update_fields=["full_name", "email", "phone", "is_active"])
+
+        # Log status change if it changed
+        if old_is_active != cleaner.is_active:
+            AccessAuditLog.objects.create(
+                company=cleaner.company,
+                cleaner=cleaner,
+                performed_by=request.user,
+                action="status_changed",
+                metadata={"new_status": cleaner.is_active},
+            )
 
         data = {
             "id": cleaner.id,

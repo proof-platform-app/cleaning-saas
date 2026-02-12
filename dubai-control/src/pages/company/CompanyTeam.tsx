@@ -11,10 +11,18 @@ import {
   Loader2,
   Key,
   Shuffle,
+  MoreVertical,
+  History,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
 import {
@@ -22,8 +30,10 @@ import {
   createCleaner,
   updateCleaner,
   resetCleanerAccess,
+  getCleanerAuditLog,
   type Cleaner,
   type CreateCleanerPayload,
+  type CleanerAuditLog,
 } from "@/api/client";
 
 export default function CompanyTeam() {
@@ -40,6 +50,9 @@ export default function CompanyTeam() {
     cleaner: Cleaner;
     tempPassword: string;
   } | null>(null);
+  const [showAuditLogModal, setShowAuditLogModal] = useState(false);
+  const [auditLogCleaner, setAuditLogCleaner] = useState<Cleaner | null>(null);
+  const [auditLogs, setAuditLogs] = useState<CleanerAuditLog[]>([]);
 
   // Fetch cleaners
   const { data: cleaners = [], isLoading } = useQuery({
@@ -112,6 +125,22 @@ export default function CompanyTeam() {
 
   const handleResetAccess = (cleaner: Cleaner) => {
     resetAccessMutation.mutate(cleaner.id);
+  };
+
+  const handleViewAuditLog = async (cleaner: Cleaner) => {
+    setAuditLogCleaner(cleaner);
+    setShowAuditLogModal(true);
+    try {
+      const logs = await getCleanerAuditLog(cleaner.id);
+      setAuditLogs(logs);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load access activity",
+      });
+      setShowAuditLogModal(false);
+    }
   };
 
   if (!canAccess) {
@@ -264,15 +293,30 @@ export default function CompanyTeam() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleResetAccess(cleaner)}
-                        disabled={resetAccessMutation.isPending}
-                      >
-                        <Key className="mr-2 h-4 w-4" />
-                        Reset access
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={resetAccessMutation.isPending}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleResetAccess(cleaner)}
+                            disabled={resetAccessMutation.isPending}
+                          >
+                            <Key className="mr-2 h-4 w-4" />
+                            Reset access
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewAuditLog(cleaner)}>
+                            <History className="mr-2 h-4 w-4" />
+                            View access log
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 ))}
@@ -344,6 +388,110 @@ export default function CompanyTeam() {
                 Done
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Access Activity Modal */}
+      {showAuditLogModal && auditLogCleaner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-xl max-h-[80vh] overflow-y-auto">
+            <div className="mb-6 flex items-start justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                  <History className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Access Activity
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Security and access management history for {auditLogCleaner.full_name}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowAuditLogModal(false);
+                  setAuditLogCleaner(null);
+                  setAuditLogs([]);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+
+            {/* Timeline */}
+            {auditLogs.length === 0 ? (
+              <div className="py-12 text-center">
+                <History className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
+                <p className="mt-4 text-sm text-muted-foreground">No activity yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Access management actions will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {auditLogs.map((log, index) => (
+                  <div
+                    key={index}
+                    className="relative flex gap-4 pb-4"
+                    style={{
+                      borderBottom:
+                        index < auditLogs.length - 1
+                          ? "1px solid hsl(var(--border))"
+                          : "none",
+                    }}
+                  >
+                    {/* Timeline dot */}
+                    <div className="relative flex flex-col items-center">
+                      <div className="h-2 w-2 rounded-full bg-muted-foreground" />
+                      {index < auditLogs.length - 1 && (
+                        <div className="absolute top-2 h-full w-px bg-border" />
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 pt-[-2px]">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {log.action}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            by {log.performed_by}
+                            {log.performed_by_email && (
+                              <span className="ml-1">({log.performed_by_email})</span>
+                            )}
+                          </p>
+                        </div>
+                        <time className="text-xs text-muted-foreground">
+                          {new Date(log.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </time>
+                      </div>
+
+                      {/* Metadata */}
+                      {log.metadata && log.action_code === "status_changed" && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Status changed to{" "}
+                          <span className="font-medium">
+                            {log.metadata.new_status ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

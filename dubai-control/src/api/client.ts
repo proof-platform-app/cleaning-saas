@@ -149,6 +149,17 @@ export interface Cleaner {
   is_active: boolean;
 }
 
+export interface CleanerAuditLog {
+  action: string;
+  action_code: "cleaner_created" | "password_reset" | "status_changed";
+  performed_by: string;
+  performed_by_email: string | null;
+  created_at: string;
+  metadata?: {
+    new_status?: boolean;
+  } | null;
+}
+
 // единственный тип Location для всего фронта
 export interface Location {
   id: number;
@@ -933,6 +944,15 @@ export async function resetCleanerAccess(
     {
       method: "POST",
     }
+  );
+}
+
+export async function getCleanerAuditLog(
+  cleanerId: number
+): Promise<CleanerAuditLog[]> {
+  await loginManager();
+  return apiFetch<CleanerAuditLog[]>(
+    `/api/company/cleaners/${cleanerId}/audit-log/`
   );
 }
 

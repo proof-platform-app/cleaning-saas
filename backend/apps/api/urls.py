@@ -395,6 +395,11 @@ urlpatterns = [
         api_views.CompanyCleanerResetAccessView.as_view(),
         name="company-cleaner-reset-access",
     ),
+    path(
+        "company/cleaners/<int:pk>/audit-log/",
+        api_views.CompanyCleanerAuditLogView.as_view(),
+        name="company-cleaner-audit-log",
+    ),
 
     # =====================
     # Owner

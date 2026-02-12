@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Company, User
+from apps.api.models import AccessAuditLog
 
 
 class CompanyView(APIView):
@@ -361,6 +362,14 @@ class CompanyCleanersView(APIView):
         cleaner.pin_hash = make_password(pin_str)
         cleaner.save(update_fields=["pin_hash"])
 
+        # Log cleaner creation
+        AccessAuditLog.objects.create(
+            company=company,
+            cleaner=cleaner,
+            performed_by=request.user,
+            action="cleaner_created",
+        )
+
         data = {
             "id": cleaner.id,
             "full_name": cleaner.full_name or "",
@@ -421,6 +430,14 @@ class CompanyCleanerResetAccessView(APIView):
         cleaner.must_change_password = True
         cleaner.save(update_fields=["password", "must_change_password"])
 
+        # Log password reset
+        AccessAuditLog.objects.create(
+            company=company,
+            cleaner=cleaner,
+            performed_by=user,
+            action="password_reset",
+        )
+
         return Response(
             {
                 "temp_password": temp_password,
@@ -428,3 +445,70 @@ class CompanyCleanerResetAccessView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class CompanyCleanerAuditLogView(APIView):
+    """
+    Get audit log for a cleaner (access management history).
+
+    GET /api/company/cleaners/{id}/audit-log/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        user = request.user
+        role = getattr(user, "role", None)
+
+        # RBAC: only Owner and Manager allowed
+        if role not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Audit log access is restricted to administrators",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {
+                    "code": "company_not_found",
+                    "message": "Company not found for this user",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get cleaner from same company
+        cleaner = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role=User.ROLE_CLEANER,
+        )
+
+        # Get audit logs for this cleaner
+        logs = AccessAuditLog.objects.filter(
+            company=company,
+            cleaner=cleaner,
+        ).select_related("performed_by")
+
+        data = []
+        for log in logs:
+            performer = log.performed_by.full_name if log.performed_by else "System"
+            performer_email = log.performed_by.email if log.performed_by else None
+
+            data.append(
+                {
+                    "action": log.get_action_display(),
+                    "action_code": log.action,
+                    "performed_by": performer,
+                    "performed_by_email": performer_email,
+                    "created_at": log.created_at.isoformat(),
+                    "metadata": log.metadata,
+                }
+            )
+
+        return Response(data, status=status.HTTP_200_OK)
