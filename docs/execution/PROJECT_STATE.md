@@ -10,16 +10,22 @@
 - Owner Assignment Deterministic — DONE ✅
 - First user of new company is automatically Owner (not Manager)
 - Management command `ensure_company_owner` to fix existing companies
+- Management command `create_company_with_owner` for sales-assisted onboarding
 - Cleaner Lifecycle Model (is_active enforcement) — DONE ✅
+- Role-oriented UI polish (Owner vs Manager) — DONE ✅
 
 **CHANGED:**
 - ManagerSignupView now creates Owner (was: Manager)
 - Email uniqueness check includes all console roles (owner, manager, staff)
 - Inactive cleaners blocked from: login, job assignment, check-in, check-out
+- Billing page: Owner sees "billing administrator" banner, Manager sees "read-only" banner
+- Settings home: role badge shown, descriptions adapt to role
+- Billing micro-copy: clear messaging about who can modify vs view
 
 **ARCHITECTURE:**
 - Every company guaranteed to have exactly 1 Owner (Billing Admin)
 - Owner/Manager role distinction formalized in docs/product/OWNER_MANAGER_MODEL_v1.md
+- RBAC helpers expanded: isOwner, isManager, getRoleLabel, getRoleDescription
 
 ### v7.6 — 2026-02-12
 

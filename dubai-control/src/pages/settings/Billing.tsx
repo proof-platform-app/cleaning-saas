@@ -43,13 +43,13 @@ export default function Billing() {
   const [billingData, setBillingData] = useState<BillingSummary | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<number | null>(null);
 
-  // Redirect Staff users
+  // Redirect Staff/Cleaner users with clear explanation
   useEffect(() => {
     if (!canAccess) {
       toast({
         variant: "destructive",
         title: "Access restricted",
-        description: "Billing access restricted to administrators",
+        description: "Billing is only available to account owners and managers. Contact your administrator for billing inquiries.",
       });
       navigate("/settings", { replace: true });
     }
@@ -406,12 +406,22 @@ export default function Billing() {
         </div>
       </div>
 
-      {/* Manager Read-Only Banner */}
+      {/* Role Context Banner */}
+      {isOwner && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
+          <p className="text-emerald-900">
+            You are the <span className="font-medium">billing administrator</span> for this account.
+            You can manage subscriptions, payment methods, and view invoices.
+          </p>
+        </div>
+      )}
+
       {isManager && (
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-700" />
           <p className="text-blue-900">
-            Billing management restricted to account owner. You have read-only access.
+            <span className="font-medium">Read-only access.</span> Only the account owner can modify billing settings, upgrade plans, or manage payment methods.
           </p>
         </div>
       )}
@@ -451,16 +461,27 @@ export default function Billing() {
 
               {/* CTA */}
               <div className="mt-4">
-                <Button
-                  asChild
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                >
-                  <Link to="/cleanproof/pricing">View plans & upgrade</Link>
-                </Button>
-                {!isOwner && (
-                  <p className="mt-2 text-xs text-blue-700">
-                    Only account owner can complete the upgrade
-                  </p>
+                {isOwner ? (
+                  <Button
+                    asChild
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                  >
+                    <Link to="/cleanproof/pricing">View plans & upgrade</Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="opacity-75"
+                    >
+                      <Link to="/cleanproof/pricing">View plans</Link>
+                    </Button>
+                    <p className="mt-2 text-xs text-blue-700">
+                      Only the account owner can upgrade or modify the subscription.
+                      Contact your administrator to make changes.
+                    </p>
+                  </>
                 )}
               </div>
             </div>
@@ -626,17 +647,22 @@ export default function Billing() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">No payment method on file.</p>
-              <p className="text-sm text-foreground">
-                {isOwner
-                  ? "To activate a paid plan, contact us."
-                  : "Only account owner can upgrade."}
-              </p>
-              {isOwner && (
-                <div className="pt-1">
-                  <Button asChild variant="outline">
-                    <Link to="/cleanproof/contact">Contact us</Link>
-                  </Button>
-                </div>
+              {isOwner ? (
+                <>
+                  <p className="text-sm text-foreground">
+                    Add a payment method to activate a paid plan and unlock all features.
+                  </p>
+                  <div className="pt-1">
+                    <Button asChild variant="outline">
+                      <Link to="/cleanproof/contact">Contact us to set up billing</Link>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Only the account owner can add payment methods.
+                  Contact your administrator to set up billing.
+                </p>
               )}
             </div>
           )}

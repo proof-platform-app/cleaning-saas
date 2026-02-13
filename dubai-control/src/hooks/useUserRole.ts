@@ -100,14 +100,91 @@ export function useUserRole(): User {
   };
 }
 
+// ============================================
+// RBAC Helper Functions
+// ============================================
+
+/**
+ * Check if user can access billing page (view)
+ * Owner: full access, Manager: read-only
+ */
 export function canAccessBilling(role: UserRole): boolean {
   return role === "owner" || role === "manager";
 }
 
+/**
+ * Check if user can modify billing (upgrade, payment methods)
+ * Only Owner can modify billing settings
+ */
 export function canModifyBilling(role: UserRole): boolean {
   return role === "owner";
 }
 
+/**
+ * Check if user can manage company (profile, team)
+ * Owner and Manager can manage company settings
+ */
+export function canManageCompany(role: UserRole): boolean {
+  return role === "owner" || role === "manager";
+}
+
+/**
+ * Check if user is the account owner (billing admin)
+ */
+export function isOwner(role: UserRole): boolean {
+  return role === "owner";
+}
+
+/**
+ * Check if user is a manager (ops admin, no billing modify)
+ */
+export function isManager(role: UserRole): boolean {
+  return role === "manager";
+}
+
+/**
+ * Check if user is staff (limited access)
+ */
+export function isStaff(role: UserRole): boolean {
+  return role === "staff";
+}
+
+/**
+ * Check if user is cleaner (field worker, no console access)
+ */
+export function isCleaner(role: UserRole): boolean {
+  return role === "cleaner";
+}
+
+/**
+ * Check if user uses password authentication
+ */
 export function isPasswordAuth(user: User): boolean {
   return user.authType === "password";
+}
+
+/**
+ * Get human-readable role label
+ */
+export function getRoleLabel(role: UserRole): string {
+  const labels: Record<UserRole, string> = {
+    owner: "Account Owner",
+    manager: "Manager",
+    staff: "Staff",
+    cleaner: "Cleaner",
+  };
+  return labels[role] || role;
+}
+
+/**
+ * Get role description for UI context
+ */
+export function getRoleDescription(role: UserRole): string {
+  const descriptions: Record<UserRole, string> = {
+    owner: "Full access to billing, company settings, and team management",
+    manager: "Can manage jobs, team, and view billing (read-only)",
+    staff: "Limited access to operational features",
+    cleaner: "Field worker with mobile app access only",
+  };
+  return descriptions[role] || "";
 }
