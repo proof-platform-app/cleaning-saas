@@ -34,8 +34,12 @@ export interface ManagerJobSummary {
 
 // ---------- Usage summary (trial + soft-limits) ----------
 
+export type PlanTier = "standard" | "pro" | "enterprise";
+
 export type UsageSummary = {
   plan: string;
+  plan_tier: PlanTier;
+  is_paid: boolean;
   is_trial_active: boolean;
   is_trial_expired: boolean;
   days_left: number | null;
@@ -648,10 +652,11 @@ export async function getUsageSummary(): Promise<UsageSummary> {
   return apiFetch<UsageSummary>("/api/cleanproof/usage-summary/");
 }
 
-export async function upgradeToActive(): Promise<UsageSummary> {
+export async function upgradeToActive(tier?: PlanTier): Promise<UsageSummary> {
   await loginManager();
   return apiFetch<UsageSummary>("/api/cleanproof/upgrade-to-active/", {
     method: "POST",
+    body: tier ? JSON.stringify({ tier }) : undefined,
   });
 }
 
@@ -985,6 +990,77 @@ export async function resetCleanerPin(
   }>(`/api/manager/cleaners/${cleanerId}/reset-pin/`, {
     method: "POST",
   });
+}
+
+// ---------- Team Members (Console Users) API ----------
+
+export type TeamMember = {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  role: "owner" | "manager" | "staff";
+  is_active: boolean;
+  is_current_user: boolean;
+};
+
+export type CreateTeamMemberPayload = {
+  full_name: string;
+  email: string;
+  role: "manager" | "staff";
+};
+
+export type CreateTeamMemberResponse = TeamMember & {
+  temp_password: string;
+};
+
+export async function getTeamMembers(): Promise<TeamMember[]> {
+  await loginManager();
+  return apiFetch<TeamMember[]>("/api/company/users/");
+}
+
+export async function createTeamMember(
+  payload: CreateTeamMemberPayload
+): Promise<CreateTeamMemberResponse> {
+  await loginManager();
+  return apiFetch<CreateTeamMemberResponse>("/api/company/users/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateTeamMember(
+  id: number,
+  payload: Partial<{
+    full_name: string;
+    role: "manager" | "staff";
+    is_active: boolean;
+  }>
+): Promise<TeamMember> {
+  await loginManager();
+  return apiFetch<TeamMember>(`/api/company/users/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeTeamMember(id: number): Promise<void> {
+  await loginManager();
+  await apiFetch(`/api/company/users/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function resetTeamMemberPassword(
+  id: number
+): Promise<{ temp_password: string; must_change_password: boolean }> {
+  await loginManager();
+  return apiFetch<{ temp_password: string; must_change_password: boolean }>(
+    `/api/company/users/${id}/reset-password/`,
+    {
+      method: "POST",
+    }
+  );
 }
 
 // ---------- Locations API ----------
@@ -1419,9 +1495,14 @@ export interface NotificationPreferences {
 export interface BillingSummary {
   can_manage: boolean;
   plan: string;
+  plan_tier: PlanTier;
   status: "trial" | "active" | "past_due" | "cancelled";
   trial_expires_at: string | null;
   next_billing_date: string | null;
+  // Explicit boolean flags for UI logic
+  is_paid: boolean;
+  is_trial_active: boolean;
+  is_trial_expired: boolean;
   usage_summary: {
     users_count: number;
     users_limit: number | null;

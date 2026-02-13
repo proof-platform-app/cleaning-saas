@@ -9,6 +9,7 @@ User = get_user_model()
 
 class TrialStatusSerializer(serializers.Serializer):
     plan = serializers.CharField()
+    plan_tier = serializers.CharField()
     trial_started_at = serializers.DateTimeField(allow_null=True)
     trial_expires_at = serializers.DateTimeField(allow_null=True)
     is_trial_active = serializers.BooleanField()
@@ -110,9 +111,15 @@ class BillingSummarySerializer(serializers.Serializer):
 
     # Plan info
     plan = serializers.CharField()
+    plan_tier = serializers.CharField()
     status = serializers.CharField()
     trial_expires_at = serializers.DateTimeField(allow_null=True)
     next_billing_date = serializers.DateTimeField(allow_null=True)
+
+    # Explicit boolean flags for frontend
+    is_paid = serializers.BooleanField()
+    is_trial_active = serializers.BooleanField()
+    is_trial_expired = serializers.BooleanField()
 
     # Usage summary
     usage_summary = serializers.DictField()

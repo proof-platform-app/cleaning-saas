@@ -24,6 +24,9 @@ class StartStandardTrialView(APIView):
 
     URL: POST /api/cleanproof/trials/start/
     Требует: авторизацию (Token / JWT — как уже настроено в проекте).
+
+    Body (optional):
+    - tier: "standard" | "pro" | "enterprise" (default: "standard")
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -32,10 +35,19 @@ class StartStandardTrialView(APIView):
         user = request.user
         company: Company = user.company
 
+        # Get tier from request body (default to standard)
+        tier = request.data.get("tier", Company.TIER_STANDARD)
+        if tier not in [Company.TIER_STANDARD, Company.TIER_PRO, Company.TIER_ENTERPRISE]:
+            tier = Company.TIER_STANDARD
+
         now = timezone.now()
 
-        # Если trial уже активен и не истёк — просто возвращаем статус
+        # Если trial уже активен и не истёк — обновляем tier если нужно и возвращаем статус
         if company.trial_expires_at and company.trial_expires_at > now and company.plan == Company.PLAN_TRIAL:
+            # Update tier if different
+            if company.plan_tier != tier:
+                company.plan_tier = tier
+                company.save(update_fields=["plan_tier"])
             data = self._serialize_company(company)
             return Response(data, status=status.HTTP_200_OK)
 
@@ -44,12 +56,14 @@ class StartStandardTrialView(APIView):
         from datetime import timedelta
 
         company.plan = Company.PLAN_TRIAL
+        company.plan_tier = tier
         company.trial_started_at = now
         company.trial_expires_at = now + timedelta(days=7)
         company.updated_at = now
         company.save(
             update_fields=[
                 "plan",
+                "plan_tier",
                 "trial_started_at",
                 "trial_expires_at",
                 "updated_at",
@@ -71,6 +85,7 @@ class StartStandardTrialView(APIView):
         serializer = TrialStatusSerializer(
             {
                 "plan": company.plan,
+                "plan_tier": company.plan_tier,
                 "trial_started_at": company.trial_started_at,
                 "trial_expires_at": company.trial_expires_at,
                 "is_trial_active": is_active,
@@ -101,6 +116,9 @@ class UsageSummaryView(APIView):
         user = request.user
         company: Company = user.company
 
+        # Paid status — plan == active
+        is_paid = company.plan == Company.PLAN_ACTIVE
+
         # Trial-состояние — через методы Company
         is_active = company.is_trial_active
         is_expired = company.is_trial_expired()
@@ -128,6 +146,8 @@ class UsageSummaryView(APIView):
 
         data = {
             "plan": company.plan,
+            "plan_tier": company.plan_tier,
+            "is_paid": is_paid,
             "is_trial_active": is_active,
             "is_trial_expired": is_expired,
             "days_left": days_left,
@@ -147,9 +167,13 @@ class UpgradeToActiveView(APIView):
     URL: POST /api/cleanproof/upgrade-to-active/
     Требует: авторизацию.
 
+    Body (optional):
+    - tier: "standard" | "pro" | "enterprise"
+
     Назначение:
     - Переключает company.plan с "trial" на "active"
-    - Идемпотентно: если уже active — ничего не делаем
+    - Опционально устанавливает plan_tier
+    - Идемпотентно: если уже active — только обновляем tier при необходимости
     - Возвращает обновлённый статус компании
     """
 
@@ -159,12 +183,16 @@ class UpgradeToActiveView(APIView):
         user = request.user
         company: Company = user.company
 
-        # Переводим в active plan
-        company.upgrade_to_active()
+        # Get tier from request body (optional)
+        tier = request.data.get("tier")
+
+        # Переводим в active plan с опциональным tier
+        company.upgrade_to_active(tier=tier)
 
         # Возвращаем обновлённый статус
         data = {
             "plan": company.plan,
+            "plan_tier": company.plan_tier,
             "trial_started_at": company.trial_started_at,
             "trial_expires_at": company.trial_expires_at,
             "is_trial_active": company.is_trial_active,

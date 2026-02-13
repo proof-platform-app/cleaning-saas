@@ -13,6 +13,12 @@ import {
   isForbiddenError,
   isNotImplementedError,
 } from "@/utils/apiErrors";
+import { AccessRestricted } from "@/components/access/AccessRestricted";
+import {
+  TRIAL_COPY,
+  BILLING_COPY,
+  formatPlanTier,
+} from "@/constants/copy";
 
 interface UsageMetric {
   label: string;
@@ -43,17 +49,8 @@ export default function Billing() {
   const [billingData, setBillingData] = useState<BillingSummary | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<number | null>(null);
 
-  // Redirect Staff/Cleaner users with clear explanation
-  useEffect(() => {
-    if (!canAccess) {
-      toast({
-        variant: "destructive",
-        title: "Access restricted",
-        description: "Billing is only available to account owners and managers. Contact your administrator for billing inquiries.",
-      });
-      navigate("/settings", { replace: true });
-    }
-  }, [canAccess, navigate, toast]);
+  // Show AccessRestricted for Staff/Cleaner users
+  // No redirect - show the restriction screen inline
 
   // Fetch billing data
   useEffect(() => {
@@ -102,9 +99,15 @@ export default function Billing() {
     };
   }, [canAccess, navigate, toast]);
 
-  // Trial countdown logic
+  // Check if company is paid (use API boolean flag)
+  const isPaid = billingData?.is_paid ?? false;
+
+  // Trial countdown logic with consistent copy
   const getTrialStatus = (): { daysRemaining: number; expired: boolean; message: string } | null => {
     if (!billingData) return null;
+
+    // Paid companies don't show trial status
+    if (isPaid) return null;
 
     // Only show trial countdown if status is "trial" or plan is "trial"
     const isTrial = billingData.status === "trial" || billingData.plan === "trial";
@@ -120,14 +123,14 @@ export default function Billing() {
         return {
           daysRemaining: 0,
           expired: true,
-          message: "Trial expired",
+          message: TRIAL_COPY.trialExpired,
         };
       }
 
       return {
         daysRemaining: diffDays,
         expired: false,
-        message: `Trial expires in ${diffDays} ${diffDays === 1 ? "day" : "days"}`,
+        message: TRIAL_COPY.trialActive(diffDays),
       };
     } catch (error) {
       console.error("Failed to parse trial_expires_at:", error);
@@ -199,14 +202,7 @@ export default function Billing() {
   };
 
   // Helper functions to format API data
-  const formatPlanName = (plan: string): string => {
-    const planMap: Record<string, string> = {
-      trial: "Trial Plan",
-      active: "Pro Plan",
-      blocked: "Suspended",
-    };
-    return planMap[plan] || plan;
-  };
+  // formatPlanTier imported from @/constants/copy
 
   const formatNextBillingDate = (date: string | null): string => {
     if (!date) return "N/A";
@@ -237,9 +233,16 @@ export default function Billing() {
     }
   };
 
-  // Don't render if access check fails (will redirect)
+  // Show AccessRestricted screen for unauthorized roles
   if (!canAccess) {
-    return null;
+    return (
+      <AccessRestricted
+        role={user.role}
+        area="Billing"
+        backTo="/settings"
+        backLabel="Back to Settings"
+      />
+    );
   }
 
   // Loading state
@@ -325,7 +328,7 @@ export default function Billing() {
 
   // Prepare data for rendering
   const plan = {
-    name: formatPlanName(billingData.plan),
+    name: formatPlanTier(billingData.plan_tier),
     status: billingData.status,
     nextBillingDate: formatNextBillingDate(billingData.next_billing_date),
   };
@@ -410,24 +413,38 @@ export default function Billing() {
       {isOwner && (
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
-          <p className="text-emerald-900">
-            You are the <span className="font-medium">billing administrator</span> for this account.
-            You can manage subscriptions, payment methods, and view invoices.
-          </p>
+          <p className="text-emerald-900">{BILLING_COPY.ownerBanner}</p>
         </div>
       )}
 
       {isManager && (
         <div className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-700" />
-          <p className="text-blue-900">
-            <span className="font-medium">Read-only access.</span> Only the account owner can modify billing settings, upgrade plans, or manage payment methods.
-          </p>
+          <p className="text-blue-900">{BILLING_COPY.managerBanner}</p>
+        </div>
+      )}
+
+      {/* Paid Active Banner */}
+      {isPaid && (
+        <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+              <CreditCard className="h-5 w-5 text-emerald-700" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-emerald-900">
+                Active Plan
+              </h3>
+              <p className="mt-1 text-sm text-emerald-800">
+                Your {formatPlanTier(billingData?.plan_tier ?? "standard")} is active. All features are available.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Trial Urgency Banner (Top Priority) */}
-      {trialStatus && (
+      {!isPaid && trialStatus && (
         <div
           className={`mb-6 rounded-xl border p-6 shadow-sm ${
             trialStatus.expired
@@ -455,8 +472,8 @@ export default function Billing() {
                 }`}
               >
                 {trialStatus.expired
-                  ? "You can still access existing data. Creating new jobs may be restricted until your plan is activated."
-                  : "Upgrade to keep creating new jobs and stay within limits."}
+                  ? TRIAL_COPY.trialExpiredDescription
+                  : TRIAL_COPY.trialActiveDescription}
               </p>
 
               {/* CTA */}
@@ -466,7 +483,7 @@ export default function Billing() {
                     asChild
                     className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                   >
-                    <Link to="/cleanproof/pricing">View plans & upgrade</Link>
+                    <Link to="/cleanproof/pricing">{BILLING_COPY.upgradeCta}</Link>
                   </Button>
                 ) : (
                   <>
@@ -474,11 +491,10 @@ export default function Billing() {
                       asChild
                       className="bg-blue-600 text-white hover:bg-blue-700"
                     >
-                      <Link to="/cleanproof/pricing">View plans</Link>
+                      <Link to="/cleanproof/pricing">{BILLING_COPY.viewPlans}</Link>
                     </Button>
                     <p className="mt-2 text-xs text-blue-700">
-                      Only the account owner can upgrade or modify the subscription.
-                      Contact your administrator to make changes.
+                      {BILLING_COPY.managerUpgradeNote}
                     </p>
                   </>
                 )}
@@ -525,29 +541,31 @@ export default function Billing() {
               Next billing date: {plan.nextBillingDate}
             </p>
 
-            {/* CTA Button - Owner Only */}
-            {isOwner && (
+            {/* CTA Button - Owner Only, not shown for paid users */}
+            {isOwner && !isPaid && (
               <div className="pt-2">
-                <Button className="bg-accent-primary text-white hover:bg-accent-primary/90">
-                  Manage plan
+                <Button asChild className="bg-accent-primary text-white hover:bg-accent-primary/90">
+                  <Link to="/cleanproof/contact">{BILLING_COPY.ownerCta}</Link>
                 </Button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Section A2: After Trial (Trial users only) */}
-        {trialStatus && (
+        {/* Section A2: After Trial (Trial users only, not for paid) */}
+        {!isPaid && trialStatus && (
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
             <h3 className="mb-4 text-base font-semibold text-foreground">After trial</h3>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>• You can still access existing jobs, reports, and proof history.</p>
-              <p>• Creating new jobs may be restricted until your plan is activated.</p>
-              <p>• Usage limits will remain active until you upgrade.</p>
+              {TRIAL_COPY.afterTrialInfo.map((item, index) => (
+                <p key={index}>• {item}</p>
+              ))}
             </div>
-            <p className="mt-3 text-sm font-medium text-foreground">
-              Need a paid plan? Contact us to upgrade.
-            </p>
+            <div className="mt-4">
+              <Button asChild variant="outline">
+                <Link to="/cleanproof/contact">{BILLING_COPY.ownerCta}</Link>
+              </Button>
+            </div>
           </div>
         )}
 
@@ -639,29 +657,24 @@ export default function Billing() {
               {/* Change Payment Method Button - Owner Only */}
               {isOwner && (
                 <div className="pt-2">
-                  <Button variant="outline">Change payment method</Button>
+                  <Button asChild variant="outline">
+                    <Link to="/cleanproof/contact">{BILLING_COPY.ownerCta}</Link>
+                  </Button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">No payment method on file.</p>
-              {isOwner ? (
-                <>
-                  <p className="text-sm text-foreground">
-                    Add a payment method to activate a paid plan and unlock all features.
-                  </p>
-                  <div className="pt-1">
-                    <Button asChild variant="outline">
-                      <Link to="/cleanproof/contact">Contact us to set up billing</Link>
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Only the account owner can add payment methods.
-                  Contact your administrator to set up billing.
-                </p>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {BILLING_COPY.noPaymentMethod}
+              </p>
+              <p className="text-sm text-foreground">
+                {isOwner ? BILLING_COPY.addPaymentOwner : BILLING_COPY.addPaymentNonOwner}
+              </p>
+              {isOwner && (
+                <Button asChild variant="outline">
+                  <Link to="/cleanproof/contact">{BILLING_COPY.contactToSetup}</Link>
+                </Button>
               )}
             </div>
           )}
@@ -723,7 +736,7 @@ export default function Billing() {
                         ) : (
                           <span
                             className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg text-muted-foreground/50"
-                            title="Only account owner can download invoices"
+                            title={BILLING_COPY.downloadRestricted}
                           >
                             <Download className="h-4 w-4" />
                           </span>
@@ -741,7 +754,7 @@ export default function Billing() {
               </div>
               <h3 className="text-lg font-semibold text-foreground">No invoices yet</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Invoices appear after a paid plan is activated.
+                {BILLING_COPY.noInvoices}
               </p>
             </div>
           )}

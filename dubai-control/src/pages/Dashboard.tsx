@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
+import { TrialExpiredBanner } from "@/components/access";
 import {
   Calendar,
   Clock,
@@ -12,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { getManagerTodayJobs, getUsageSummary, API_BASE_URL } from "@/api/client";
+import { TRIAL_COPY, formatPlanTier, CTA_COPY } from "@/constants/copy";
 
 type ApiJob = {
   id: number;
@@ -40,10 +42,15 @@ type UiJob = {
 };
 
 type UsageSummary = {
+  plan: string;
+  plan_tier: "standard" | "pro" | "enterprise";
+  is_paid?: boolean;
   is_trial_active: boolean;
   is_trial_expired: boolean;
   days_left?: number | null;
 };
+
+// formatPlanTier imported from @/constants/copy
 
 // Нормализуем время: поддерживаем ISO и просто "HH:MM(:SS)"
 function normalizeTime(value?: string | null): string | null {
@@ -113,8 +120,6 @@ function mapApiJobToUi(job: ApiJob): UiJob {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-
   const [todayJobs, setTodayJobs] = useState<UiJob[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -125,11 +130,12 @@ export default function Dashboard() {
   useEffect(() => {
     const trialEntry = localStorage.getItem("cleanproof_trial_entry");
 
-    if (trialEntry === "standard") {
+    // Accept any valid tier: standard, pro, enterprise
+    if (trialEntry && ["standard", "pro", "enterprise"].includes(trialEntry)) {
       // Remove flag immediately to prevent re-triggering
       localStorage.removeItem("cleanproof_trial_entry");
 
-      // Call trial start endpoint
+      // Call trial start endpoint with the selected tier
       const token = localStorage.getItem("authToken") || localStorage.getItem("auth_token");
 
       if (token) {
@@ -139,10 +145,11 @@ export default function Dashboard() {
             "Content-Type": "application/json",
             Authorization: `Token ${token}`,
           },
+          body: JSON.stringify({ tier: trialEntry }),
         })
           .then(async (resp) => {
             if (resp.ok) {
-              console.log("Trial started successfully");
+              console.log(`Trial started successfully with tier: ${trialEntry}`);
             } else {
               console.warn("Failed to start trial:", resp.status);
             }
@@ -215,22 +222,29 @@ export default function Dashboard() {
     timeZone: "Asia/Dubai", // GST / UTC+4
   }).format(todayInGulf);
 
-  // Banner texts
+  // Check if company is paid
+  const isPaid = usage?.is_paid ?? false;
+
+  // Banner texts using consistent copy
   const bannerTitle =
-    usage && usage.is_trial_expired
-      ? "Trial ended"
+    isPaid
+      ? formatPlanTier(usage?.plan_tier ?? "standard")
+      : usage && usage.is_trial_expired
+      ? TRIAL_COPY.trialExpired
       : usage && usage.is_trial_active
-      ? `Trial active · ${usage.days_left ?? 0} day${
-          (usage.days_left ?? 0) === 1 ? "" : "s"
-        } left`
-      : "Standard plan";
+      ? TRIAL_COPY.trialActive(usage.days_left ?? 0)
+      : usage
+      ? formatPlanTier(usage.plan_tier)
+      : "Loading...";
 
   const bannerDescription =
-    usage && usage.is_trial_expired
-      ? "Your 7-day free trial has ended. You can still view existing jobs and download reports, but to create new jobs you'll need to upgrade."
+    isPaid
+      ? "Your plan is active. All features are available."
+      : usage && usage.is_trial_expired
+      ? TRIAL_COPY.trialExpiredDescription
       : usage && usage.is_trial_active
-      ? "You're exploring CleanProof with full access. Upgrade anytime — no changes to your data."
-      : "You’re on a paid plan. All features are available.";
+      ? TRIAL_COPY.trialActiveDescription
+      : "You're on a paid plan. All features are available.";
 
   return (
     <div className="p-8 animate-fade-in">
@@ -279,26 +293,37 @@ export default function Dashboard() {
       )}
 
       {/* Usage / Trial banner */}
-      {usage && (
-        <div className="mb-6 rounded-xl border border-border bg-muted/40 px-4 py-3 flex items-center justify-between">
+      {usage && usage.is_trial_expired && !isPaid ? (
+        <TrialExpiredBanner
+          variant="inline"
+          title={TRIAL_COPY.trialExpired}
+          description={TRIAL_COPY.trialExpiredDescription}
+          ctaText={CTA_COPY.contactToUpgrade}
+          ctaHref={CTA_COPY.contactHref}
+          className="mb-6"
+        />
+      ) : usage ? (
+        <div className={`mb-6 rounded-xl border px-4 py-3 flex items-center justify-between ${
+          isPaid
+            ? "border-emerald-200 bg-emerald-50"
+            : "border-border bg-muted/40"
+        }`}>
           <div>
-            <p className="text-sm font-medium text-foreground">
+            <p className={`text-sm font-medium ${isPaid ? "text-emerald-900" : "text-foreground"}`}>
               {bannerTitle}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className={`mt-1 text-xs ${isPaid ? "text-emerald-700" : "text-muted-foreground"}`}>
               {bannerDescription}
             </p>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/cleanproof/pricing")}
-          >
-            Upgrade
-          </Button>
+          {!isPaid && (
+            <Button asChild variant="outline" size="sm">
+              <Link to={CTA_COPY.contactHref}>{CTA_COPY.contactToUpgrade}</Link>
+            </Button>
+          )}
         </div>
-      )}
+      ) : null}
 
       {/* Stats Grid */}
       <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -2,7 +2,7 @@
 
 > **Purpose:** This document confirms CleanProof is ready for paying customers.
 > **Last Updated:** 2026-02-13
-> **Status:** Pre-revenue validation complete
+> **Status:** Pre-revenue validation complete — Manual paid activation implemented
 
 ---
 
@@ -54,7 +54,9 @@ Pre-payment flow is complete and honest.
 | All upgrade CTAs point to `/cleanproof/contact` | **DONE** | Unified in `CTA_COPY.contactHref` |
 | No Stripe/Paddle/payment provider references | **DONE** | Billing page is contact-based |
 | Billing copy is accurate | **DONE** | "No payment method on file" + contact CTA |
-| Manual activation process documented | **DONE** | Admin sets `plan_tier` + `status=active` |
+| Manual activation process documented | **DONE** | `activate_paid_plan` management command |
+| `is_paid` flag in API responses | **DONE** | `/api/cleanproof/usage-summary/`, `/api/settings/billing/` |
+| Paid companies bypass trial checks | **DONE** | Job creation allowed regardless of `trial_expires_at` |
 
 ### Trial to Paid Conversion Flow
 1. Customer contacts via `/cleanproof/contact`
@@ -150,4 +152,5 @@ All contracts and state documents are current.
 
 | Date | Change |
 |------|--------|
+| 2026-02-13 | Manual paid activation implemented (`activate_paid_plan` command) |
 | 2026-02-13 | Initial checklist created (pre-revenue lock) |

@@ -210,12 +210,21 @@ class BillingSummaryView(APIView):
         # Invoices (empty for MVP)
         invoices = []
 
+        # Explicit boolean flags for frontend
+        is_paid = company.plan == Company.PLAN_ACTIVE
+        is_trial_active_flag = company.is_trial_active
+        is_trial_expired_flag = company.is_trial_expired()
+
         data = {
             "can_manage": can_manage,
             "plan": company.plan,
+            "plan_tier": company.plan_tier,
             "status": plan_status,
             "trial_expires_at": company.trial_expires_at,
             "next_billing_date": None,  # TODO: Add when real billing is implemented
+            "is_paid": is_paid,
+            "is_trial_active": is_trial_active_flag,
+            "is_trial_expired": is_trial_expired_flag,
             "usage_summary": usage_summary,
             "payment_method": payment_method,
             "invoices": invoices,

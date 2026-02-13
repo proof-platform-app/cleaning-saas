@@ -3,7 +3,6 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +15,8 @@ import { PlanningFiltersPanel } from "@/components/planning/PlanningFilters";
 import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
 import { CreateJobDrawer } from "@/components/planning/CreateJobDrawer";
+import { TrialExpiredBanner } from "@/components/access";
+import { TRIAL_COPY } from "@/constants/copy";
 
 import type {
   PlanningFilters,
@@ -60,16 +61,17 @@ export default function JobPlanning() {
   const [selectedJob, setSelectedJob] = useState<PlanningJob | null>(null);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
-  const navigate = useNavigate();
+  // Track if trial expired error occurred from API
+  const [trialExpiredFromApi, setTrialExpiredFromApi] = useState(false);
 
-  // null — trial ещё не трогали, объект — trial истёк
-  const [trialExpired, setTrialExpired] = useState<null | { detail: string }>(
-    null,
-  );
+  // Check if company is paid (bypasses trial expiry)
+  const isPaid = billingSummary?.is_paid ?? false;
 
   // Check if trial has expired based on billing summary
+  // Paid companies are never considered expired
   const isTrialExpired = useMemo(() => {
     if (!billingSummary) return false;
+    if (isPaid) return false; // Paid companies bypass trial check
 
     const isTrial = billingSummary.status === "trial" || billingSummary.plan === "trial";
     if (!isTrial || !billingSummary.trial_expires_at) return false;
@@ -81,7 +83,7 @@ export default function JobPlanning() {
     } catch {
       return false;
     }
-  }, [billingSummary]);
+  }, [billingSummary, isPaid]);
 
   const loadError = isPlanningError
     ? planningError?.message || "Failed to load jobs. Please try again."
@@ -117,7 +119,7 @@ export default function JobPlanning() {
 
   const handleJobCreated = (newJob: PlanningJob) => {
     // успешное создание — очищаем возможный баннер про истёкший trial
-    setTrialExpired(null);
+    setTrialExpiredFromApi(false);
 
     // Если job создана на другой день — просто перезагружаем
     if (newJob.scheduled_date !== filters.date) {
@@ -129,6 +131,9 @@ export default function JobPlanning() {
     setSelectedJob(newJob);
     void refetchPlanning();
   };
+
+  // Show trial expired banner if detected from billing or API error
+  const showTrialExpiredBanner = isTrialExpired || trialExpiredFromApi;
 
   return (
     <div className="min-h-screen bg-background">
@@ -183,23 +188,13 @@ export default function JobPlanning() {
           {/* Jobs Table - Right Column */}
           <div className="flex-1 min-w-0">
             {/* Trial expired banner */}
-            {trialExpired && (
-              <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <div>
-                  <p className="font-medium">Your free trial has ended.</p>
-                  <p className="mt-1">
-                    {trialExpired.detail ||
-                      "You can still view existing jobs and download reports, but creating new jobs requires an upgrade."}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/cleanproof/pricing")}
-                  className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Upgrade
-                </button>
-              </div>
+            {showTrialExpiredBanner && (
+              <TrialExpiredBanner
+                variant="inline"
+                title={TRIAL_COPY.trialExpired}
+                description={TRIAL_COPY.trialExpiredDescription}
+                className="mb-4"
+              />
             )}
 
             <div className="mb-4 flex items-start justify-between gap-4">

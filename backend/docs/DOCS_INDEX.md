@@ -24,6 +24,12 @@
 | **Project State** | [docs/execution/PROJECT_STATE.md](execution/PROJECT_STATE.md) | Implementation status by layer |
 | **Commercial Readiness** | [docs/commercial/COMMERCIAL_READINESS_CHECKLIST.md](commercial/COMMERCIAL_READINESS_CHECKLIST.md) | Pre-revenue go-live checklist |
 
+### Product Specifications
+
+| Document | Path | Content |
+|----------|------|---------|
+| **Paid Activation Flow** | [docs/product/PAID_ACTIVATION_FLOW_v1.md](product/PAID_ACTIVATION_FLOW_v1.md) | Manual paid plan activation (pre-Paddle) |
+
 ## Test Credentials
 
 | Role | Email/Phone | Password/PIN |
@@ -69,13 +75,14 @@ docs/
 │   └── COMMERCIAL_READINESS_CHECKLIST.md # Pre-revenue go-live checklist
 ├── execution/
 │   └── PROJECT_STATE.md    # Implementation status
+├── product/
+│   └── PAID_ACTIVATION_FLOW_v1.md # Manual paid activation spec
 ├── settings/
 │   └── VERIFICATION_CHECKLIST.md # Testing checklist
 ├── analytics/              # (future)
 ├── architecture/           # (future)
 ├── audit/                  # (future)
 ├── billing/                # (future)
-├── product/                # (future)
 ├── reports/                # (future)
 ├── sla/                    # (future)
 └── vision/                 # (future)

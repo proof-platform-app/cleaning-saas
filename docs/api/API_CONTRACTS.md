@@ -1,8 +1,8 @@
 # API_CONTRACTS — CleanProof
 
 Status: ACTIVE
-Version: 1.9.0
-Last updated: 2026-02-12
+Version: 1.10.0
+Last updated: 2026-02-13
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
 
@@ -27,6 +27,20 @@ Last updated: 2026-02-12
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.10.0 — 2026-02-13
+
+- NEW: Manual paid plan activation (pre-Paddle) — management command `activate_paid_plan`.
+- NEW: `is_paid` boolean field in `/api/cleanproof/usage-summary/` response.
+- NEW: `is_paid`, `is_trial_active`, `is_trial_expired` boolean fields in `/api/settings/billing/` response.
+- CHANGED: Paid companies (`plan=active`) bypass trial expiry checks — job creation always allowed.
+- CHANGED: Frontend shows "Active Plan" banner and hides upgrade CTAs for paid companies.
+
+### 1.9.1 — 2026-02-13
+
+- FIXED: Invoice download RBAC clarified — owner-only (Manager gets 403, not 501).
+- NEW: RBAC summary table (section 0.5.1) — quick reference for Settings & Billing permissions.
+- NEW: Trial enforcement section (section 0.5.2) — documents `code: "trial_expired"` error format.
 
 ### 1.9.0 — 2026-02-12
 
@@ -164,13 +178,71 @@ Manager:  manager@test.com /  Test1234!
 
 ### 0.5. Роли
 
-* `role = "manager"` — доступ ко всем manager-* эндпоинтам.
+* `role = "owner"` — полный доступ ко всем manager и billing эндпоинтам.
+* `role = "manager"` — доступ ко всем manager-* эндпоинтам, read-only billing.
+* `role = "staff"` — ограниченный доступ (no billing, no company management).
 * `role = "cleaner"` — доступ только к cleaner-* эндпоинтам.
 * Backend всегда проверяет:
 
   * роль;
   * принадлежность объекта компании / пользователю;
   * коммерческий статус компании (trial, blocked, active).
+
+### 0.5.1. RBAC Summary — Settings & Billing
+
+| Endpoint | Owner | Manager | Staff | Cleaner |
+|----------|-------|---------|-------|---------|
+| `GET /api/settings/billing/` | ✅ `can_manage=true` | ✅ `can_manage=false` | ❌ 403 | ❌ 403 |
+| `GET /api/settings/billing/invoices/:id/download/` | ✅ 501 (stub) | ❌ 403 | ❌ 403 | ❌ 403 |
+| `GET /api/company/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `PATCH /api/company/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `GET /api/company/cleaners/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `POST /api/company/cleaners/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `POST /api/manager/jobs/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+
+**Key rules:**
+- **Invoice download is owner-only.** Manager gets 403 (read-only billing access).
+- **Staff/Cleaner are blocked** from all billing and company endpoints.
+- **Trial enforcement** applies to job creation regardless of role (see 0.5.2).
+
+### 0.5.2. Trial Enforcement — Job Creation
+
+When creating a job (`POST /api/manager/jobs/`), the backend checks commercial status:
+
+**Trial expired:**
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "code": "trial_expired",
+  "detail": "Your free trial has ended. You can still view existing jobs and download reports, but creating new jobs requires an upgrade."
+}
+```
+
+**Company blocked:**
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "code": "company_blocked",
+  "detail": "Your account is currently blocked. Please contact support."
+}
+```
+
+**Trial jobs limit reached:**
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "code": "trial_jobs_limit_reached",
+  "detail": "Your free trial allows up to <LIMIT> jobs. Please upgrade your plan to create more jobs."
+}
+```
+
+The `code` field is machine-readable and used by frontend to show appropriate UI (e.g., trial expired banner, upgrade CTA).
 
 ### 0.6. Координаты как источник истины
 
@@ -2460,7 +2532,8 @@ Authorization: Token <token>
 **Auth:** Required (Token).
 
 **RBAC:**
-- Owner/Manager: 501 Not Implemented
+- Owner: 501 Not Implemented (owner-only action)
+- Manager: 403 Forbidden (read-only billing access)
 - Staff/Cleaner: 403 Forbidden
 
 **Request:**
