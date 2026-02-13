@@ -71,24 +71,48 @@ Pre-payment flow is complete and honest.
 
 ## 4. Security & Deployment
 
-Production security baseline.
+Production security baseline — **HARDENED** in config/settings.py.
 
 | Checkpoint | Status | Notes |
 |------------|--------|-------|
-| `DEBUG=False` in production | **REQUIRED** | `.env` or environment variable |
-| No sensitive data in logs | **REQUIRED** | Passwords, tokens, PII excluded |
-| `SECRET_KEY` is unique | **REQUIRED** | Generate new key for production |
-| `ALLOWED_HOSTS` configured | **REQUIRED** | Only production domains |
-| CORS restricted | **REQUIRED** | Only frontend domain(s) |
+| `DEBUG=False` in production | **DONE** | Defaults to False, env-driven |
+| No sensitive data in logs | **DONE** | Logging configured for production |
+| `SECRET_KEY` from environment | **DONE** | Raises error if missing in production |
+| `ALLOWED_HOSTS` env-driven | **DONE** | `ALLOWED_HOSTS` env variable |
+| CORS restricted | **DONE** | `CORS_ORIGINS` env variable, no wildcards |
 | Admin endpoints protected | **DONE** | Requires superuser authentication |
 | Token authentication secure | **DONE** | DRF TokenAuthentication |
+| Security headers enabled | **DONE** | HSTS, X-Frame, etc. when DEBUG=False |
+| Email password from env | **DONE** | `EMAIL_HOST_PASSWORD` env variable |
+
+### Production Environment Variables
+
+```bash
+# Required
+SECRET_KEY=<generate-unique-key>
+ALLOWED_HOSTS=cleanproof.com,www.cleanproof.com
+CORS_ORIGINS=https://cleanproof.com,https://www.cleanproof.com
+
+# Optional (defaults shown)
+DEBUG=False
+EMAIL_HOST_PASSWORD=<gmail-app-password>
+SECURE_SSL_REDIRECT=True
+```
+
+### Generate SECRET_KEY
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
 
 ### Pre-Deployment Checklist
+
 ```bash
 # Verify production settings
-python manage.py check --deploy
+SECRET_KEY=test ALLOWED_HOSTS=localhost python manage.py check --deploy
 
-# Expected: No critical issues
+# Run with production mode simulation
+DEBUG=False SECRET_KEY=test ALLOWED_HOSTS=localhost python manage.py runserver
 ```
 
 ---
@@ -152,5 +176,6 @@ All contracts and state documents are current.
 
 | Date | Change |
 |------|--------|
+| 2026-02-13 | Production hardening v1 — env-driven settings, security headers, logging |
 | 2026-02-13 | Manual paid activation implemented (`activate_paid_plan` command) |
 | 2026-02-13 | Initial checklist created (pre-revenue lock) |
