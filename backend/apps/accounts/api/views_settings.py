@@ -228,6 +228,9 @@ class BillingSummaryView(APIView):
 class InvoiceDownloadView(APIView):
     """
     GET /api/settings/billing/invoices/:id/download - Download invoice PDF
+
+    RBAC: Owner only (billing admin action)
+    Manager/Staff/Cleaner: 403 Forbidden
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -235,9 +238,9 @@ class InvoiceDownloadView(APIView):
         user = request.user
         role = user.role
 
-        # RBAC: Staff users cannot access billing
-        if role == User.ROLE_STAFF or role == User.ROLE_CLEANER:
-            return forbidden_error("Billing access restricted to administrators")
+        # RBAC: Only Owner can download invoices
+        if role != User.ROLE_OWNER:
+            return forbidden_error("Only account owner can download invoices")
 
         # Not implemented yet (no Stripe integration)
         return not_implemented_error("Invoice download is not available yet")

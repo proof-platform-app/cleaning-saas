@@ -708,18 +708,27 @@ export default function Billing() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleDownloadInvoice(Number(invoice.id))}
-                          disabled={downloadingInvoice === Number(invoice.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                          title="Download invoice"
-                        >
-                          {downloadingInvoice === Number(invoice.id) ? (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          ) : (
+                        {isOwner ? (
+                          <button
+                            onClick={() => handleDownloadInvoice(Number(invoice.id))}
+                            disabled={downloadingInvoice === Number(invoice.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                            title="Download invoice"
+                          >
+                            {downloadingInvoice === Number(invoice.id) ? (
+                              <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg text-muted-foreground/50"
+                            title="Only account owner can download invoices"
+                          >
                             <Download className="h-4 w-4" />
-                          )}
-                        </button>
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
