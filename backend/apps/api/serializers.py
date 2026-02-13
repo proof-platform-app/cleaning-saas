@@ -260,6 +260,12 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({"cleaner_id": "Invalid cleaner"})
 
+        # Block assignment of inactive cleaners
+        if not cleaner.is_active:
+            raise serializers.ValidationError(
+                {"cleaner_id": "Cleaner is inactive and cannot be assigned to jobs"}
+            )
+
         template = None
         template_id = attrs.get("checklist_template_id")
         if template_id:

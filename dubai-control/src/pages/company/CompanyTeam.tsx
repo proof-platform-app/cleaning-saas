@@ -250,16 +250,31 @@ export default function CompanyTeam() {
               </thead>
               <tbody className="divide-y divide-border bg-card">
                 {cleaners.map((cleaner) => (
-                  <tr key={cleaner.id} className="transition-colors hover:bg-muted/30">
+                  <tr
+                    key={cleaner.id}
+                    className={`transition-colors hover:bg-muted/30 ${
+                      !cleaner.is_active ? "opacity-60" : ""
+                    }`}
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${
+                            cleaner.is_active
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
                           {cleaner.full_name
                             .split(" ")
                             .map((n) => n[0])
                             .join("")}
                         </div>
-                        <div className="font-medium text-foreground">
+                        <div
+                          className={`font-medium ${
+                            cleaner.is_active ? "text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
                           {cleaner.full_name}
                         </div>
                       </div>
@@ -306,10 +321,18 @@ export default function CompanyTeam() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() => handleResetAccess(cleaner)}
-                            disabled={resetAccessMutation.isPending}
+                            disabled={resetAccessMutation.isPending || !cleaner.is_active}
+                            title={
+                              !cleaner.is_active
+                                ? "Cleaner is inactive and cannot be assigned to jobs"
+                                : undefined
+                            }
                           >
                             <Key className="mr-2 h-4 w-4" />
                             Reset access
+                            {!cleaner.is_active && (
+                              <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>
+                            )}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleViewAuditLog(cleaner)}>
                             <History className="mr-2 h-4 w-4" />

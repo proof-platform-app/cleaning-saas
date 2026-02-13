@@ -10,12 +10,24 @@ class AccessAuditLog(models.Model):
     - Cleaner creation
     - Password resets
     - Status changes (active/inactive)
+    - Login events
     """
 
+    # Action type constants
+    ACTION_CLEANER_CREATED = "cleaner_created"
+    ACTION_PASSWORD_RESET = "password_reset"
+    ACTION_STATUS_CHANGED = "status_changed"
+    ACTION_LOGIN_SUCCESS = "login_success"
+    ACTION_DEACTIVATED = "deactivated"
+    ACTION_REACTIVATED = "reactivated"
+
     ACTION_CHOICES = [
-        ("cleaner_created", "Cleaner created"),
-        ("password_reset", "Password reset"),
-        ("status_changed", "Cleaner status changed"),
+        (ACTION_CLEANER_CREATED, "Cleaner created"),
+        (ACTION_PASSWORD_RESET, "Password reset"),
+        (ACTION_STATUS_CHANGED, "Cleaner status changed"),
+        (ACTION_LOGIN_SUCCESS, "Login success"),
+        (ACTION_DEACTIVATED, "Deactivated"),
+        (ACTION_REACTIVATED, "Reactivated"),
     ]
 
     company = models.ForeignKey(

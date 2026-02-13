@@ -133,6 +133,13 @@ class JobCheckInView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Block inactive cleaners from check-in
+        if not user.is_active:
+            return Response(
+                {"detail": "Account deactivated. Cannot check in."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         job = get_object_or_404(
             Job.objects.select_related("location"),
             pk=pk,
@@ -204,6 +211,13 @@ class JobCheckOutView(APIView):
         if user.role != User.ROLE_CLEANER:
             return Response(
                 {"detail": "Only cleaners can check out."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Block inactive cleaners from check-out
+        if not user.is_active:
+            return Response(
+                {"detail": "Account deactivated. Cannot check out."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

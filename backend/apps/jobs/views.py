@@ -170,6 +170,10 @@ def jobs_create(request):
         location = get_object_or_404(Location, id=location_id)
         cleaner = get_object_or_404(User, id=cleaner_id)
 
+        # Block assignment of inactive cleaners
+        if not cleaner.is_active:
+            return _json_error("Cleaner is inactive and cannot be assigned to jobs", 400)
+
         checklist_template = None
         if checklist_template_id:
             checklist_template = get_object_or_404(ChecklistTemplate, id=int(checklist_template_id))
