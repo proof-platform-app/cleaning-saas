@@ -760,6 +760,68 @@ Authorization: Token <token>
 
 ---
 
+## 29.1 Sales-Assisted Onboarding (Management Commands)
+
+### Create Company with Owner
+
+Used for manual client onboarding without public registration.
+
+```bash
+# Basic usage (auto-generated password)
+python manage.py create_company_with_owner \
+    --company-name "Acme Cleaning LLC" \
+    --owner-email "admin@acme.com"
+
+# With specific password
+python manage.py create_company_with_owner \
+    --company-name "Acme Cleaning LLC" \
+    --owner-email "admin@acme.com" \
+    --owner-name "John Smith" \
+    --temp-password "SecurePass123!"
+
+# With phone number and trial plan
+python manage.py create_company_with_owner \
+    --company-name "Acme Cleaning LLC" \
+    --owner-email "admin@acme.com" \
+    --owner-phone "+971501234567" \
+    --plan trial
+```
+
+**Arguments:**
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--company-name` | Yes | Company name |
+| `--owner-email` | Yes | Owner email (login) |
+| `--owner-name` | No | Full name (extracted from email if not provided) |
+| `--owner-phone` | No | Phone number |
+| `--temp-password` | No | Temporary password (auto-generated if not provided) |
+| `--plan` | No | `active` (default) or `trial` (7-day) |
+
+**Output:**
+- Company ID
+- Owner ID and email
+- Temporary password (shown once, not logged)
+- Login instructions
+
+**Security:**
+- Password is printed ONCE and not logged to files
+- Send credentials via secure channel (WhatsApp, Signal)
+- Recommend owner change password after first login
+
+### Ensure Company Owner
+
+Fixes existing companies without an Owner by promoting the earliest Manager.
+
+```bash
+# Dry run (shows what would be changed)
+python manage.py ensure_company_owner
+
+# Apply changes
+python manage.py ensure_company_owner --apply
+```
+
+---
+
 ## 30. Jobs — Cleaner Flow
 
 ### Today Jobs (Cleaner)

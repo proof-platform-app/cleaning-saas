@@ -137,7 +137,10 @@ Frontend, mobile, backend (как напоминание инвариантов)
 - execution-флоу (jobs, check-in/out, photos, checklist);
 - правила GPS, proof, SLA;
 - trial / commercial поведение;
-- инварианты и “что нарушать нельзя”.
+- инварианты и "что нарушать нельзя";
+- **sales-assisted onboarding commands** (section 29.1):
+  - `create_company_with_owner` — создание компании с Owner
+  - `ensure_company_owner` — исправление компаний без Owner.
 
 **Как менять:**
 
