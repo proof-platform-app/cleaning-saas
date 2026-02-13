@@ -22,6 +22,7 @@
 | Document | Path | Content |
 |----------|------|---------|
 | **Project State** | [docs/execution/PROJECT_STATE.md](execution/PROJECT_STATE.md) | Implementation status by layer |
+| **Commercial Readiness** | [docs/commercial/COMMERCIAL_READINESS_CHECKLIST.md](commercial/COMMERCIAL_READINESS_CHECKLIST.md) | Pre-revenue go-live checklist |
 
 ## Test Credentials
 
@@ -64,6 +65,8 @@ docs/
 ├── api/
 │   ├── API_CONTRACTS.md    # Error formats, RBAC matrix
 │   └── SETTINGS_API_RBAC.md # Settings API details
+├── commercial/
+│   └── COMMERCIAL_READINESS_CHECKLIST.md # Pre-revenue go-live checklist
 ├── execution/
 │   └── PROJECT_STATE.md    # Implementation status
 ├── settings/
