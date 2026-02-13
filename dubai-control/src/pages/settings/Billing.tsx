@@ -473,7 +473,6 @@ export default function Billing() {
                     <Button
                       asChild
                       variant="outline"
-                      className="opacity-75"
                     >
                       <Link to="/cleanproof/pricing">View plans</Link>
                     </Button>
