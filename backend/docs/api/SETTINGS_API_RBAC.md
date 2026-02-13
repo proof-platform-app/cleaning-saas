@@ -30,7 +30,7 @@ This document defines Role-Based Access Control rules for Settings API endpoints
 | Endpoint | Method | Owner | Manager | Staff | Cleaner | Notes |
 |----------|--------|-------|---------|-------|---------|-------|
 | `/api/settings/billing/` | GET | 200 (can_manage=true) | 200 (can_manage=false) | 403 | 403 | Only Owner/Manager roles allowed |
-| `/api/settings/billing/invoices/:id/download/` | GET | 501 | 501 | 403 | 403 | Not implemented yet; 403 for Staff/Cleaner |
+| `/api/settings/billing/invoices/:id/download/` | GET | 501 | 403 | 403 | 403 | Owner-only; Not implemented yet (501); Others get 403 |
 
 ## Response Examples
 
@@ -156,3 +156,91 @@ STAFF_TOKEN=$(curl -s -X POST http://localhost:8000/api/manager/auth/login/ \
 curl -X GET http://localhost:8000/api/settings/billing/ \
   -H "Authorization: Token $STAFF_TOKEN"
 ```
+
+## RBAC Smoke Test Script
+
+A comprehensive automated RBAC regression test is available:
+
+### Running the Test
+
+```bash
+cd backend
+./verify_roles.sh
+```
+
+### What It Tests
+
+The script performs 20 tests across all roles (Owner, Manager, Staff, Cleaner):
+
+1. **Auth/Me endpoints** (5 tests)
+   - GET /api/me - all roles can access
+   - POST /api/me/change-password - 403 for SSO users
+
+2. **Settings/Billing endpoints** (7 tests)
+   - GET /api/settings/billing - Owner/Manager can access, Staff/Cleaner blocked
+   - GET /api/settings/billing/invoices/:id/download - Owner-only (501), others blocked (403)
+
+3. **Company/Team endpoints** (6 tests)
+   - GET /api/company - Owner/Manager can access, Staff blocked
+   - GET /api/company/cleaners - Owner/Manager can access
+   - POST /api/company/cleaners/:id/reset-access - Owner/Manager can reset, Staff blocked
+
+4. **Trial enforcement** (2 tests)
+   - Job creation blocked with expired trial (returns code `trial_expired`)
+
+### Test Credentials
+
+The script uses these test users (created via `setup_test_users.py`):
+
+| Role | Email/Phone | Password/PIN |
+|------|-------------|--------------|
+| Owner | owner@test.com | testpass123! |
+| Manager | manager@test.com | testpass123! |
+| Staff | staff@test.com | testpass123! |
+| SSO Owner | sso@test.com | testpass123! |
+| Cleaner | +971500000001 | PIN 1234 |
+
+### Expected Output
+
+```
+============================================================
+RBAC SMOKE TEST — verify_roles.sh
+============================================================
+
+[1/7] Setting up test users
+  ✓ Test users created/updated
+
+[2/7] Checking server
+  ✓ Server already running
+
+[3/7] Getting auth tokens
+  ✓ Owner token acquired
+  ✓ Manager token acquired
+  ✓ Staff token acquired
+  ✓ Cleaner token acquired
+
+[4/7] Testing Auth/Me endpoints
+  → Owner GET /api/me... ✓ Owner can access /api/me
+  → Manager GET /api/me... ✓ Manager can access /api/me
+  ...
+
+============================================================
+SUMMARY
+============================================================
+
+Total tests: 20
+Passed: 20
+Failed: 0
+
+============================================================
+ALL PASSED
+============================================================
+```
+
+### Usage Notes
+
+- No `jq` dependency - uses Python for JSON parsing
+- Runs in ~30-60 seconds
+- Automatically creates test users if needed
+- Restores trial state after testing
+- Exit code 0 = all passed, non-zero = failures
