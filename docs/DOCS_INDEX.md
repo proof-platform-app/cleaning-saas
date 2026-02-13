@@ -788,6 +788,39 @@ Owner and Manager roles only (RBAC enforced).
 
 ---
 
+## 20.1 Owner/Manager Role Model
+
+### `docs/product/OWNER_MANAGER_MODEL_v1.md`
+
+**Роль:**
+Design specification for Owner/Manager role distinction and RBAC rules.
+
+**Кому:**
+Product, backend engineer, frontend engineer, founder.
+
+**Когда использовать:**
+
+- при проектировании новых features с RBAC;
+- при понимании различия Owner vs Manager;
+- при планировании onboarding flow;
+- при проверке, какая роль имеет доступ к какой функции.
+
+**Что внутри:**
+
+- Terminology: Owner (Billing Admin) vs Manager (Ops Admin);
+- Onboarding models: self-serve vs sales-assisted;
+- RBAC matrix for all existing features (billing, company, team, jobs, reports);
+- Non-goals: transfer ownership, invites, multi-owner, payment integration;
+- Implementation notes (existing code references).
+
+**Как менять:**
+
+- обновлять при изменении RBAC rules;
+- обновлять при добавлении новых features с role-based access;
+- версионировать в CHANGELOG.
+
+---
+
 ## 21. Как пользоваться всей системой документов
 
 Ниже — типовые ситуации и **какой документ открывать в первую очередь**.
