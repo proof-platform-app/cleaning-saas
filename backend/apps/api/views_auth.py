@@ -201,8 +201,10 @@ class ManagerSignupView(APIView):
     """
     Public signup endpoint.
 
-    Создаёт новую компанию + первого менеджера.
+    Создаёт новую компанию + первого пользователя (Owner).
     Не требует аутентификации.
+
+    IMPORTANT: First user of a company is always Owner (Billing Admin).
     """
 
     authentication_classes: list = []
@@ -211,7 +213,7 @@ class ManagerSignupView(APIView):
     def post(self, request, *args, **kwargs):
         company_name = (request.data.get("company_name") or "").strip()
         full_name = (request.data.get("full_name") or "").strip()
-        email = (request.data.get("email") or "").strip()
+        email = (request.data.get("email") or "").strip().lower()
         password = request.data.get("password") or ""
 
         errors: dict[str, list[str]] = {}
@@ -228,32 +230,33 @@ class ManagerSignupView(APIView):
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Проверяем уникальность email среди менеджеров
+        # Check email uniqueness among all console users (owner, manager, staff)
         if User.objects.filter(
             email__iexact=email,
-            role=User.ROLE_MANAGER,
+            role__in=[User.ROLE_OWNER, User.ROLE_MANAGER, User.ROLE_STAFF],
         ).exists():
             return Response(
-                {"email": ["A manager with this email already exists."]},
+                {"email": ["A user with this email already exists."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Создаём компанию (остальные поля по умолчанию)
+        # Create company
         company = Company.objects.create(
             name=company_name,
             contact_email=email,
         )
 
-        # Создаём менеджера
-        manager = User.objects.create(
+        # Create first user as OWNER (not manager)
+        # Owner = Billing Admin, has full control over company
+        owner = User.objects.create(
             company=company,
-            role=User.ROLE_MANAGER,
+            role=User.ROLE_OWNER,  # First user is always Owner
             email=email,
             full_name=full_name,
             is_active=True,
         )
-        manager.set_password(password)
-        manager.save(update_fields=["password"])
+        owner.set_password(password)
+        owner.save(update_fields=["password"])
 
         data = {
             "company": {
@@ -261,9 +264,10 @@ class ManagerSignupView(APIView):
                 "name": company.name,
             },
             "user": {
-                "id": manager.id,
-                "email": manager.email,
-                "full_name": manager.full_name,
+                "id": owner.id,
+                "email": owner.email,
+                "full_name": owner.full_name,
+                "role": owner.role,
             },
         }
         return Response(data, status=status.HTTP_201_CREATED)

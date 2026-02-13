@@ -42,8 +42,10 @@ The following **cannot change** in Platform Layer v1 without explicit version bu
 
 ### 2.1. Role Model
 - Four roles: `owner`, `manager`, `staff`, `cleaner`
+- **Owner uniqueness:** exactly one Owner per company (first user = Owner)
 - RBAC matrix for Settings/Billing endpoints
 - Role-based visibility (e.g., Staff cannot see Billing link)
+- Management command `ensure_company_owner` for data integrity
 
 ### 2.2. Error Response Structure
 ```json

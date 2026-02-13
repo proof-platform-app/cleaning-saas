@@ -1,8 +1,25 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.6)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.7)
 
-Обновлено: 2026-02-12
+Обновлено: 2026-02-13
 
 ## Changelog
+
+### v7.7 — 2026-02-13
+
+**NEW:**
+- Owner Assignment Deterministic — DONE ✅
+- First user of new company is automatically Owner (not Manager)
+- Management command `ensure_company_owner` to fix existing companies
+- Cleaner Lifecycle Model (is_active enforcement) — DONE ✅
+
+**CHANGED:**
+- ManagerSignupView now creates Owner (was: Manager)
+- Email uniqueness check includes all console roles (owner, manager, staff)
+- Inactive cleaners blocked from: login, job assignment, check-in, check-out
+
+**ARCHITECTURE:**
+- Every company guaranteed to have exactly 1 Owner (Billing Admin)
+- Owner/Manager role distinction formalized in docs/product/OWNER_MANAGER_MODEL_v1.md
 
 ### v7.6 — 2026-02-12
 
