@@ -26,6 +26,7 @@ import {
   resetCleanerPin,
   type Cleaner as ApiCleaner,
 } from "@/api/client";
+import { PLAN_STATUS } from "@/constants/copy";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -278,7 +279,7 @@ export default function Settings() {
     if (!usage) return null;
 
     const isTrialPlan =
-      usage.plan === "trial" || usage.is_trial_active === true;
+      usage.plan === PLAN_STATUS.TRIAL || usage.is_trial_active === true;
 
     if (!isTrialPlan) return null;
 

@@ -16,7 +16,7 @@ import { JobsTable } from "@/components/planning/JobsTable";
 import { JobSidePanel } from "@/components/planning/JobSidePanel";
 import { CreateJobDrawer } from "@/components/planning/CreateJobDrawer";
 import { TrialExpiredBanner } from "@/components/access";
-import { TRIAL_COPY } from "@/constants/copy";
+import { TRIAL_COPY, PLAN_STATUS, BILLING_STATUS } from "@/constants/copy";
 
 import type {
   PlanningFilters,
@@ -73,7 +73,7 @@ export default function JobPlanning() {
     if (!billingSummary) return false;
     if (isPaid) return false; // Paid companies bypass trial check
 
-    const isTrial = billingSummary.status === "trial" || billingSummary.plan === "trial";
+    const isTrial = billingSummary.status === BILLING_STATUS.TRIAL || billingSummary.plan === PLAN_STATUS.TRIAL;
     if (!isTrial || !billingSummary.trial_expires_at) return false;
 
     try {

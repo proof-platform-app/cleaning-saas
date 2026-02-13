@@ -17,6 +17,8 @@ import { AccessRestricted } from "@/components/access/AccessRestricted";
 import {
   TRIAL_COPY,
   BILLING_COPY,
+  PLAN_STATUS,
+  BILLING_STATUS,
   formatPlanTier,
 } from "@/constants/copy";
 
@@ -110,7 +112,7 @@ export default function Billing() {
     if (isPaid) return null;
 
     // Only show trial countdown if status is "trial" or plan is "trial"
-    const isTrial = billingData.status === "trial" || billingData.plan === "trial";
+    const isTrial = billingData.status === BILLING_STATUS.TRIAL || billingData.plan === PLAN_STATUS.TRIAL;
     if (!isTrial || !billingData.trial_expires_at) return null;
 
     try {
@@ -523,16 +525,16 @@ export default function Billing() {
               <span className="text-sm text-muted-foreground">Status:</span>
               <span
                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                  plan.status === "active"
+                  plan.status === BILLING_STATUS.ACTIVE
                     ? "bg-status-completed-bg text-status-completed"
-                    : plan.status === "trial"
+                    : plan.status === BILLING_STATUS.TRIAL
                       ? "bg-blue-50 text-blue-700"
-                      : plan.status === "past_due"
+                      : plan.status === BILLING_STATUS.PAST_DUE
                         ? "bg-status-failed-bg text-status-failed"
                         : "bg-status-flagged-bg text-status-flagged"
                 }`}
               >
-                {plan.status === "active" ? "Active" : plan.status}
+                {plan.status === BILLING_STATUS.ACTIVE ? "Active" : plan.status}
               </span>
             </div>
 
