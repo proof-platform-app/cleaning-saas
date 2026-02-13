@@ -472,7 +472,7 @@ export default function Billing() {
                   <>
                     <Button
                       asChild
-                      variant="outline"
+                      variant="secondary"
                     >
                       <Link to="/cleanproof/pricing">View plans</Link>
                     </Button>
