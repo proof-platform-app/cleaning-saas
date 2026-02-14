@@ -1,8 +1,41 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.9)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.10)
 
-Обновлено: 2026-02-13
+Обновлено: 2026-02-14
 
 ## Changelog
+
+### v7.10 — 2026-02-14
+
+**PDF Reports Enhancement + XLSX Export — DONE ✅**
+
+Job Report PDF:
+- Company logo in header — DONE ✅
+- Color-coded status badges (completed/in_progress/scheduled) — DONE ✅
+- Blue header for summary table — DONE ✅
+- Styled notes sections with backgrounds (Manager=gray, Cleaner=yellow) — DONE ✅
+- SLA status as colored blocks (green OK / red violated) — DONE ✅
+- Human-readable SLA reason labels — DONE ✅
+- Human-readable audit event types (Check In / Check Out) — DONE ✅
+- Improved table styling with alternating rows — DONE ✅
+
+Company SLA Report PDF:
+- KPI summary cards (Total Jobs, Violations, Success Rate) — DONE ✅
+- Grammar fix for singular/plural (1 job was / 2 jobs were) — DONE ✅
+- Human-readable SLA reason labels — DONE ✅
+- Footer with page numbers and generation date — DONE ✅
+- Color-coded tables (blue headers, red for violations) — DONE ✅
+- Alternating row colors — DONE ✅
+
+XLSX Export (replaced CSV):
+- Excel format with openpyxl — DONE ✅
+- Blue header with white text — DONE ✅
+- Both readable names and IDs included — DONE ✅
+- Auto-sized columns — DONE ✅
+- Alternating row colors — DONE ✅
+
+**Documentation:**
+- docs/reports/PDF_REPORTS.md created
+- DOCS_INDEX.md updated
 
 ### v7.9 — 2026-02-13
 

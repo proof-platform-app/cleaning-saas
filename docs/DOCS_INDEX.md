@@ -30,6 +30,7 @@
 | Document | Path | Content |
 |----------|------|---------|
 | **Paid Activation Flow** | [docs/product/PAID_ACTIVATION_FLOW_v1.md](product/PAID_ACTIVATION_FLOW_v1.md) | Manual paid plan activation (pre-Paddle) |
+| **PDF Reports** | [docs/reports/PDF_REPORTS.md](reports/PDF_REPORTS.md) | Job Report, Company SLA Report, XLSX Export |
 
 ### Deployment
 
@@ -92,13 +93,15 @@ docs/
 │   └── PAID_ACTIVATION_FLOW_v1.md # Manual paid activation spec
 ├── settings/
 │   └── VERIFICATION_CHECKLIST.md # Testing checklist
+├── reports/
+│   ├── MASTER_CONTEXT_REPORTS.md # Reports overview
+│   └── PDF_REPORTS.md      # PDF/XLSX export documentation
 ├── analytics/              # (future)
-├── architecture/           # (future)
-├── audit/                  # (future)
-├── billing/                # (future)
-├── reports/                # (future)
-├── sla/                    # (future)
-└── vision/                 # (future)
+├── architecture/           # System architecture docs
+├── audit/                  # Audit trail documentation
+├── billing/                # (future - payment integration)
+├── sla/                    # SLA rules and logic
+└── vision/                 # Product vision docs
 ```
 
 ## What's "Done"
