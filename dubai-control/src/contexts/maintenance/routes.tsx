@@ -4,32 +4,42 @@
 
 import type { RouteObject } from "react-router-dom";
 
-// Existing maintenance pages (from pages/maintenance/)
-// These will be migrated here over time
-// import { ServiceVisitsPage } from "./ui/ServiceVisitsPage";
-// import { AssetDetailPage } from "./ui/AssetDetailPage";
+// Static preview pages (imported from Lovable pattern)
+// These show placeholder data and can be used for UI development
+import { VisitsPage } from "./ui/VisitsPage";
+import { AssetsPage } from "./ui/AssetsPage";
+import { TechniciansPage } from "./ui/TechniciansPage";
 
 /**
- * Maintenance context routes.
+ * Maintenance context routes (static/preview versions).
  * All paths must be under /maintenance/* namespace.
  *
- * Usage in App.tsx:
+ * These routes use static placeholder data and are useful for:
+ * - UI development without backend
+ * - Design reviews
+ * - Frontend-only testing
+ *
+ * For production, App.tsx uses pages from pages/maintenance/ with real API calls.
+ *
+ * Usage in App.tsx (if needed):
  * ```tsx
  * import { maintenanceRoutes } from "@/contexts/maintenance";
  * // Then spread or map routes in the Route tree
  * ```
  */
 export const maintenanceRoutes: RouteObject[] = [
-  // Routes will be added here as Lovable UI is imported
-  // Example:
-  // {
-  //   path: "/maintenance/visits",
-  //   element: <ServiceVisitsPage />,
-  // },
-  // {
-  //   path: "/maintenance/assets/:id",
-  //   element: <AssetDetailPage />,
-  // },
+  {
+    path: "/maintenance/visits",
+    element: <VisitsPage />,
+  },
+  {
+    path: "/maintenance/assets",
+    element: <AssetsPage />,
+  },
+  {
+    path: "/maintenance/technicians",
+    element: <TechniciansPage />,
+  },
 ];
 
 /**

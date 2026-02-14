@@ -5,9 +5,11 @@
 // Routes
 export { maintenanceRoutes, maintenancePaths } from "./routes";
 
-// UI Pages (imported from Lovable)
-// export { ServiceVisitsPage } from "./ui/ServiceVisitsPage";
-// export { AssetDetailPage } from "./ui/AssetDetailPage";
+// UI Pages (static/preview - imported from Lovable pattern)
+// These pages use placeholder data for UI development
+export { VisitsPage } from "./ui/VisitsPage";
+export { AssetsPage } from "./ui/AssetsPage";
+export { TechniciansPage } from "./ui/TechniciansPage";
 
 // Components (imported from Lovable)
 // export { VisitCard } from "./components/VisitCard";
