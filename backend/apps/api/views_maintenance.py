@@ -783,8 +783,21 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
         if date_to:
             visits = visits.filter(scheduled_date__lte=date_to)
 
-        data = [
-            {
+        data = []
+        for visit in visits:
+            # Handle optional asset (maintenance jobs may not have asset linked)
+            asset_data = None
+            if visit.asset:
+                asset_data = {
+                    "id": visit.asset.id,
+                    "name": visit.asset.name,
+                    "asset_type": {
+                        "id": visit.asset.asset_type.id,
+                        "name": visit.asset.asset_type.name,
+                    } if visit.asset.asset_type else None,
+                }
+
+            data.append({
                 "id": visit.id,
                 "scheduled_date": visit.scheduled_date.isoformat(),
                 "scheduled_start_time": visit.scheduled_start_time.isoformat() if visit.scheduled_start_time else None,
@@ -798,14 +811,7 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
                     "id": visit.cleaner.id,
                     "name": visit.cleaner.full_name or visit.cleaner.email,
                 },
-                "asset": {
-                    "id": visit.asset.id,
-                    "name": visit.asset.name,
-                    "asset_type": {
-                        "id": visit.asset.asset_type.id,
-                        "name": visit.asset.asset_type.name,
-                    },
-                },
+                "asset": asset_data,
                 "category": {
                     "id": visit.maintenance_category.id,
                     "name": visit.maintenance_category.name,
@@ -814,9 +820,7 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
                 "actual_start_time": visit.actual_start_time.isoformat() if visit.actual_start_time else None,
                 "actual_end_time": visit.actual_end_time.isoformat() if visit.actual_end_time else None,
                 "created_at": visit.created_at.isoformat(),
-            }
-            for visit in visits
-        ]
+            })
 
         return Response(data, status=status.HTTP_200_OK)
 
