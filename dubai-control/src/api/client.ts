@@ -1903,8 +1903,13 @@ export async function createServiceVisit(
   input: CreateServiceVisitInput
 ): Promise<ServiceVisit> {
   await loginManager();
+  // CRITICAL: Set context to "maintenance" for service visits
+  // This ensures visits appear in /api/manager/service-visits/ not in cleaning endpoints
   return apiFetch<ServiceVisit>("/api/manager/jobs/", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      context: "maintenance",
+    }),
   });
 }

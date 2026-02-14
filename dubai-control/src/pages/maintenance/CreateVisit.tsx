@@ -161,14 +161,22 @@ export default function CreateVisit() {
       return;
     }
 
+    // Convert __none__ to null for optional fields
+    const assetId = formData.asset_id && formData.asset_id !== "__none__"
+      ? Number(formData.asset_id)
+      : null;
+    const categoryId = formData.category_id && formData.category_id !== "__none__"
+      ? Number(formData.category_id)
+      : null;
+
     createMutation.mutate({
       scheduled_date: formData.scheduled_date,
       scheduled_start_time: formData.scheduled_start_time || null,
       scheduled_end_time: formData.scheduled_end_time || null,
       location_id: Number(formData.location_id),
       cleaner_id: Number(formData.cleaner_id),
-      asset_id: formData.asset_id ? Number(formData.asset_id) : null,
-      maintenance_category_id: formData.category_id ? Number(formData.category_id) : null,
+      asset_id: assetId,
+      maintenance_category_id: categoryId,
       manager_notes: formData.manager_notes || undefined,
     });
   };
@@ -340,10 +348,10 @@ export default function CreateVisit() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No asset</SelectItem>
+                  <SelectItem value="__none__">No asset</SelectItem>
                   {filteredAssets.map((asset) => (
                     <SelectItem key={asset.id} value={String(asset.id)}>
-                      {asset.name} ({asset.asset_type.name})
+                      {asset.name}{asset.asset_type ? ` (${asset.asset_type.name})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -367,7 +375,7 @@ export default function CreateVisit() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No category</SelectItem>
+                  <SelectItem value="__none__">No category</SelectItem>
                   {categories.filter((c) => c.is_active).map((cat) => (
                     <SelectItem key={cat.id} value={String(cat.id)}>
                       {cat.name}

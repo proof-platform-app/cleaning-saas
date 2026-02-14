@@ -59,7 +59,7 @@ interface WidgetProps {
   onRetry?: () => void;
   linkTo?: string;
   linkLabel?: string;
-  variant?: "default" | "warning" | "success";
+  variant?: "default" | "warning" | "success" | "blue" | "purple" | "teal";
 }
 
 function Widget({
@@ -75,23 +75,47 @@ function Widget({
   variant = "default",
 }: WidgetProps) {
   const variantClasses = {
-    default: "border-border",
-    warning: "border-amber-500/30 bg-amber-500/5",
-    success: "border-green-500/30 bg-green-500/5",
+    default: "border-border bg-card",
+    warning: "border-amber-200 bg-amber-50/50",
+    success: "border-emerald-200 bg-emerald-50/50",
+    blue: "border-slate-200 bg-slate-50/50",
+    purple: "border-violet-200 bg-violet-50/40",
+    teal: "border-cyan-200 bg-cyan-50/40",
+  };
+
+  const iconBgClasses = {
+    default: "bg-muted/50",
+    warning: "bg-amber-100/80",
+    success: "bg-emerald-100/80",
+    blue: "bg-slate-100/80",
+    purple: "bg-violet-100/70",
+    teal: "bg-cyan-100/70",
   };
 
   const iconClasses = {
     default: "text-muted-foreground",
-    warning: "text-amber-500",
-    success: "text-green-500",
+    warning: "text-amber-600/80",
+    success: "text-emerald-600/80",
+    blue: "text-slate-600",
+    purple: "text-violet-500/80",
+    teal: "text-cyan-600/80",
+  };
+
+  const valueClasses = {
+    default: "text-foreground",
+    warning: "text-amber-900/80",
+    success: "text-emerald-900/80",
+    blue: "text-slate-700",
+    purple: "text-violet-900/80",
+    teal: "text-cyan-900/80",
   };
 
   return (
     <div
-      className={`rounded-xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md ${variantClasses[variant]}`}
+      className={`rounded-xl border p-5 shadow-sm transition-all hover:shadow-md ${variantClasses[variant]}`}
     >
       <div className="flex items-start justify-between">
-        <div className={`rounded-lg bg-muted/50 p-2 ${iconClasses[variant]}`}>
+        <div className={`rounded-lg p-2.5 ${iconBgClasses[variant]} ${iconClasses[variant]}`}>
           {icon}
         </div>
         {linkTo && (
@@ -126,7 +150,7 @@ function Widget({
           </div>
         ) : (
           <>
-            <p className="text-3xl font-semibold tracking-tight text-foreground">
+            <p className={`text-3xl font-semibold tracking-tight ${valueClasses[variant]}`}>
               {value}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">{title}</p>
@@ -313,6 +337,7 @@ export default function MaintenanceDashboard() {
             error={todayError}
             onRetry={() => refetchToday()}
             linkTo={todayLink}
+            variant="blue"
           />
 
           {/* 2. Upcoming Visits */}
@@ -325,6 +350,7 @@ export default function MaintenanceDashboard() {
             error={upcomingError}
             onRetry={() => refetchUpcoming()}
             linkTo={upcomingLink}
+            variant="purple"
           />
 
           {/* 3. Overdue Visits */}
@@ -341,7 +367,7 @@ export default function MaintenanceDashboard() {
             error={overdueError}
             onRetry={() => refetchOverdue()}
             linkTo={overdueLink}
-            variant={overdueVisits.length > 0 ? "warning" : "default"}
+            variant={overdueVisits.length > 0 ? "warning" : "success"}
           />
 
           {/* 4. Asset Summary */}
@@ -361,7 +387,7 @@ export default function MaintenanceDashboard() {
             variant={
               assetsServiced > 0 && assetsServiced === allAssets.length
                 ? "success"
-                : "default"
+                : "teal"
             }
           />
         </div>
