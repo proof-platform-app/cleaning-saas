@@ -30,6 +30,8 @@ import Reports from "./pages/Reports";
 import ViolationJobsPage from "./pages/ViolationJobsPage";
 import ReportEmailLogsPage from "./pages/ReportEmailLogs";
 import Analytics from "./pages/Analytics";
+
+/* Maintenance Context Pages */
 import Assets from "./pages/maintenance/Assets";
 import VisitList from "./pages/maintenance/VisitList";
 import CreateVisit from "./pages/maintenance/CreateVisit";
@@ -37,6 +39,7 @@ import VisitDetail from "./pages/maintenance/VisitDetail";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
+import { AppContextProvider } from "@/contexts/AppContext";
 
 /* Marketing – CleanProof */
 import CleanProofLanding from "@/marketing/cleanproof/CleanProofLanding";
@@ -54,7 +57,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        {/* глобальный контроль скролла */}
+        {/* Global scroll control */}
         <ScrollToTop />
 
         <LocationsProvider>
@@ -67,7 +70,7 @@ const App = () => (
             <Route path="/cleanproof/pricing" element={<PricingPage />} />
             <Route path="/cleanproof/updates" element={<CleanProofUpdates />} />
             <Route path="/cleanproof/contact" element={<CleanProofContact />} />
-            {/* alias на всякий случай */}
+            {/* alias */}
             <Route path="/pricing" element={<PricingPage />} />
 
             {/* =========================
@@ -77,14 +80,24 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
 
             {/* =========================
-                Protected app (with layout)
+                Protected app (with layout + context)
                 ========================= */}
-            <Route element={<AppLayout />}>
+            <Route
+              element={
+                <AppContextProvider>
+                  <AppLayout />
+                </AppContextProvider>
+              }
+            >
+              {/* -------------------------
+                  Cleaning Context Routes
+                  (existing paths, unchanged)
+                  ------------------------- */}
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/jobs" element={<Jobs />} />
               <Route path="/jobs/:id" element={<JobDetails />} />
 
-              {/* create-job считается легаси: всегда ведём в Job Planning */}
+              {/* Legacy redirect: create-job → planning */}
               <Route
                 path="/create-job"
                 element={<Navigate to="/planning" replace />}
@@ -107,14 +120,37 @@ const App = () => (
               <Route path="/locations/new" element={<Locations />} />
               <Route path="/locations/:id" element={<Locations />} />
 
-              {/* Maintenance Context V1 */}
-              <Route path="/assets" element={<Assets />} />
-              <Route path="/assets/new" element={<Assets />} />
-              <Route path="/assets/:id" element={<Assets />} />
+              {/* -------------------------
+                  Maintenance Context Routes
+                  (all under /maintenance/*)
+                  ------------------------- */}
               <Route path="/maintenance/visits" element={<VisitList />} />
               <Route path="/maintenance/visits/new" element={<CreateVisit />} />
               <Route path="/maintenance/visits/:id" element={<VisitDetail />} />
+              <Route path="/maintenance/assets" element={<Assets />} />
+              <Route path="/maintenance/assets/new" element={<Assets />} />
+              <Route path="/maintenance/assets/:id" element={<Assets />} />
+              {/* Technicians placeholder - reuses cleaners for now */}
+              <Route path="/maintenance/technicians" element={<CompanyTeam />} />
 
+              {/* Legacy /assets redirect to maintenance context */}
+              <Route
+                path="/assets"
+                element={<Navigate to="/maintenance/assets" replace />}
+              />
+              <Route
+                path="/assets/new"
+                element={<Navigate to="/maintenance/assets/new" replace />}
+              />
+              <Route
+                path="/assets/:id"
+                element={<Navigate to="/maintenance/assets/:id" replace />}
+              />
+
+              {/* -------------------------
+                  Shared Routes
+                  (accessible from any context)
+                  ------------------------- */}
               <Route path="/company/profile" element={<CompanyProfile />} />
               <Route path="/company/team" element={<CompanyTeam />} />
               <Route path="/settings" element={<SettingsHome />} />

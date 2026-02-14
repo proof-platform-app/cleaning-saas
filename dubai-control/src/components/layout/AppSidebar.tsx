@@ -1,24 +1,16 @@
 // dubai-control/src/components/layout/AppSidebar.tsx
+// Sidebar navigation - renders items from current context registry
 
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
-  Briefcase,
-  CalendarDays,
-  Settings,
   LogOut,
-  MapPin,
-  Clock3,
-  BarChart3,
-  FileText,
   ChevronLeft,
   ChevronRight,
-  Building2,
-  Wrench,
-  ClipboardList,
 } from "lucide-react";
-import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useAppContext } from "@/contexts/AppContext";
+import { getNavItems } from "@/config/contexts";
 
 type AppSidebarProps = {
   collapsed: boolean;
@@ -28,24 +20,12 @@ type AppSidebarProps = {
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
   const user = useUserRole();
-  const canSeeCompany = canAccessBilling(user.role); // Owner/Manager only
+  const { currentContext, contextConfig } = useAppContext();
 
-  const navigation = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Jobs", href: "/jobs", icon: Briefcase },
-    { name: "Job Planning", href: "/planning", icon: CalendarDays },
-    { name: "Job History", href: "/history", icon: Clock3 },
-    { name: "Performance", href: "/performance", icon: BarChart3 },
-    { name: "Analytics", href: "/analytics", icon: BarChart3 },
-    { name: "Reports", href: "/reports", icon: FileText },
-    { name: "Locations", href: "/locations", icon: MapPin },
-    { name: "Assets", href: "/assets", icon: Wrench },
-    { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
-    ...(canSeeCompany
-      ? [{ name: "Company", href: "/company/profile", icon: Building2 }]
-      : []),
-    { name: "Settings", href: "/settings", icon: Settings },
-  ];
+  // Get navigation items for current context, filtered by user role
+  // Cleaners don't have access to console navigation
+  const consoleRole = user.role === "cleaner" ? undefined : user.role;
+  const navigation = getNavItems(currentContext, consoleRole);
 
   return (
     <aside
@@ -64,16 +44,16 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           )}
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
-            SC
+            {currentContext === "maintenance" ? "MP" : "SC"}
           </div>
           {!collapsed && (
             <span className="font-semibold tracking-tight text-foreground">
-              CleanProof
+              {contextConfig.productName}
             </span>
           )}
         </div>
 
-        {/* Стрелка только в широком режиме — справа, нейтральная */}
+        {/* Collapse toggle - only in expanded mode */}
         {!collapsed && (
           <button
             type="button"
@@ -85,7 +65,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         )}
       </div>
 
-      {/* Стрелка в свернутом режиме — отдельной строкой, тоже нейтральная */}
+      {/* Expand toggle - only in collapsed mode */}
       {collapsed && (
         <div className="flex items-center justify-center border-b border-border py-2">
           <button
@@ -98,10 +78,11 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         </div>
       )}
 
-      {/* Navigation */}
+      {/* Navigation from context registry */}
       <nav className="flex-1 space-y-1 px-2 py-4">
         {navigation.map((item) => {
-          const isActive = location.pathname === item.href;
+          const isActive = location.pathname === item.href ||
+            (item.href !== "/" && location.pathname.startsWith(item.href));
 
           return (
             <NavLink
