@@ -742,10 +742,10 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
         if error:
             return error
 
-        # Only Jobs with asset != null are maintenance service visits
+        # Maintenance context service visits
         visits = Job.objects.filter(
             company=company,
-            asset__isnull=False,
+            context=Job.CONTEXT_MAINTENANCE,  # Maintenance context (not based on asset nullability)
         ).select_related(
             "location",
             "cleaner",
@@ -796,7 +796,7 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
                 },
                 "technician": {
                     "id": visit.cleaner.id,
-                    "name": f"{visit.cleaner.first_name} {visit.cleaner.last_name}".strip() or visit.cleaner.email,
+                    "name": visit.cleaner.full_name or visit.cleaner.email,
                 },
                 "asset": {
                     "id": visit.asset.id,
@@ -860,7 +860,7 @@ class AssetServiceHistoryView(MaintenancePermissionMixin, APIView):
                 "status": visit.status,
                 "technician": {
                     "id": visit.cleaner.id,
-                    "name": f"{visit.cleaner.first_name} {visit.cleaner.last_name}".strip() or visit.cleaner.email,
+                    "name": visit.cleaner.full_name or visit.cleaner.email,
                 },
                 "category": {
                     "id": visit.maintenance_category.id,

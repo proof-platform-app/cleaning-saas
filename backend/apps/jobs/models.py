@@ -11,7 +11,20 @@ from apps.locations.models import Location, ChecklistTemplate
 class Job(models.Model):
     """
     Уборка на конкретной локации, в конкретный день, за конкретным клинером.
+
+    Context field determines which product context this job belongs to:
+    - "cleaning": Standard cleaning jobs (CleanProof)
+    - "maintenance": Service visits (MaintainProof)
     """
+
+    # Context choices - determines which product this job belongs to
+    CONTEXT_CLEANING = "cleaning"
+    CONTEXT_MAINTENANCE = "maintenance"
+
+    CONTEXT_CHOICES = [
+        (CONTEXT_CLEANING, "Cleaning"),
+        (CONTEXT_MAINTENANCE, "Maintenance"),
+    ]
 
     STATUS_SCHEDULED = "scheduled"
     STATUS_IN_PROGRESS = "in_progress"
@@ -31,6 +44,16 @@ class Job(models.Model):
         Company,
         on_delete=models.CASCADE,
         related_name="jobs",
+    )
+
+    # Context separation: cleaning vs maintenance
+    # IMPORTANT: Context separation MUST NOT rely on asset nullability
+    context = models.CharField(
+        max_length=32,
+        choices=CONTEXT_CHOICES,
+        default=CONTEXT_CLEANING,
+        db_index=True,
+        help_text="Product context: cleaning (CleanProof) or maintenance (MaintainProof)",
     )
 
     location = models.ForeignKey(

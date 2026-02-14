@@ -1,8 +1,8 @@
 # MAINTENANCE CONTEXT — V1 SCOPE
 
 **Status:** LOCKED
-**Version:** 1.0.1
-**Last Updated:** 2026-02-14
+**Version:** 1.0.2
+**Last Updated:** 2026-02-15
 
 This document defines the strict scope for Maintenance Context v1 within Proof Platform. It establishes boundaries to protect Platform Layer and Proof Engine integrity.
 
@@ -97,8 +97,17 @@ Maintenance Context v1 permits the following **additive** backend changes only:
 
 | Model | Addition | Notes |
 |-------|----------|-------|
+| `Job` | `context` (CharField) | Product context: `cleaning` or `maintenance`. **MUST NOT rely on asset nullability**. Set explicitly at creation. |
 | `Job` | `asset` (nullable FK to Asset) | Optional link to serviced asset |
 | `Job` | `maintenance_category` (nullable FK) | Optional service category |
+
+#### Context Separation
+
+The `Job.context` field provides explicit product separation:
+- `cleaning` — Standard CleanProof cleaning jobs
+- `maintenance` — MaintainProof service visits
+
+**Critical Rule:** Context MUST be set explicitly at job creation time. It does NOT depend on whether `asset` is null. A maintenance job can exist without an asset, and a cleaning job never has an asset — but the `context` field determines the product boundary, not the presence of asset.
 
 ### 4.3 Checklist Templates
 
@@ -338,6 +347,7 @@ Any modification to this scope document requires:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.0.2 | 2026-02-15 | Add Job.context field for explicit product separation (cleaning vs maintenance) |
 | 1.0.1 | 2026-02-14 | Add anti-ticketing guardrails (reactive dispatch, incident intake explicitly forbidden) |
 | 1.0 | 2026-02-14 | Initial V1 scope definition |
 

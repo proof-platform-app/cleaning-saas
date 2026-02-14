@@ -1325,6 +1325,12 @@ Content-Type: application/json
 * `checklist_template_id` — integer или `null`
 * `notes` / `manager_notes` (зависит от сериализатора)
 
+Maintenance Context V1 (optional):
+
+* `context` — `"cleaning"` (default) или `"maintenance"`. **IMPORTANT:** Context MUST be set explicitly, NOT derived from asset presence.
+* `asset_id` — integer или `null` (FK на Asset для service visits)
+* `maintenance_category_id` — integer или `null` (FK на MaintenanceCategory)
+
 **Enforcement (trial / blocking)**
 
 Перед созданием выполняются проверки:

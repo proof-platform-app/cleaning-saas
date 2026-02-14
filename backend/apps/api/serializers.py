@@ -5,7 +5,7 @@ from rest_framework import serializers
 from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent, JobPhoto
 from apps.locations.models import Location, ChecklistTemplate, ChecklistTemplateItem
 from apps.marketing.models import ReportEmailLog
-from apps.maintenance.models import Asset
+from apps.maintenance.models import Asset, MaintenanceCategory
 
 User = get_user_model()
 
@@ -229,6 +229,7 @@ class ManagerJobCreateSerializer(serializers.Serializer):
     Payload для создания Job менеджером.
 
     Maintenance Context V1: accepts optional asset_id for service visit tracking.
+    Context field determines product separation (cleaning vs maintenance).
     """
     scheduled_date = serializers.DateField()
     scheduled_start_time = serializers.TimeField(required=False, allow_null=True)
@@ -238,9 +239,18 @@ class ManagerJobCreateSerializer(serializers.Serializer):
     cleaner_id = serializers.IntegerField()
     checklist_template_id = serializers.IntegerField(required=False, allow_null=True)
 
-    # Maintenance Context V1: optional asset binding
+    # Maintenance Context V1: optional asset binding and category
     asset_id = serializers.IntegerField(required=False, allow_null=True)
+    maintenance_category_id = serializers.IntegerField(required=False, allow_null=True)
     manager_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    # Context separation: cleaning (CleanProof) or maintenance (MaintainProof)
+    # IMPORTANT: Context MUST NOT rely on asset nullability - it's set explicitly
+    context = serializers.ChoiceField(
+        choices=[Job.CONTEXT_CLEANING, Job.CONTEXT_MAINTENANCE],
+        default=Job.CONTEXT_CLEANING,
+        required=False,
+    )
 
     def validate(self, attrs):
         request = self.context["request"]
@@ -304,10 +314,25 @@ class ManagerJobCreateSerializer(serializers.Serializer):
                     {"asset_id": "Asset location does not match job location"}
                 )
 
+        # Maintenance Context V1: validate maintenance_category_id
+        maintenance_category = None
+        maintenance_category_id = attrs.get("maintenance_category_id")
+        if maintenance_category_id:
+            try:
+                maintenance_category = MaintenanceCategory.objects.get(
+                    id=maintenance_category_id,
+                    company=company,
+                )
+            except MaintenanceCategory.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"maintenance_category_id": "Invalid maintenance category"}
+                )
+
         attrs["_location"] = location
         attrs["_cleaner"] = cleaner
         attrs["_template"] = template
         attrs["_asset"] = asset
+        attrs["_maintenance_category"] = maintenance_category
         return attrs
 
     def create(self, validated_data):
@@ -315,6 +340,9 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         cleaner = validated_data["_cleaner"]
         template = validated_data.get("_template")
         asset = validated_data.get("_asset")
+        maintenance_category = validated_data.get("_maintenance_category")
+        # Context is set explicitly - does NOT depend on asset presence
+        context = validated_data.get("context", Job.CONTEXT_CLEANING)
 
         job = Job.objects.create(
             company=location.company,
@@ -325,6 +353,8 @@ class ManagerJobCreateSerializer(serializers.Serializer):
             scheduled_end_time=validated_data.get("scheduled_end_time"),
             status="scheduled",
             asset=asset,
+            maintenance_category=maintenance_category,
+            context=context,
             manager_notes=validated_data.get("manager_notes") or "",
         )
 

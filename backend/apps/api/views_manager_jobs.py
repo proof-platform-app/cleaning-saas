@@ -369,7 +369,11 @@ class ManagerJobsTodayView(APIView):
         today = timezone.localdate()
 
         qs = (
-            Job.objects.filter(company=user.company, scheduled_date=today)
+            Job.objects.filter(
+                company=user.company,
+                scheduled_date=today,
+                context=Job.CONTEXT_CLEANING,  # Cleaning context only (exclude maintenance)
+            )
             .select_related("location", "cleaner")
             .order_by("scheduled_start_time", "id")
         )
@@ -433,7 +437,10 @@ class ManagerJobsActiveView(APIView):
         completed_from = today - timedelta(days=ACTIVE_COMPLETED_DAYS)
 
         qs = (
-            Job.objects.filter(company=company)
+            Job.objects.filter(
+                company=company,
+                context=Job.CONTEXT_CLEANING,  # Cleaning context only (exclude maintenance)
+            )
             .filter(
                 Q(status__in=[Job.STATUS_SCHEDULED, Job.STATUS_IN_PROGRESS])
                 | Q(
@@ -961,7 +968,11 @@ class ManagerPlanningJobsView(APIView):
             )
 
         qs = (
-            Job.objects.filter(company=user.company, scheduled_date=day)
+            Job.objects.filter(
+                company=user.company,
+                scheduled_date=day,
+                context=Job.CONTEXT_CLEANING,  # Cleaning context only (exclude maintenance)
+            )
             .select_related("location", "cleaner")
             .prefetch_related("photos", "checklist_items")
             .order_by("scheduled_start_time", "id")
@@ -1015,6 +1026,7 @@ class ManagerJobsHistoryView(APIView):
                 company=user.company,
                 scheduled_date__gte=date_from,
                 scheduled_date__lte=date_to,
+                context=Job.CONTEXT_CLEANING,  # Cleaning context only (exclude maintenance)
             )
             .select_related("location", "cleaner", "asset")
             .prefetch_related("photos", "checklist_items")
@@ -1097,7 +1109,7 @@ class ManagerJobsExportView(APIView):
         start_dt = timezone.make_aware(datetime.combine(date_from, time.min))
         end_dt = timezone.make_aware(datetime.combine(date_to, time.max))
 
-        # 3. Base queryset: only completed jobs for this company
+        # 3. Base queryset: only completed cleaning jobs for this company
         qs = (
             Job.objects.select_related("company", "location", "cleaner")
             .filter(
@@ -1105,6 +1117,7 @@ class ManagerJobsExportView(APIView):
                 status=Job.STATUS_COMPLETED,
                 actual_end_time__gte=start_dt,
                 actual_end_time__lte=end_dt,
+                context=Job.CONTEXT_CLEANING,  # Cleaning context only (exclude maintenance)
             )
             .order_by("-actual_end_time")
         )
