@@ -1,8 +1,8 @@
 // dubai-control/src/contexts/maintenance/ui/VisitsPage.tsx
-// Maintenance Service Visits Page - imported from Lovable pattern
-// Static version with placeholder data
+// Maintenance Service Visits Page - wired to real API
+// See docs/execution/LOVABLE_UI_IMPORT_PROTOCOL.md
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +21,18 @@ import {
   Filter,
   Calendar,
   Download,
+  Loader2,
 } from "lucide-react";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 import { maintenancePaths } from "../routes";
+import {
+  useVisits,
+  useTodaysVisits,
+  getVisitStatusStyle,
+  getVisitStatusLabel,
+  type ServiceVisit,
+} from "../adapters/useVisits";
+import { useTechnicians } from "../adapters/useTechnicians";
 
 // RBAC
 function canAccessVisits(role: UserRole): boolean {
@@ -36,114 +45,69 @@ function canCreateVisits(role: UserRole): boolean {
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    scheduled: "bg-amber-100 text-amber-800",
-    in_progress: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-    cancelled: "bg-red-100 text-red-800",
-  };
-
-  const labels: Record<string, string> = {
-    scheduled: "Scheduled",
-    in_progress: "In Progress",
-    completed: "Completed",
-    cancelled: "Cancelled",
-  };
-
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-800"}`}>
-      {labels[status] || status}
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getVisitStatusStyle(status)}`}>
+      {getVisitStatusLabel(status)}
     </span>
   );
 }
-
-// Priority badge
-function PriorityBadge({ priority }: { priority: "low" | "medium" | "high" | "urgent" }) {
-  const styles = {
-    low: "bg-gray-100 text-gray-800",
-    medium: "bg-blue-100 text-blue-800",
-    high: "bg-orange-100 text-orange-800",
-    urgent: "bg-red-100 text-red-800",
-  };
-
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[priority]}`}>
-      {priority.charAt(0).toUpperCase() + priority.slice(1)}
-    </span>
-  );
-}
-
-// Placeholder data
-const placeholderVisits = [
-  {
-    id: 1,
-    date: "2024-02-14",
-    time: "09:00 - 11:00",
-    asset: "AHU-01 Main Building",
-    location: "Tower A - Floor 1",
-    technician: "John Smith",
-    status: "scheduled",
-    priority: "medium" as const,
-    type: "Preventive",
-  },
-  {
-    id: 2,
-    date: "2024-02-14",
-    time: "14:00 - 16:00",
-    asset: "Elevator A1",
-    location: "Tower A",
-    technician: "Mike Johnson",
-    status: "in_progress",
-    priority: "high" as const,
-    type: "Corrective",
-  },
-  {
-    id: 3,
-    date: "2024-02-13",
-    time: "10:00 - 12:00",
-    asset: "Fire Pump System",
-    location: "Basement B1",
-    technician: "Sarah Williams",
-    status: "completed",
-    priority: "low" as const,
-    type: "Inspection",
-  },
-  {
-    id: 4,
-    date: "2024-02-13",
-    time: "08:00 - 09:00",
-    asset: "Generator Set 1",
-    location: "Utility Building",
-    technician: "Tom Brown",
-    status: "completed",
-    priority: "medium" as const,
-    type: "Preventive",
-  },
-];
 
 export function VisitsPage() {
   const navigate = useNavigate();
   const user = useUserRole();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
+  const [technicianFilter, setTechnicianFilter] = useState("all");
 
   const hasAccess = canAccessVisits(user.role);
   const canCreate = canCreateVisits(user.role);
 
+  // Fetch visits - last 30 days by default
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const dateFrom = thirtyDaysAgo.toISOString().split("T")[0];
+
+  const { data: visits = [], isLoading, error } = useVisits(
+    { date_from: dateFrom },
+    hasAccess
+  );
+
+  // Fetch today's visits for stats
+  const { data: todaysVisits = [] } = useTodaysVisits(hasAccess);
+
+  // Fetch technicians for filter dropdown
+  const { data: technicians = [] } = useTechnicians(hasAccess);
+
   // Filter visits
-  const filteredVisits = placeholderVisits.filter((visit) => {
-    if (statusFilter !== "all" && visit.status !== statusFilter) return false;
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      return (
-        visit.asset.toLowerCase().includes(search) ||
-        visit.location.toLowerCase().includes(search) ||
-        visit.technician.toLowerCase().includes(search)
-      );
-    }
-    return true;
-  });
+  const filteredVisits = useMemo(() => {
+    return visits.filter((visit: ServiceVisit) => {
+      // Status filter
+      if (statusFilter !== "all" && visit.status !== statusFilter) return false;
+
+      // Technician filter
+      if (technicianFilter !== "all" && visit.cleaner?.id !== Number(technicianFilter)) return false;
+
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        return (
+          visit.location?.name?.toLowerCase().includes(search) ||
+          visit.location?.address?.toLowerCase().includes(search) ||
+          visit.cleaner?.full_name?.toLowerCase().includes(search) ||
+          visit.asset?.name?.toLowerCase().includes(search)
+        );
+      }
+      return true;
+    });
+  }, [visits, statusFilter, technicianFilter, searchTerm]);
+
+  // Calculate stats from today's visits
+  const stats = useMemo(() => {
+    const scheduled = todaysVisits.filter((v: ServiceVisit) => v.status === "scheduled").length;
+    const inProgress = todaysVisits.filter((v: ServiceVisit) => v.status === "in_progress").length;
+    const completed = todaysVisits.filter((v: ServiceVisit) => v.status === "completed").length;
+    return { total: todaysVisits.length, scheduled, inProgress, completed };
+  }, [todaysVisits]);
 
   // Access restricted
   if (!hasAccess) {
@@ -154,6 +118,33 @@ export function VisitsPage() {
           <h2 className="mt-4 text-xl font-semibold text-foreground">Access Restricted</h2>
           <p className="mt-2 text-muted-foreground">
             You don't have permission to view service visits.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl p-8">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Loading visits...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="mx-auto max-w-6xl p-8">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-8 text-center">
+          <ClipboardList className="mx-auto h-12 w-12 text-destructive" />
+          <h2 className="mt-4 text-xl font-semibold text-foreground">Error Loading Visits</h2>
+          <p className="mt-2 text-muted-foreground">
+            {error instanceof Error ? error.message : "Failed to load visits"}
           </p>
         </div>
       </div>
@@ -193,19 +184,19 @@ export function VisitsPage() {
       {/* Quick Stats */}
       <div className="mb-6 grid grid-cols-4 gap-4">
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-2xl font-bold text-foreground">12</div>
+          <div className="text-2xl font-bold text-foreground">{stats.total}</div>
           <div className="text-sm text-muted-foreground">Today's Visits</div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-2xl font-bold text-amber-600">4</div>
+          <div className="text-2xl font-bold text-amber-600">{stats.scheduled}</div>
           <div className="text-sm text-muted-foreground">Scheduled</div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-2xl font-bold text-blue-600">3</div>
+          <div className="text-2xl font-bold text-blue-600">{stats.inProgress}</div>
           <div className="text-sm text-muted-foreground">In Progress</div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="text-2xl font-bold text-green-600">5</div>
+          <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
           <div className="text-sm text-muted-foreground">Completed Today</div>
         </div>
       </div>
@@ -233,15 +224,17 @@ export function VisitsPage() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Date" />
+        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Technician" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Dates</SelectItem>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
+            <SelectItem value="all">All Technicians</SelectItem>
+            {technicians.map((tech) => (
+              <SelectItem key={tech.id} value={String(tech.id)}>
+                {tech.full_name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button variant="outline" size="icon">
@@ -261,11 +254,15 @@ export function VisitsPage() {
         {filteredVisits.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <ClipboardList className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-4 text-lg font-semibold text-foreground">No visits found</h3>
+            <h3 className="mt-4 text-lg font-semibold text-foreground">
+              {visits.length === 0 ? "No visits yet" : "No visits found"}
+            </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Try adjusting your search or filters
+              {visits.length === 0
+                ? "Schedule your first service visit"
+                : "Try adjusting your search or filters"}
             </p>
-            {canCreate && (
+            {canCreate && visits.length === 0 && (
               <Button className="mt-4" onClick={() => navigate(maintenancePaths.visitNew)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Schedule Visit
@@ -281,19 +278,13 @@ export function VisitsPage() {
                     Date / Time
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Asset
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Location
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Asset
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Technician
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Priority
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Status
@@ -304,32 +295,41 @@ export function VisitsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {filteredVisits.map((visit) => (
+                {filteredVisits.map((visit: ServiceVisit) => (
                   <tr
                     key={visit.id}
                     className="transition-colors hover:bg-muted/30 cursor-pointer"
                     onClick={() => navigate(maintenancePaths.visitDetail(visit.id))}
                   >
                     <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">{visit.date}</div>
-                      <div className="text-xs text-muted-foreground">{visit.time}</div>
+                      <div className="font-medium text-foreground">{visit.scheduled_date}</div>
+                      {(visit.scheduled_start_time || visit.scheduled_end_time) && (
+                        <div className="text-xs text-muted-foreground">
+                          {visit.scheduled_start_time || "—"} - {visit.scheduled_end_time || "—"}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-foreground">{visit.asset}</div>
+                      <div className="text-sm text-foreground">{visit.location?.name || "—"}</div>
+                      {visit.location?.address && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {visit.location.address}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">{visit.location}</div>
+                      {visit.asset ? (
+                        <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
+                          {visit.asset.name}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-foreground">{visit.technician}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
-                        {visit.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <PriorityBadge priority={visit.priority} />
+                      <div className="text-sm text-foreground">
+                        {visit.cleaner?.full_name || "Unassigned"}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={visit.status} />
@@ -349,14 +349,6 @@ export function VisitsPage() {
             </table>
           </div>
         )}
-      </div>
-
-      {/* Info Banner */}
-      <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <p className="font-medium">Static Preview</p>
-        <p className="mt-1 text-xs">
-          This page shows placeholder data. Connect to API via adapters to display real visits.
-        </p>
       </div>
     </div>
   );

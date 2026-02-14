@@ -16,5 +16,40 @@ export { TechniciansPage } from "./ui/TechniciansPage";
 // export { AssetStatusBadge } from "./components/AssetStatusBadge";
 
 // Adapters (API bridge layer)
-// export { useServiceVisits } from "./adapters/useServiceVisits";
-// export { useAssets } from "./adapters/useAssets";
+export {
+  useAssets,
+  useAsset,
+  useAssetTypes,
+  useCreateAsset,
+  useUpdateAsset,
+  useDeleteAsset,
+  assetKeys,
+  type Asset,
+  type AssetType,
+  type AssetFilters,
+} from "./adapters/useAssets";
+
+export {
+  useVisits,
+  useTodaysVisits,
+  useVisit,
+  useCreateVisit,
+  visitKeys,
+  getVisitStatusStyle,
+  getVisitStatusLabel,
+  VISIT_STATUS,
+  type ServiceVisit,
+  type VisitFilters,
+} from "./adapters/useVisits";
+
+export {
+  useTechnicians,
+  useActiveTechnicians,
+  useTechnicianAuditLog,
+  useCreateTechnician,
+  useUpdateTechnician,
+  technicianKeys,
+  getTechnicianStatusStyle,
+  getTechnicianInitials,
+  type Technician,
+} from "./adapters/useTechnicians";

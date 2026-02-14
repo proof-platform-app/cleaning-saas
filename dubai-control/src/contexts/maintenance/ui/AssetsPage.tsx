@@ -1,8 +1,8 @@
 // dubai-control/src/contexts/maintenance/ui/AssetsPage.tsx
-// Maintenance Assets Page - imported from Lovable pattern
-// Static version with placeholder data
+// Maintenance Assets Page - wired to real API
+// See docs/execution/LOVABLE_UI_IMPORT_PROTOCOL.md
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,8 +19,10 @@ import {
   MoreHorizontal,
   Filter,
   Download,
+  Loader2,
 } from "lucide-react";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
+import { useAssets, useAssetTypes, type Asset } from "../adapters/useAssets";
 
 // RBAC
 function canWriteAssets(role: UserRole): boolean {
@@ -31,66 +33,28 @@ function canReadAssets(role: UserRole): boolean {
   return role === "owner" || role === "manager" || role === "staff";
 }
 
-// Status badge component
-function StatusBadge({ status }: { status: "active" | "inactive" | "maintenance" }) {
-  const styles = {
-    active: "bg-green-100 text-green-800",
-    inactive: "bg-gray-100 text-gray-800",
-    maintenance: "bg-amber-100 text-amber-800",
-  };
-
-  const labels = {
-    active: "Active",
-    inactive: "Inactive",
-    maintenance: "Under Maintenance",
-  };
+// Status badge component - maps is_active boolean to status
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  const style = isActive
+    ? "bg-green-100 text-green-800"
+    : "bg-gray-100 text-gray-800";
+  const label = isActive ? "Active" : "Inactive";
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}>
+      {label}
     </span>
   );
 }
 
-// Placeholder data
-const placeholderAssets = [
-  {
-    id: 1,
-    name: "AHU-01 Main Building",
-    type: "HVAC",
-    location: "Tower A - Floor 1",
-    serialNumber: "SN-2024-001",
-    status: "active" as const,
-    lastService: "2024-02-10",
-  },
-  {
-    id: 2,
-    name: "Elevator A1",
-    type: "Elevator",
-    location: "Tower A",
-    serialNumber: "ELV-2024-A1",
-    status: "maintenance" as const,
-    lastService: "2024-02-12",
-  },
-  {
-    id: 3,
-    name: "Fire Pump System",
-    type: "Fire Safety",
-    location: "Basement B1",
-    serialNumber: "FP-2024-001",
-    status: "active" as const,
-    lastService: "2024-01-28",
-  },
-  {
-    id: 4,
-    name: "Generator Set 1",
-    type: "Electrical",
-    location: "Utility Building",
-    serialNumber: "GEN-2024-001",
-    status: "inactive" as const,
-    lastService: "2024-01-15",
-  },
-];
+// Type badge component
+function TypeBadge({ typeName }: { typeName: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+      {typeName}
+    </span>
+  );
+}
 
 export function AssetsPage() {
   const user = useUserRole();
@@ -101,20 +65,38 @@ export function AssetsPage() {
   const hasReadAccess = canReadAssets(user.role);
   const hasWriteAccess = canWriteAssets(user.role);
 
+  // Fetch assets from API
+  const { data: assets = [], isLoading: assetsLoading, error: assetsError } = useAssets(
+    undefined,
+    hasReadAccess
+  );
+
+  // Fetch asset types for filter dropdown
+  const { data: assetTypes = [] } = useAssetTypes(hasReadAccess);
+
   // Filter assets
-  const filteredAssets = placeholderAssets.filter((asset) => {
-    if (statusFilter !== "all" && asset.status !== statusFilter) return false;
-    if (typeFilter !== "all" && asset.type !== typeFilter) return false;
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      return (
-        asset.name.toLowerCase().includes(search) ||
-        asset.serialNumber.toLowerCase().includes(search) ||
-        asset.location.toLowerCase().includes(search)
-      );
-    }
-    return true;
-  });
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset: Asset) => {
+      // Status filter
+      if (statusFilter === "active" && !asset.is_active) return false;
+      if (statusFilter === "inactive" && asset.is_active) return false;
+
+      // Type filter
+      if (typeFilter !== "all" && asset.asset_type?.id !== Number(typeFilter)) return false;
+
+      // Search filter
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        return (
+          asset.name.toLowerCase().includes(search) ||
+          asset.serial_number?.toLowerCase().includes(search) ||
+          asset.location?.name?.toLowerCase().includes(search) ||
+          asset.description?.toLowerCase().includes(search)
+        );
+      }
+      return true;
+    });
+  }, [assets, statusFilter, typeFilter, searchTerm]);
 
   // Access restricted
   if (!hasReadAccess) {
@@ -125,6 +107,33 @@ export function AssetsPage() {
           <h2 className="mt-4 text-xl font-semibold text-foreground">Access Restricted</h2>
           <p className="mt-2 text-muted-foreground">
             You don't have permission to view assets.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (assetsLoading) {
+    return (
+      <div className="mx-auto max-w-6xl p-8">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-muted-foreground">Loading assets...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (assetsError) {
+    return (
+      <div className="mx-auto max-w-6xl p-8">
+        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-8 text-center">
+          <Wrench className="mx-auto h-12 w-12 text-destructive" />
+          <h2 className="mt-4 text-xl font-semibold text-foreground">Error Loading Assets</h2>
+          <p className="mt-2 text-muted-foreground">
+            {assetsError instanceof Error ? assetsError.message : "Failed to load assets"}
           </p>
         </div>
       </div>
@@ -176,7 +185,6 @@ export function AssetsPage() {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
-            <SelectItem value="maintenance">Under Maintenance</SelectItem>
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -185,10 +193,11 @@ export function AssetsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="HVAC">HVAC</SelectItem>
-            <SelectItem value="Elevator">Elevator</SelectItem>
-            <SelectItem value="Electrical">Electrical</SelectItem>
-            <SelectItem value="Fire Safety">Fire Safety</SelectItem>
+            {assetTypes.map((type) => (
+              <SelectItem key={type.id} value={String(type.id)}>
+                {type.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button variant="outline" size="icon">
@@ -208,10 +217,20 @@ export function AssetsPage() {
         {filteredAssets.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <Wrench className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-4 text-lg font-semibold text-foreground">No assets found</h3>
+            <h3 className="mt-4 text-lg font-semibold text-foreground">
+              {assets.length === 0 ? "No assets yet" : "No assets found"}
+            </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Try adjusting your search or filters
+              {assets.length === 0
+                ? "Add your first asset to start tracking maintenance"
+                : "Try adjusting your search or filters"}
             </p>
+            {hasWriteAccess && assets.length === 0 && (
+              <Button className="mt-4">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Asset
+              </Button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -233,39 +252,40 @@ export function AssetsPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Last Service
-                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {filteredAssets.map((asset) => (
+                {filteredAssets.map((asset: Asset) => (
                   <tr
                     key={asset.id}
                     className="transition-colors hover:bg-muted/30"
                   >
                     <td className="px-6 py-4">
                       <div className="font-medium text-foreground">{asset.name}</div>
+                      {asset.description && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {asset.description}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                        {asset.type}
-                      </span>
+                      <TypeBadge typeName={asset.asset_type?.name || "Unknown"} />
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">{asset.location}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {asset.location?.name || "—"}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
-                      <code className="text-sm text-muted-foreground">{asset.serialNumber}</code>
+                      <code className="text-sm text-muted-foreground">
+                        {asset.serial_number || "—"}
+                      </code>
                     </td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={asset.status} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">{asset.lastService}</div>
+                      <StatusBadge isActive={asset.is_active} />
                     </td>
                     <td className="px-6 py-4 text-right">
                       <Button variant="ghost" size="icon">
@@ -278,14 +298,6 @@ export function AssetsPage() {
             </table>
           </div>
         )}
-      </div>
-
-      {/* Info Banner */}
-      <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <p className="font-medium">Static Preview</p>
-        <p className="mt-1 text-xs">
-          This page shows placeholder data. Connect to API via adapters to display real assets.
-        </p>
       </div>
     </div>
   );
