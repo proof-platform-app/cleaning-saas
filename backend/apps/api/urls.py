@@ -451,4 +451,24 @@ urlpatterns = [
         api_views.AssetDetailView.as_view(),
         name="manager-asset-detail",
     ),
+    path(
+        "manager/assets/<int:pk>/visits/",
+        api_views.AssetServiceHistoryView.as_view(),
+        name="manager-asset-visits",
+    ),
+    path(
+        "manager/maintenance-categories/",
+        api_views.MaintenanceCategoryListCreateView.as_view(),
+        name="manager-maintenance-categories",
+    ),
+    path(
+        "manager/maintenance-categories/<int:pk>/",
+        api_views.MaintenanceCategoryDetailView.as_view(),
+        name="manager-maintenance-category-detail",
+    ),
+    path(
+        "manager/service-visits/",
+        api_views.ServiceVisitsListView.as_view(),
+        name="manager-service-visits",
+    ),
 ]

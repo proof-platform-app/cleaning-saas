@@ -2,6 +2,7 @@
 // Maintenance Context Navigation Configuration
 
 import {
+  LayoutDashboard,
   ClipboardList,
   Wrench,
   Users,
@@ -15,6 +16,7 @@ import type { ContextConfig, NavItem } from "./types";
  * All routes under /maintenance/* prefix.
  */
 export const maintenanceNavItems: NavItem[] = [
+  { name: "Dashboard", href: "/maintenance/dashboard", icon: LayoutDashboard },
   { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
   { name: "Assets", href: "/maintenance/assets", icon: Wrench },
   { name: "Technicians", href: "/maintenance/technicians", icon: Users },
@@ -34,4 +36,5 @@ export const maintenanceContext: ContextConfig = {
   defaultRoute: "/maintenance/visits",
   navItems: maintenanceNavItems,
   enabled: true,
+  shellMode: "compact",
 };

@@ -1,3 +1,6 @@
+/* Product visual identity tokens - must be before @tailwind */
+@import "./styles/product-themes.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,6 +48,14 @@
     --status-completed-bg: 142 76% 94%;
     --status-issue: 25 95% 53%;
     --status-issue-bg: 25 95% 95%;
+
+    /* Lovable status colors (maintenance context) */
+    --status-open: 215 45% 52%;
+    --status-open-bg: 215 35% 95%;
+    --status-progress: 40 45% 48%;
+    --status-progress-bg: 40 35% 94%;
+    --status-cancelled: 0 30% 52%;
+    --status-cancelled-bg: 0 20% 95%;
 
     /* Analytics colors - enterprise palette */
     --analytics-primary: 221 83% 53%;
@@ -200,55 +211,3 @@
   }
 }
 
-/* ============================================
-   Lovable-style UI Components (Maintenance Context)
-   Imported from control-hub design system
-   ============================================ */
-
-@layer components {
-  /* Page layout utilities */
-  .page-header {
-    @apply flex items-center justify-between pb-4;
-  }
-
-  .page-title {
-    @apply text-lg font-semibold text-foreground;
-    letter-spacing: -0.01em;
-  }
-
-  /* Premium card wrapper */
-  .premium-card {
-    @apply bg-card rounded-md border border-border;
-    box-shadow: var(--shadow-sm);
-  }
-
-  /* Data table styles */
-  .data-table {
-    @apply w-full;
-    font-size: 0.8125rem;
-    letter-spacing: -0.01em;
-  }
-
-  .data-table th {
-    @apply text-muted-foreground font-medium text-left px-3 py-2.5 border-b border-border uppercase;
-    font-size: 0.6875rem;
-    letter-spacing: 0.04em;
-    background: hsl(var(--muted) / 0.5);
-  }
-
-  .data-table td {
-    @apply px-3 py-2.5 border-b border-border;
-  }
-
-  .data-table tbody tr {
-    @apply transition-colors;
-  }
-
-  .data-table tbody tr:hover td {
-    @apply bg-muted/30;
-  }
-
-  .data-table tbody tr:last-child td {
-    @apply border-b-0;
-  }
-}

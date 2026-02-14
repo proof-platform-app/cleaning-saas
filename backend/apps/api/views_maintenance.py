@@ -20,8 +20,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.maintenance.models import AssetType, Asset
+from apps.maintenance.models import AssetType, Asset, MaintenanceCategory
 from apps.locations.models import Location
+from apps.jobs.models import Job
 
 
 # =============================================================================
@@ -532,3 +533,364 @@ class AssetDetailView(MaintenancePermissionMixin, APIView):
 
         asset.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# =============================================================================
+# MaintenanceCategory Views
+# =============================================================================
+
+class MaintenanceCategoryListCreateView(MaintenancePermissionMixin, APIView):
+    """
+    List and create maintenance categories.
+
+    GET /api/manager/maintenance-categories/
+    POST /api/manager/maintenance-categories/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        categories = MaintenanceCategory.objects.filter(company=company).order_by("name")
+
+        data = [
+            {
+                "id": cat.id,
+                "name": cat.name,
+                "description": cat.description,
+                "is_active": cat.is_active,
+            }
+            for cat in categories
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        # Trial/blocked checks
+        if company.is_blocked():
+            code = "trial_expired" if company.is_trial_expired() else "company_blocked"
+            return Response(
+                {"code": code, "message": "Account access restricted. Please upgrade or contact support."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        name = (request.data.get("name") or "").strip()
+        description = (request.data.get("description") or "").strip()
+
+        if not name:
+            return Response(
+                {"code": "VALIDATION_ERROR", "message": "Name is required.", "fields": {"name": ["Name is required."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check uniqueness
+        if MaintenanceCategory.objects.filter(company=company, name__iexact=name).exists():
+            return Response(
+                {"code": "VALIDATION_ERROR", "message": "Category with this name already exists.", "fields": {"name": ["Category with this name already exists."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        category = MaintenanceCategory.objects.create(
+            company=company,
+            name=name,
+            description=description,
+            is_active=True,
+        )
+
+        return Response(
+            {
+                "id": category.id,
+                "name": category.name,
+                "description": category.description,
+                "is_active": category.is_active,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MaintenanceCategoryDetailView(MaintenancePermissionMixin, APIView):
+    """
+    Retrieve, update, delete maintenance category.
+
+    GET /api/manager/maintenance-categories/<id>/
+    PATCH /api/manager/maintenance-categories/<id>/
+    DELETE /api/manager/maintenance-categories/<id>/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _get_category(self, company, pk):
+        return get_object_or_404(MaintenanceCategory, pk=pk, company=company)
+
+    def get(self, request, pk):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        category = self._get_category(company, pk)
+
+        return Response(
+            {
+                "id": category.id,
+                "name": category.name,
+                "description": category.description,
+                "is_active": category.is_active,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request, pk):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        category = self._get_category(company, pk)
+
+        name = request.data.get("name")
+        description = request.data.get("description")
+        is_active = request.data.get("is_active")
+
+        update_fields = []
+
+        if name is not None:
+            name = name.strip()
+            if not name:
+                return Response(
+                    {"code": "VALIDATION_ERROR", "message": "Name cannot be empty.", "fields": {"name": ["Name cannot be empty."]}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Check uniqueness (exclude self)
+            if MaintenanceCategory.objects.filter(company=company, name__iexact=name).exclude(pk=pk).exists():
+                return Response(
+                    {"code": "VALIDATION_ERROR", "message": "Category with this name already exists.", "fields": {"name": ["Category with this name already exists."]}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            category.name = name
+            update_fields.append("name")
+
+        if description is not None:
+            category.description = description.strip()
+            update_fields.append("description")
+
+        if is_active is not None:
+            category.is_active = bool(is_active)
+            update_fields.append("is_active")
+
+        if update_fields:
+            category.save(update_fields=update_fields)
+
+        return Response(
+            {
+                "id": category.id,
+                "name": category.name,
+                "description": category.description,
+                "is_active": category.is_active,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, pk):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        category = self._get_category(company, pk)
+
+        # Check if any jobs reference this category
+        if Job.objects.filter(maintenance_category=category).exists():
+            return Response(
+                {"code": "CONFLICT", "message": "Cannot delete category with linked service visits. Deactivate instead."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        category.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# =============================================================================
+# Service Visits Views (Jobs with asset link = maintenance visits)
+# =============================================================================
+
+class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
+    """
+    List service visits (Jobs that have an asset linked).
+
+    GET /api/manager/service-visits/
+        Query params:
+        - status: scheduled, in_progress, completed, cancelled
+        - technician_id: filter by cleaner/technician
+        - asset_id: filter by specific asset
+        - location_id: filter by location
+        - date_from: filter by scheduled_date >= date_from (YYYY-MM-DD)
+        - date_to: filter by scheduled_date <= date_to (YYYY-MM-DD)
+        - category_id: filter by maintenance_category
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        # Only Jobs with asset != null are maintenance service visits
+        visits = Job.objects.filter(
+            company=company,
+            asset__isnull=False,
+        ).select_related(
+            "location",
+            "cleaner",
+            "asset",
+            "asset__asset_type",
+            "maintenance_category",
+        ).order_by("-scheduled_date", "-created_at")
+
+        # Filtering
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            visits = visits.filter(status=status_filter)
+
+        technician_id = request.query_params.get("technician_id")
+        if technician_id:
+            visits = visits.filter(cleaner_id=technician_id)
+
+        asset_id = request.query_params.get("asset_id")
+        if asset_id:
+            visits = visits.filter(asset_id=asset_id)
+
+        location_id = request.query_params.get("location_id")
+        if location_id:
+            visits = visits.filter(location_id=location_id)
+
+        category_id = request.query_params.get("category_id")
+        if category_id:
+            visits = visits.filter(maintenance_category_id=category_id)
+
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            visits = visits.filter(scheduled_date__gte=date_from)
+
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            visits = visits.filter(scheduled_date__lte=date_to)
+
+        data = [
+            {
+                "id": visit.id,
+                "scheduled_date": visit.scheduled_date.isoformat(),
+                "scheduled_start_time": visit.scheduled_start_time.isoformat() if visit.scheduled_start_time else None,
+                "scheduled_end_time": visit.scheduled_end_time.isoformat() if visit.scheduled_end_time else None,
+                "status": visit.status,
+                "location": {
+                    "id": visit.location.id,
+                    "name": visit.location.name,
+                },
+                "technician": {
+                    "id": visit.cleaner.id,
+                    "name": f"{visit.cleaner.first_name} {visit.cleaner.last_name}".strip() or visit.cleaner.email,
+                },
+                "asset": {
+                    "id": visit.asset.id,
+                    "name": visit.asset.name,
+                    "asset_type": {
+                        "id": visit.asset.asset_type.id,
+                        "name": visit.asset.asset_type.name,
+                    },
+                },
+                "category": {
+                    "id": visit.maintenance_category.id,
+                    "name": visit.maintenance_category.name,
+                } if visit.maintenance_category else None,
+                "manager_notes": visit.manager_notes,
+                "actual_start_time": visit.actual_start_time.isoformat() if visit.actual_start_time else None,
+                "actual_end_time": visit.actual_end_time.isoformat() if visit.actual_end_time else None,
+                "created_at": visit.created_at.isoformat(),
+            }
+            for visit in visits
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class AssetServiceHistoryView(MaintenancePermissionMixin, APIView):
+    """
+    Get service history for a specific asset.
+
+    GET /api/manager/assets/<id>/visits/
+    Returns all Jobs linked to this asset, ordered by date descending.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        # Verify asset exists and belongs to company
+        asset = get_object_or_404(
+            Asset.objects.select_related("asset_type", "location"),
+            pk=pk,
+            company=company,
+        )
+
+        # Get all visits (jobs) for this asset
+        visits = Job.objects.filter(
+            asset=asset,
+        ).select_related(
+            "cleaner",
+            "maintenance_category",
+        ).order_by("-scheduled_date", "-created_at")
+
+        visits_data = [
+            {
+                "id": visit.id,
+                "scheduled_date": visit.scheduled_date.isoformat(),
+                "scheduled_start_time": visit.scheduled_start_time.isoformat() if visit.scheduled_start_time else None,
+                "status": visit.status,
+                "technician": {
+                    "id": visit.cleaner.id,
+                    "name": f"{visit.cleaner.first_name} {visit.cleaner.last_name}".strip() or visit.cleaner.email,
+                },
+                "category": {
+                    "id": visit.maintenance_category.id,
+                    "name": visit.maintenance_category.name,
+                } if visit.maintenance_category else None,
+                "manager_notes": visit.manager_notes,
+                "cleaner_notes": visit.cleaner_notes,
+                "actual_start_time": visit.actual_start_time.isoformat() if visit.actual_start_time else None,
+                "actual_end_time": visit.actual_end_time.isoformat() if visit.actual_end_time else None,
+            }
+            for visit in visits
+        ]
+
+        return Response(
+            {
+                "asset": {
+                    "id": asset.id,
+                    "name": asset.name,
+                    "serial_number": asset.serial_number,
+                    "asset_type": {
+                        "id": asset.asset_type.id,
+                        "name": asset.asset_type.name,
+                    },
+                    "location": {
+                        "id": asset.location.id,
+                        "name": asset.location.name,
+                    },
+                },
+                "visits": visits_data,
+                "total_visits": len(visits_data),
+            },
+            status=status.HTTP_200_OK,
+        )

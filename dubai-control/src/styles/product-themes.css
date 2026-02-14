@@ -1,0 +1,477 @@
+/* =============================================================================
+   Product Visual Identity Tokens
+
+   Each product has its own visual identity defined through CSS variables.
+   These tokens are scoped to .product-{id} root classes applied in AppLayout.
+
+   Products:
+   - cleaning (CleanProof) - Apple-inspired blue, friendly, rounded
+   - maintenance (MaintainProof) - Enterprise gray-blue, dense, professional
+   - property (PropertyProof) - Warm amber, document-focused
+   - fitout (FitOutProof) - Deep teal, project-centric
+   ============================================================================= */
+
+/* =============================================================================
+   PRODUCT TOKEN DEFINITIONS
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   CleanProof (Cleaning) - Apple-inspired blue, friendly UI
+   ----------------------------------------------------------------------------- */
+.product-cleaning {
+  /* Accent colors - professional blue */
+  --product-accent: hsl(221 83% 53%);
+  --product-accent-hover: hsl(221 83% 48%);
+  --product-accent-soft: hsl(221 83% 95%);
+
+  /* Surface & borders */
+  --product-surface: hsl(0 0% 100%);
+  --product-surface-elevated: hsl(0 0% 100%);
+  --product-border: hsl(214 32% 91%);
+  --product-border-subtle: hsl(214 32% 94%);
+
+  /* Typography */
+  --product-header-color: hsl(222 47% 11%);
+  --product-text-primary: hsl(222 47% 11%);
+  --product-text-secondary: hsl(215 16% 47%);
+
+  /* Density & sizing */
+  --product-density: 0.875rem; /* 14px */
+  --product-density-sm: 0.8125rem; /* 13px */
+  --product-radius: 0.75rem; /* 12px */
+  --product-radius-sm: 0.5rem; /* 8px */
+
+  /* Table styling */
+  --product-table-header-size: 0.75rem;
+  --product-table-header-weight: 500;
+  --product-table-header-spacing: 0.025em;
+  --product-table-header-transform: none;
+  --product-table-header-bg: hsl(210 40% 97%);
+  --product-table-row-hover: hsl(210 40% 98%);
+
+  /* Shadows - soft Apple-style */
+  --product-shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --product-shadow-elevated: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+/* -----------------------------------------------------------------------------
+   MaintainProof (Maintenance) - Enterprise, dense, Deep Teal Identity
+   Target color: #1F4F56 range (deep teal)
+   ----------------------------------------------------------------------------- */
+.product-maintenance {
+  /* =========================================================================
+     SHADCN THEME VARIABLE OVERRIDES
+     These override the global :root values for Maintenance context only
+     ========================================================================= */
+
+  /* Primary = Deep Teal (buttons, focus rings, links) */
+  --primary: 188 45% 24%;
+  --primary-foreground: 0 0% 98%;
+
+  /* Focus ring */
+  --ring: 188 45% 24%;
+
+  /* Accent = Deep Teal */
+  --accent: 188 45% 24%;
+  --accent-foreground: 0 0% 98%;
+
+  /* Border - neutral gray */
+  --border: 210 16% 88%;
+
+  /* Background - enterprise neutral gray */
+  --background: 210 20% 97%;
+
+  /* Card */
+  --card: 0 0% 100%;
+
+  /* Geometry - flatter, more compact */
+  --radius: 6px;
+
+  /* =========================================================================
+     PRODUCT-SPECIFIC TOKENS
+     ========================================================================= */
+
+  /* Accent colors - deep teal, professional */
+  --product-accent: hsl(188 45% 24%);
+  --product-accent-hover: hsl(188 45% 20%);
+  --product-accent-soft: hsl(188 30% 94%);
+
+  /* Surface & borders - flatter, more neutral */
+  --product-surface: hsl(0 0% 100%);
+  --product-surface-elevated: hsl(0 0% 100%);
+  --product-border: hsl(210 16% 88%);
+  --product-border-subtle: hsl(210 14% 91%);
+
+  /* Typography - darker, tighter */
+  --product-header-color: hsl(210 20% 20%);
+  --product-text-primary: hsl(210 20% 20%);
+  --product-text-secondary: hsl(210 10% 50%);
+
+  /* Density & sizing - compact enterprise */
+  --product-density: 0.8125rem; /* 13px */
+  --product-density-sm: 0.75rem; /* 12px */
+  --product-radius: 0.375rem; /* 6px */
+  --product-radius-sm: 0.25rem; /* 4px */
+
+  /* Table styling - uppercase headers, enterprise feel */
+  --product-table-header-size: 0.6875rem; /* 11px */
+  --product-table-header-weight: 500;
+  --product-table-header-spacing: 0.04em;
+  --product-table-header-transform: uppercase;
+  --product-table-header-bg: hsl(210 14% 97%);
+  --product-table-row-hover: hsl(210 14% 98.5%);
+
+  /* Shadows - minimal, flat */
+  --product-shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+  --product-shadow-elevated: 0 2px 4px 0 rgb(0 0 0 / 0.04);
+
+  /* Typography density */
+  font-size: 13px;
+}
+
+/* -----------------------------------------------------------------------------
+   PropertyProof (Property) - Warm amber, document-focused
+   ----------------------------------------------------------------------------- */
+.product-property {
+  /* Accent colors - warm amber */
+  --product-accent: hsl(38 92% 50%);
+  --product-accent-hover: hsl(38 92% 45%);
+  --product-accent-soft: hsl(38 50% 95%);
+
+  /* Surface & borders */
+  --product-surface: hsl(0 0% 100%);
+  --product-surface-elevated: hsl(40 20% 99%);
+  --product-border: hsl(40 20% 88%);
+  --product-border-subtle: hsl(40 15% 92%);
+
+  /* Typography */
+  --product-header-color: hsl(30 25% 15%);
+  --product-text-primary: hsl(30 20% 20%);
+  --product-text-secondary: hsl(30 10% 45%);
+
+  /* Density & sizing - readable, document-focused */
+  --product-density: 0.875rem; /* 14px */
+  --product-density-sm: 0.8125rem; /* 13px */
+  --product-radius: 0.5rem; /* 8px */
+  --product-radius-sm: 0.375rem; /* 6px */
+
+  /* Table styling */
+  --product-table-header-size: 0.75rem;
+  --product-table-header-weight: 600;
+  --product-table-header-spacing: 0.01em;
+  --product-table-header-transform: none;
+  --product-table-header-bg: hsl(40 30% 97%);
+  --product-table-row-hover: hsl(40 25% 98%);
+
+  /* Shadows - warm, subtle */
+  --product-shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.03), 0 1px 2px -1px rgb(0 0 0 / 0.03);
+  --product-shadow-elevated: 0 4px 6px -1px rgb(0 0 0 / 0.04);
+}
+
+/* -----------------------------------------------------------------------------
+   FitOutProof (Fitout) - Deep teal, project-centric
+   ----------------------------------------------------------------------------- */
+.product-fitout {
+  /* Accent colors - deep teal */
+  --product-accent: hsl(175 70% 35%);
+  --product-accent-hover: hsl(175 70% 30%);
+  --product-accent-soft: hsl(175 40% 95%);
+
+  /* Surface & borders */
+  --product-surface: hsl(0 0% 100%);
+  --product-surface-elevated: hsl(175 10% 99%);
+  --product-border: hsl(175 15% 85%);
+  --product-border-subtle: hsl(175 10% 90%);
+
+  /* Typography */
+  --product-header-color: hsl(175 30% 15%);
+  --product-text-primary: hsl(175 20% 20%);
+  --product-text-secondary: hsl(175 10% 45%);
+
+  /* Density & sizing - spacious for project views */
+  --product-density: 0.875rem; /* 14px */
+  --product-density-sm: 0.8125rem; /* 13px */
+  --product-radius: 0.625rem; /* 10px */
+  --product-radius-sm: 0.375rem; /* 6px */
+
+  /* Table styling */
+  --product-table-header-size: 0.75rem;
+  --product-table-header-weight: 600;
+  --product-table-header-spacing: 0.02em;
+  --product-table-header-transform: none;
+  --product-table-header-bg: hsl(175 15% 97%);
+  --product-table-row-hover: hsl(175 10% 98%);
+
+  /* Shadows - crisp */
+  --product-shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  --product-shadow-elevated: 0 4px 8px -2px rgb(0 0 0 / 0.06);
+}
+
+/* =============================================================================
+   SCOPED COMPONENT RULES
+   These rules apply product tokens to common UI patterns
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   A) Page Headers - title styling varies by product
+   ----------------------------------------------------------------------------- */
+
+.product-cleaning .page-title,
+.product-cleaning h1.text-2xl {
+  color: var(--product-header-color);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.product-maintenance .page-title,
+.product-maintenance h1.text-2xl {
+  color: var(--product-header-color);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.product-property .page-title,
+.product-property h1.text-2xl {
+  color: var(--product-header-color);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.product-fitout .page-title,
+.product-fitout h1.text-2xl {
+  color: var(--product-header-color);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* -----------------------------------------------------------------------------
+   B) Status Pills / Badges - product accent colors
+   ----------------------------------------------------------------------------- */
+
+/* Primary status (scheduled/open) */
+.product-cleaning .status-scheduled,
+.product-cleaning .badge-primary {
+  background: var(--product-accent-soft);
+  color: var(--product-accent);
+}
+
+.product-maintenance .status-scheduled,
+.product-maintenance .status-open,
+.product-maintenance .badge-primary {
+  background: hsl(215 35% 95%);
+  color: hsl(215 45% 52%);
+}
+
+.product-property .status-scheduled,
+.product-property .badge-primary {
+  background: var(--product-accent-soft);
+  color: hsl(38 70% 40%);
+}
+
+.product-fitout .status-scheduled,
+.product-fitout .badge-primary {
+  background: var(--product-accent-soft);
+  color: var(--product-accent);
+}
+
+/* In Progress status */
+.product-cleaning .status-in-progress,
+.product-cleaning .status-inprogress {
+  background: hsl(221 83% 95%);
+  color: hsl(221 83% 53%);
+}
+
+.product-maintenance .status-in-progress,
+.product-maintenance .status-progress {
+  background: hsl(40 35% 94%);
+  color: hsl(40 45% 48%);
+}
+
+.product-property .status-in-progress {
+  background: hsl(38 50% 93%);
+  color: hsl(38 70% 40%);
+}
+
+.product-fitout .status-in-progress {
+  background: hsl(175 30% 93%);
+  color: hsl(175 60% 35%);
+}
+
+/* Completed status */
+.product-cleaning .status-completed {
+  background: hsl(142 76% 94%);
+  color: hsl(142 71% 40%);
+}
+
+.product-maintenance .status-completed {
+  background: hsl(155 25% 94%);
+  color: hsl(155 35% 42%);
+}
+
+.product-property .status-completed {
+  background: hsl(142 50% 94%);
+  color: hsl(142 60% 38%);
+}
+
+.product-fitout .status-completed {
+  background: hsl(160 40% 94%);
+  color: hsl(160 50% 35%);
+}
+
+/* -----------------------------------------------------------------------------
+   C) Tables - header styling varies significantly by product
+   ----------------------------------------------------------------------------- */
+
+/* Table headers */
+[class*="product-"] table th,
+[class*="product-"] .data-table th {
+  background: var(--product-table-header-bg);
+  color: var(--product-text-secondary);
+  font-size: var(--product-table-header-size);
+  font-weight: var(--product-table-header-weight);
+  letter-spacing: var(--product-table-header-spacing);
+  text-transform: var(--product-table-header-transform);
+}
+
+/* Table row hover */
+[class*="product-"] table tbody tr:hover td,
+[class*="product-"] .data-table tbody tr:hover td {
+  background: var(--product-table-row-hover);
+}
+
+/* Maintenance-specific table density */
+.product-maintenance table,
+.product-maintenance .data-table {
+  font-size: var(--product-density);
+}
+
+.product-maintenance table th,
+.product-maintenance .data-table th {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--product-border-subtle);
+}
+
+.product-maintenance table td,
+.product-maintenance .data-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--product-border-subtle);
+}
+
+/* Cleaning table - more relaxed */
+.product-cleaning table th,
+.product-cleaning .data-table th {
+  padding: 0.75rem 1rem;
+}
+
+.product-cleaning table td,
+.product-cleaning .data-table td {
+  padding: 0.75rem 1rem;
+}
+
+/* -----------------------------------------------------------------------------
+   D) Cards - radius/shadow varies by product
+   ----------------------------------------------------------------------------- */
+
+[class*="product-"] .card,
+[class*="product-"] [class*="rounded-lg"][class*="border"] {
+  border-radius: var(--product-radius);
+  border-color: var(--product-border);
+  box-shadow: var(--product-shadow-card);
+}
+
+/* Maintenance cards - flatter */
+.product-maintenance .card,
+.product-maintenance .premium-card,
+.product-maintenance .detail-card {
+  border-radius: var(--product-radius);
+  border: 1px solid var(--product-border);
+  box-shadow: var(--product-shadow-card);
+}
+
+/* Cleaning cards - softer, more elevated */
+.product-cleaning .card {
+  border-radius: var(--product-radius);
+  box-shadow: var(--product-shadow-card);
+}
+
+/* -----------------------------------------------------------------------------
+   E) Primary Buttons - accent color
+   ----------------------------------------------------------------------------- */
+
+[class*="product-"] button.bg-primary,
+[class*="product-"] .btn-primary {
+  background-color: var(--product-accent);
+}
+
+[class*="product-"] button.bg-primary:hover,
+[class*="product-"] .btn-primary:hover {
+  background-color: var(--product-accent-hover);
+}
+
+/* -----------------------------------------------------------------------------
+   E.1) Maintenance Button Elevation & Geometry
+   Flatter, less rounded with subtle shadow lift
+   ----------------------------------------------------------------------------- */
+
+.product-maintenance button.bg-primary,
+.product-maintenance [class*="bg-primary"] {
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  transition: all 0.2s ease;
+}
+
+.product-maintenance button.bg-primary:hover,
+.product-maintenance [class*="bg-primary"]:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+/* Maintenance card geometry - flatter corners */
+.product-maintenance .rounded-xl {
+  border-radius: 8px !important;
+}
+
+.product-maintenance .rounded-lg {
+  border-radius: 6px !important;
+}
+
+/* Ensure buttons have consistent flat geometry */
+.product-maintenance button {
+  border-radius: 6px;
+}
+
+/* -----------------------------------------------------------------------------
+   F) Typography density
+   ----------------------------------------------------------------------------- */
+
+.product-maintenance {
+  font-size: var(--product-density);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.product-cleaning {
+  font-size: var(--product-density);
+}
+
+.product-property {
+  font-size: var(--product-density);
+}
+
+.product-fitout {
+  font-size: var(--product-density);
+}
+
+/* -----------------------------------------------------------------------------
+   G) Text colors
+   ----------------------------------------------------------------------------- */
+
+[class*="product-"] {
+  color: var(--product-text-primary);
+}
+
+[class*="product-"] .text-muted-foreground,
+[class*="product-"] .text-secondary {
+  color: var(--product-text-secondary);
+}

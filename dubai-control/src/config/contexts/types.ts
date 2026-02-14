@@ -10,6 +10,15 @@ import type { LucideIcon } from "lucide-react";
 export type AppContextId = "cleaning" | "maintenance" | "property" | "fitout";
 
 /**
+ * Shell layout modes for different product UIs.
+ * - default: Standard container (px-6 py-8 max-w-7xl) - CleanProof style
+ * - compact: Full-bleed, dense layout - MaintainProof style
+ * - document: Narrower container for document-centric views
+ * - project: Wider container for project management views
+ */
+export type ShellMode = "default" | "compact" | "document" | "project";
+
+/**
  * Navigation item definition for sidebar.
  */
 export interface NavItem {
@@ -41,6 +50,8 @@ export interface ContextConfig {
   navItems: NavItem[];
   /** Whether this context is enabled */
   enabled: boolean;
+  /** Shell layout mode (optional, defaults to "default") */
+  shellMode?: ShellMode;
 }
 
 /**

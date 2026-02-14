@@ -13,6 +13,35 @@ from apps.accounts.models import Company
 from apps.locations.models import Location
 
 
+class MaintenanceCategory(models.Model):
+    """
+    Service category for maintenance visits.
+
+    Examples: Preventive, Corrective, Emergency, Inspection
+
+    Company-scoped: each company defines their own categories.
+    Used to classify Jobs when they are maintenance service visits.
+    """
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="maintenance_categories"
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = ["company", "name"]
+        verbose_name_plural = "Maintenance categories"
+
+    def __str__(self):
+        return self.name
+
+
 class AssetType(models.Model):
     """
     Asset classification/category.

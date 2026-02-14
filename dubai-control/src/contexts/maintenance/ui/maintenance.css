@@ -1,0 +1,240 @@
+/* =============================================================================
+   Maintenance Context Shell Styles
+
+   NOTE: Layout (padding, max-width) is now controlled by AppLayout via shellMode.
+   This file only provides:
+   - Typography density (Inter font, 13px base)
+   - Product accent colors
+   - Component-specific overrides
+
+   NO negative margins - layout is context-driven.
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Typography: Inter font, denser sizing
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 0.8125rem; /* 13px base */
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: hsl(220 20% 20%);
+}
+
+/* -----------------------------------------------------------------------------
+   Page Header: Compact, professional
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0;
+}
+
+.maintenance-root .page-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: hsl(220 20% 20%);
+  letter-spacing: -0.015em;
+}
+
+/* -----------------------------------------------------------------------------
+   Filter Bar: Compact row
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.625rem;
+}
+
+/* -----------------------------------------------------------------------------
+   Premium Card: Flat, minimal shadow
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .premium-card {
+  background: hsl(0 0% 100%);
+  border: 1px solid hsl(220 12% 90%);
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+}
+
+/* -----------------------------------------------------------------------------
+   Data Table: Dense & Professional
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .data-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
+}
+
+.maintenance-root .data-table th {
+  background: hsl(220 12% 97%);
+  color: hsl(220 10% 50%);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(220 12% 92%);
+}
+
+.maintenance-root .data-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid hsl(220 12% 92%);
+  color: hsl(220 20% 20%);
+}
+
+.maintenance-root .data-table tbody tr {
+  transition: none;
+}
+
+.maintenance-root .data-table tbody tr:hover td {
+  background: hsl(220 12% 98.5%);
+}
+
+.maintenance-root .data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* -----------------------------------------------------------------------------
+   Status Pills: Muted, professional
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.maintenance-root .status-open {
+  background: hsl(215 35% 95%);
+  color: hsl(215 45% 52%);
+}
+
+.maintenance-root .status-progress {
+  background: hsl(40 35% 94%);
+  color: hsl(40 45% 48%);
+}
+
+.maintenance-root .status-completed {
+  background: hsl(155 25% 94%);
+  color: hsl(155 35% 42%);
+}
+
+.maintenance-root .status-cancelled {
+  background: hsl(0 20% 95%);
+  color: hsl(0 30% 52%);
+}
+
+/* -----------------------------------------------------------------------------
+   Proof Indicators
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .proof-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.125rem;
+  color: hsl(220 10% 50% / 0.6);
+}
+
+.maintenance-root .proof-indicator.has-proof {
+  background: hsl(155 25% 94%);
+  color: hsl(155 35% 42%);
+}
+
+/* -----------------------------------------------------------------------------
+   Detail Cards (for VisitDetail page)
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .detail-card {
+  background: hsl(0 0% 100%);
+  border: 1px solid hsl(220 12% 90%);
+  border-radius: 0.375rem;
+  padding: 1rem;
+}
+
+.maintenance-root .detail-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(220 20% 20%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.maintenance-root .detail-card-title svg {
+  width: 1rem;
+  height: 1rem;
+  color: hsl(220 10% 50%);
+}
+
+.maintenance-root .detail-section {
+  margin-top: 0.75rem;
+}
+
+.maintenance-root .detail-label {
+  font-size: 0.75rem;
+  color: hsl(220 10% 50%);
+}
+
+.maintenance-root .detail-value {
+  font-size: 0.8125rem;
+  color: hsl(220 20% 20%);
+  font-weight: 500;
+}
+
+/* -----------------------------------------------------------------------------
+   Back Button
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .back-button {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8125rem;
+  color: hsl(220 10% 50%);
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.maintenance-root .back-button:hover {
+  color: hsl(220 20% 20%);
+}
+
+/* -----------------------------------------------------------------------------
+   Detail Header
+   ----------------------------------------------------------------------------- */
+
+.maintenance-root .detail-header {
+  margin-bottom: 1rem;
+}
+
+.maintenance-root .detail-header h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: hsl(220 20% 20%);
+  letter-spacing: -0.02em;
+}
+
+.maintenance-root .detail-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}

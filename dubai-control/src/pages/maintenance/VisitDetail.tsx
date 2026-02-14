@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { getServiceVisit } from "@/api/client";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
+import { MaintenanceLayout } from "@/contexts/maintenance/ui/MaintenanceLayout";
 
 // RBAC: Check if user can access visits (owner/manager/staff)
 function canAccessVisits(role: UserRole): boolean {
@@ -92,76 +93,73 @@ export default function VisitDetail() {
   // Access restricted view
   if (!hasAccess) {
     return (
-      <div className="mx-auto max-w-4xl p-8">
-        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-8 text-center">
-          <ClipboardList className="mx-auto h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-xl font-semibold text-foreground">
-            Access Restricted
-          </h2>
-          <p className="mt-2 text-muted-foreground">
+      <MaintenanceLayout>
+        <div className="py-8 text-center">
+          <ClipboardList className="mx-auto h-10 w-10 text-destructive" />
+          <h2 className="mt-4 text-lg font-semibold">Access Restricted</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             You don't have permission to view service visits.
           </p>
-          <Button onClick={() => navigate("/maintenance/visits")} className="mt-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+          <Button onClick={() => navigate("/maintenance/visits")} className="mt-4" size="sm">
+            <ArrowLeft className="mr-2 h-3.5 w-3.5" />
             Back to Visits
           </Button>
         </div>
-      </div>
+      </MaintenanceLayout>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <MaintenanceLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </MaintenanceLayout>
     );
   }
 
   if (isError || !visit) {
     return (
-      <div className="mx-auto max-w-4xl p-8">
-        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-8 text-center">
-          <ClipboardList className="mx-auto h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-xl font-semibold text-foreground">
-            Failed to load visit
-          </h2>
-          <p className="mt-2 text-muted-foreground">
+      <MaintenanceLayout>
+        <div className="py-8 text-center">
+          <ClipboardList className="mx-auto h-10 w-10 text-destructive" />
+          <h2 className="mt-4 text-lg font-semibold">Failed to load visit</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             Service visit #{id} could not be found or loaded.
           </p>
-          <div className="mt-4 flex justify-center gap-3">
-            <Button variant="outline" onClick={() => navigate("/maintenance/visits")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Visits
+          <div className="mt-4 flex justify-center gap-2">
+            <Button variant="outline" onClick={() => navigate("/maintenance/visits")} size="sm">
+              <ArrowLeft className="mr-2 h-3.5 w-3.5" />
+              Back
             </Button>
-            <Button onClick={() => refetch()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <Button onClick={() => refetch()} size="sm">
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
               Retry
             </Button>
           </div>
         </div>
-      </div>
+      </MaintenanceLayout>
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-8">
+    <MaintenanceLayout>
+      {/* Back button */}
+      <button
+        onClick={() => navigate("/maintenance/visits")}
+        className="back-button"
+      >
+        <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+        Back to Visits
+      </button>
+
       {/* Header */}
-      <div className="mb-8">
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/maintenance/visits")}
-          className="mb-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Visits
-        </Button>
+      <div className="detail-header">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              Service Visit #{visit.id}
-            </h1>
-            <div className="mt-2 flex items-center gap-3">
+            <h1>Service Visit #{visit.id}</h1>
+            <div className="detail-badges">
               <StatusBadge status={visit.status} />
               <SLABadge status={visit.sla_status} />
             </div>
@@ -169,22 +167,23 @@ export default function VisitDetail() {
           <Button
             variant="outline"
             onClick={() => navigate(`/jobs/${visit.id}`)}
+            size="sm"
           >
-            <ExternalLink className="mr-2 h-4 w-4" />
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
             Open in Job Detail
           </Button>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {/* Schedule Card */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <Calendar className="h-5 w-5 text-muted-foreground" />
+        <div className="detail-card">
+          <h2 className="detail-card-title">
+            <Calendar />
             Schedule
           </h2>
-          <div className="mt-4 space-y-3">
+          <div className="detail-section space-y-2">
             <div>
               <span className="text-sm text-muted-foreground">Date:</span>
               <span className="ml-2 text-sm font-medium text-foreground">
@@ -230,12 +229,12 @@ export default function VisitDetail() {
         </div>
 
         {/* Location Card */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <MapPin className="h-5 w-5 text-muted-foreground" />
+        <div className="detail-card">
+          <h2 className="detail-card-title">
+            <MapPin />
             Location
           </h2>
-          <div className="mt-4 space-y-3">
+          <div className="detail-section space-y-2">
             <div>
               <span className="text-sm font-medium text-foreground">
                 {visit.location?.name || "—"}
@@ -261,12 +260,12 @@ export default function VisitDetail() {
         </div>
 
         {/* Technician Card */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <User className="h-5 w-5 text-muted-foreground" />
+        <div className="detail-card">
+          <h2 className="detail-card-title">
+            <User />
             Technician
           </h2>
-          <div className="mt-4 space-y-3">
+          <div className="detail-section space-y-2">
             <div>
               <span className="text-sm font-medium text-foreground">
                 {visit.cleaner?.full_name || "—"}
@@ -281,12 +280,12 @@ export default function VisitDetail() {
         </div>
 
         {/* Asset Card */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <Wrench className="h-5 w-5 text-muted-foreground" />
+        <div className="detail-card">
+          <h2 className="detail-card-title">
+            <Wrench />
             Asset
           </h2>
-          <div className="mt-4">
+          <div className="detail-section">
             {visit.asset ? (
               <div className="space-y-2">
                 <Link
@@ -313,12 +312,12 @@ export default function VisitDetail() {
 
       {/* Notes Section */}
       {(visit.manager_notes || visit.cleaner_notes) && (
-        <div className="mt-6 rounded-xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-            <FileText className="h-5 w-5 text-muted-foreground" />
+        <div className="detail-card mt-4">
+          <h2 className="detail-card-title">
+            <FileText />
             Notes
           </h2>
-          <div className="mt-4 space-y-4">
+          <div className="detail-section space-y-3">
             {visit.manager_notes && (
               <div className="rounded-lg bg-muted/50 p-4">
                 <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
@@ -344,35 +343,35 @@ export default function VisitDetail() {
       )}
 
       {/* Evidence Section */}
-      <div className="mt-6 rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Evidence & Proof</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+      <div className="detail-card mt-4">
+        <h2 className="detail-card-title">Evidence & Proof</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
           View photos, checklist, and check-in/check-out events in the full Job Detail.
         </p>
-        <div className="mt-4">
-          <Button onClick={() => navigate(`/jobs/${visit.id}`)}>
-            <ExternalLink className="mr-2 h-4 w-4" />
+        <div className="mt-3">
+          <Button onClick={() => navigate(`/jobs/${visit.id}`)} size="sm">
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
             Open in Job Detail
           </Button>
         </div>
 
         {/* Quick Stats */}
-        <div className="mt-6 grid grid-cols-3 gap-4 border-t border-border pt-4">
+        <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-3">
           <div>
-            <div className="text-sm text-muted-foreground">Photos</div>
-            <div className="text-lg font-semibold text-foreground">
+            <div className="detail-label">Photos</div>
+            <div className="detail-value">
               {visit.photos?.length || 0}
             </div>
           </div>
           <div>
-            <div className="text-sm text-muted-foreground">Checklist Items</div>
-            <div className="text-lg font-semibold text-foreground">
+            <div className="detail-label">Checklist Items</div>
+            <div className="detail-value">
               {visit.checklist_items?.length || 0}
             </div>
           </div>
           <div>
-            <div className="text-sm text-muted-foreground">Check Events</div>
-            <div className="text-lg font-semibold text-foreground">
+            <div className="detail-label">Check Events</div>
+            <div className="detail-value">
               {visit.check_events?.length || 0}
             </div>
           </div>
@@ -381,9 +380,9 @@ export default function VisitDetail() {
 
       {/* SLA Violations */}
       {visit.sla_status === "violated" && visit.sla_reasons && visit.sla_reasons.length > 0 && (
-        <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-red-800">SLA Violations</h2>
-          <ul className="mt-2 list-disc list-inside text-sm text-red-700">
+        <div className="detail-card mt-4 border-red-200 bg-red-50">
+          <h2 className="text-sm font-semibold text-red-800">SLA Violations</h2>
+          <ul className="mt-2 list-disc list-inside text-xs text-red-700">
             {visit.sla_reasons.map((reason, idx) => (
               <li key={idx}>
                 {reason.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -392,6 +391,6 @@ export default function VisitDetail() {
           </ul>
         </div>
       )}
-    </div>
+    </MaintenanceLayout>
   );
 }

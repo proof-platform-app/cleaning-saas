@@ -183,6 +183,15 @@ export interface Location {
   [key: string]: any;
 }
 
+// ---------- Maintenance Context: Categories ----------
+
+export interface MaintenanceCategory {
+  id: number;
+  name: string;
+  description: string;
+  is_active: boolean;
+}
+
 // ---------- Maintenance Context: Assets ----------
 
 export interface AssetType {
@@ -1243,6 +1252,93 @@ export async function deleteAsset(id: number): Promise<void> {
   });
 }
 
+// ---------- Maintenance Categories API (V1) ----------
+
+export async function getMaintenanceCategories(): Promise<MaintenanceCategory[]> {
+  await loginManager();
+  return apiFetch<MaintenanceCategory[]>("/api/manager/maintenance-categories/");
+}
+
+export async function getMaintenanceCategory(id: number): Promise<MaintenanceCategory> {
+  await loginManager();
+  return apiFetch<MaintenanceCategory>(`/api/manager/maintenance-categories/${id}/`);
+}
+
+export async function createMaintenanceCategory(input: {
+  name: string;
+  description?: string;
+}): Promise<MaintenanceCategory> {
+  await loginManager();
+  return apiFetch<MaintenanceCategory>("/api/manager/maintenance-categories/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateMaintenanceCategory(
+  id: number,
+  input: Partial<{
+    name: string;
+    description: string;
+    is_active: boolean;
+  }>
+): Promise<MaintenanceCategory> {
+  await loginManager();
+  return apiFetch<MaintenanceCategory>(`/api/manager/maintenance-categories/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteMaintenanceCategory(id: number): Promise<void> {
+  await loginManager();
+  await apiFetch(`/api/manager/maintenance-categories/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+// ---------- Asset Service History API (V1) ----------
+
+export interface AssetServiceHistory {
+  asset: {
+    id: number;
+    name: string;
+    serial_number: string;
+    asset_type: {
+      id: number;
+      name: string;
+    };
+    location: {
+      id: number;
+      name: string;
+    };
+  };
+  visits: Array<{
+    id: number;
+    scheduled_date: string;
+    scheduled_start_time: string | null;
+    status: string;
+    technician: {
+      id: number;
+      name: string;
+    };
+    category: {
+      id: number;
+      name: string;
+    } | null;
+    manager_notes: string;
+    cleaner_notes: string;
+    actual_start_time: string | null;
+    actual_end_time: string | null;
+  }>;
+  total_visits: number;
+}
+
+export async function getAssetServiceHistory(assetId: number): Promise<AssetServiceHistory> {
+  await loginManager();
+  return apiFetch<AssetServiceHistory>(`/api/manager/assets/${assetId}/visits/`);
+}
+
 // ---- Backward-compatible exports ----
 export const fetchManagerJobsToday = getManagerTodayJobs;
 
@@ -1747,6 +1843,7 @@ export type CreateServiceVisitInput = {
   location_id: number;
   cleaner_id: number; // "technician" in UI
   asset_id?: number | null;
+  maintenance_category_id?: number | null;
   checklist_template_id?: number | null;
   manager_notes?: string;
 };
@@ -1755,14 +1852,16 @@ export async function getServiceVisits(filters?: {
   date_from?: string;
   date_to?: string;
   status?: string;
-  cleaner_id?: number;
+  cleaner_id?: number;  // technician_id in API
   location_id?: number;
+  asset_id?: number;
+  category_id?: number;
 }): Promise<ServiceVisit[]> {
   await loginManager();
 
   const params = new URLSearchParams();
 
-  // Default to last 30 days if no dates provided
+  // Date filters
   if (filters?.date_from) {
     params.append("date_from", filters.date_from);
   }
@@ -1772,17 +1871,25 @@ export async function getServiceVisits(filters?: {
   if (filters?.status) {
     params.append("status", filters.status);
   }
+  // API uses technician_id, we expose cleaner_id for consistency
   if (filters?.cleaner_id) {
-    params.append("cleaner_id", String(filters.cleaner_id));
+    params.append("technician_id", String(filters.cleaner_id));
   }
   if (filters?.location_id) {
     params.append("location_id", String(filters.location_id));
   }
+  if (filters?.asset_id) {
+    params.append("asset_id", String(filters.asset_id));
+  }
+  if (filters?.category_id) {
+    params.append("category_id", String(filters.category_id));
+  }
 
   const query = params.toString();
+  // Use the dedicated service-visits endpoint (maintenance context)
   const url = query
-    ? `/api/manager/jobs/history/?${query}`
-    : "/api/manager/jobs/history/";
+    ? `/api/manager/service-visits/?${query}`
+    : "/api/manager/service-visits/";
 
   return apiFetch<ServiceVisit[]>(url);
 }

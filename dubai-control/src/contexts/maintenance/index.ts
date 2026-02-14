@@ -11,7 +11,14 @@ export { AssetsPage } from "./ui/AssetsPage";
 export { TechniciansPage } from "./ui/TechniciansPage";
 
 // Lovable Layout Components (reusable UI patterns)
+export { MaintenanceLayout } from "./ui/MaintenanceLayout";
 export { AssetsLovableLayout, type AssetLayoutItem } from "./ui/AssetsLovableLayout";
+export {
+  VisitsLovableLayout,
+  type VisitLayoutItem,
+  type VisitStatus,
+  type FilterOption,
+} from "./ui/VisitsLovableLayout";
 
 // Components (imported from Lovable)
 // export { VisitCard } from "./components/VisitCard";

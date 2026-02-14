@@ -47,6 +47,7 @@ export const maintenanceRoutes: RouteObject[] = [
  * Use these constants instead of hardcoding paths.
  */
 export const maintenancePaths = {
+  dashboard: "/maintenance/dashboard",
   visits: "/maintenance/visits",
   visitNew: "/maintenance/visits/new",
   visitDetail: (id: number | string) => `/maintenance/visits/${id}`,

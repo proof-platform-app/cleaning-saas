@@ -32,6 +32,7 @@ import ReportEmailLogsPage from "./pages/ReportEmailLogs";
 import Analytics from "./pages/Analytics";
 
 /* Maintenance Context Pages */
+import MaintenanceDashboard from "./pages/maintenance/Dashboard";
 import Assets from "./pages/maintenance/Assets";
 import VisitList from "./pages/maintenance/VisitList";
 import CreateVisit from "./pages/maintenance/CreateVisit";
@@ -124,6 +125,7 @@ const App = () => (
                   Maintenance Context Routes
                   (all under /maintenance/*)
                   ------------------------- */}
+              <Route path="/maintenance/dashboard" element={<MaintenanceDashboard />} />
               <Route path="/maintenance/visits" element={<VisitList />} />
               <Route path="/maintenance/visits/new" element={<CreateVisit />} />
               <Route path="/maintenance/visits/:id" element={<VisitDetail />} />

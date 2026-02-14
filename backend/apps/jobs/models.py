@@ -64,6 +64,16 @@ class Job(models.Model):
         help_text="Optional link to asset for maintenance service visits",
     )
 
+    # Maintenance Context V1: optional category for service visits
+    maintenance_category = models.ForeignKey(
+        "apps_maintenance.MaintenanceCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="jobs",
+        help_text="Optional category for maintenance service visits (e.g., Preventive, Corrective)",
+    )
+
     scheduled_date = models.DateField()
     scheduled_start_time = models.TimeField(null=True, blank=True)
     scheduled_end_time = models.TimeField(null=True, blank=True)

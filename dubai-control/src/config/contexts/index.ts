@@ -1,12 +1,12 @@
 // dubai-control/src/config/contexts/index.ts
 // Context Registry - exports all context configurations
 
-import type { AppContextId, ContextConfig, ContextRegistry, NavItem } from "./types";
+import type { AppContextId, ContextConfig, ContextRegistry, NavItem, ShellMode } from "./types";
 import { cleaningContext } from "./cleaning";
 import { maintenanceContext } from "./maintenance";
 
 // Re-export types
-export type { AppContextId, ContextConfig, NavItem };
+export type { AppContextId, ContextConfig, NavItem, ShellMode };
 
 /**
  * Placeholder contexts (not yet implemented).
@@ -19,6 +19,7 @@ const propertyContext: ContextConfig = {
   defaultRoute: "/property",
   navItems: [],
   enabled: false,
+  shellMode: "document",
 };
 
 const fitoutContext: ContextConfig = {
@@ -29,6 +30,7 @@ const fitoutContext: ContextConfig = {
   defaultRoute: "/fitout",
   navItems: [],
   enabled: false,
+  shellMode: "project",
 };
 
 /**

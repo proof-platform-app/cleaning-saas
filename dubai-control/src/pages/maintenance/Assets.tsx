@@ -23,18 +23,20 @@ import { useToast } from "@/components/ui/use-toast";
 import { Plus, Loader2, X, Wrench, ChevronRight, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import {
-  getAssets,
-  getAssetTypes,
-  getLocations,
-  createAsset,
-  updateAsset,
-  deleteAsset,
-  createAssetType,
+  listAssets,
+  listAssetTypes,
+  listLocations,
+  createNewAsset,
+  updateExistingAsset,
+  removeAsset,
+  createNewAssetType,
+  maintenanceKeys,
   type Asset,
   type AssetType,
   type Location,
-} from "@/api/client";
+} from "@/api/maintenance";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
+import { MaintenanceLayout } from "@/contexts/maintenance/ui/MaintenanceLayout";
 
 // Format date for display (Lovable pattern)
 function formatDate(dateStr: string): string {
@@ -83,31 +85,31 @@ export default function Assets() {
   const hasWriteAccess = canWriteAssets(user.role);
 
   // Fetch assets
-  const { data: assets = [], isLoading: assetsLoading } = useQuery({
-    queryKey: ["assets"],
-    queryFn: () => getAssets(),
+  const { data: assets = [], isLoading: assetsLoading, isError: assetsError, error: assetsErrorData, refetch: refetchAssets } = useQuery({
+    queryKey: maintenanceKeys.assets.list(),
+    queryFn: () => listAssets(),
     enabled: hasReadAccess,
   });
 
   // Fetch asset types
-  const { data: assetTypes = [], isLoading: typesLoading } = useQuery({
-    queryKey: ["assetTypes"],
-    queryFn: getAssetTypes,
+  const { data: assetTypes = [], isLoading: typesLoading, isError: typesError } = useQuery({
+    queryKey: maintenanceKeys.assetTypes.list(),
+    queryFn: listAssetTypes,
     enabled: hasReadAccess,
   });
 
   // Fetch locations for dropdown
   const { data: locations = [] } = useQuery({
-    queryKey: ["locations"],
-    queryFn: getLocations,
+    queryKey: maintenanceKeys.locations,
+    queryFn: listLocations,
     enabled: hasReadAccess,
   });
 
   // Create asset mutation
   const createMutation = useMutation({
-    mutationFn: (data: Parameters<typeof createAsset>[0]) => createAsset(data),
+    mutationFn: (data: Parameters<typeof createNewAsset>[0]) => createNewAsset(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.assets.all });
       toast({
         title: "Success",
         description: "Asset created successfully",
@@ -127,10 +129,10 @@ export default function Assets() {
 
   // Update asset mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateAsset>[1] }) =>
-      updateAsset(id, data),
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateExistingAsset>[1] }) =>
+      updateExistingAsset(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.assets.all });
       toast({
         title: "Success",
         description: "Asset updated successfully",
@@ -152,9 +154,9 @@ export default function Assets() {
 
   // Delete asset mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteAsset(id),
+    mutationFn: (id: number) => removeAsset(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.assets.all });
       toast({
         title: "Success",
         description: "Asset deleted successfully",
@@ -176,9 +178,9 @@ export default function Assets() {
   // Create asset type mutation
   const createTypeMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
-      createAssetType(data),
+      createNewAssetType(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assetTypes"] });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.assetTypes.all });
       toast({
         title: "Success",
         description: "Asset type created successfully",
@@ -325,23 +327,55 @@ export default function Assets() {
   // Access restricted view
   if (!hasReadAccess) {
     return (
-      <div className="mx-auto max-w-6xl p-8">
-        <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-8 text-center">
+      <MaintenanceLayout>
+        <div className="py-8 text-center">
           <Wrench className="mx-auto h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-xl font-semibold text-foreground">Access Restricted</h2>
+          <h2 className="mt-4 text-xl font-semibold">Access Restricted</h2>
           <p className="mt-2 text-muted-foreground">
             You don't have permission to view assets.
           </p>
         </div>
-      </div>
+      </MaintenanceLayout>
     );
   }
 
   if (assetsLoading || typesLoading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
+      <MaintenanceLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </MaintenanceLayout>
+    );
+  }
+
+  // Error state
+  if (assetsError || typesError) {
+    const errorMessage = (assetsErrorData as any)?.response?.data?.message
+      || "Failed to load assets. Please try again.";
+    return (
+      <MaintenanceLayout>
+        <div className="space-y-4">
+          {/* Error Banner */}
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-destructive" />
+              <p className="text-sm font-medium text-destructive">Error loading data</p>
+            </div>
+            <p className="mt-1 text-sm text-destructive/80">{errorMessage}</p>
+          </div>
+          <div className="py-8 text-center">
+            <Wrench className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h2 className="mt-4 text-xl font-semibold">Unable to load assets</h2>
+            <p className="mt-2 text-muted-foreground">
+              There was an error loading the assets list.
+            </p>
+            <Button onClick={() => refetchAssets()} className="mt-4" size="sm">
+              Retry
+            </Button>
+          </div>
+        </div>
+      </MaintenanceLayout>
     );
   }
 
@@ -349,9 +383,10 @@ export default function Assets() {
   const activeTypes = assetTypes.filter((t) => t.is_active);
 
   return (
-    <div className="space-y-4">
-      {/* Header - Lovable style (clean, minimal) */}
-      <div className="page-header">
+    <MaintenanceLayout>
+      <div className="space-y-4">
+        {/* Header - Lovable style (clean, minimal) */}
+        <div className="page-header">
         <h1 className="page-title">Assets</h1>
         {hasWriteAccess && (
           <Button size="sm" className="h-8 px-3 text-xs font-medium" onClick={handleAddNew}>
@@ -622,6 +657,7 @@ export default function Assets() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </MaintenanceLayout>
   );
 }

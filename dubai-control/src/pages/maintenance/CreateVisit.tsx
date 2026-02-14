@@ -18,14 +18,17 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Loader2, ClipboardList, Save } from "lucide-react";
 import {
-  getLocations,
-  getCleaners,
-  getAssets,
-  createServiceVisit,
+  listLocations,
+  listTechnicians,
+  listAssets,
+  listCategories,
+  createVisit,
+  maintenanceKeys,
   type Location,
   type Cleaner,
   type Asset,
-} from "@/api/client";
+  type MaintenanceCategory,
+} from "@/api/maintenance";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 
 // RBAC: Check if user can create visits (owner/manager)
@@ -49,6 +52,7 @@ export default function CreateVisit() {
     location_id: "",
     cleaner_id: "",
     asset_id: "",
+    category_id: "",
     manager_notes: "",
   });
 
@@ -59,22 +63,29 @@ export default function CreateVisit() {
 
   // Fetch locations
   const { data: locations = [], isLoading: locationsLoading } = useQuery({
-    queryKey: ["locations"],
-    queryFn: getLocations,
+    queryKey: maintenanceKeys.locations,
+    queryFn: listLocations,
     enabled: canCreate,
   });
 
   // Fetch technicians (cleaners)
   const { data: technicians = [], isLoading: techniciansLoading } = useQuery({
-    queryKey: ["cleaners"],
-    queryFn: getCleaners,
+    queryKey: maintenanceKeys.technicians,
+    queryFn: listTechnicians,
     enabled: canCreate,
   });
 
   // Fetch assets
   const { data: assets = [], isLoading: assetsLoading } = useQuery({
-    queryKey: ["assets"],
-    queryFn: () => getAssets({ is_active: true }),
+    queryKey: maintenanceKeys.assets.list({ is_active: true }),
+    queryFn: () => listAssets({ is_active: true }),
+    enabled: canCreate,
+  });
+
+  // Fetch maintenance categories
+  const { data: categories = [] } = useQuery({
+    queryKey: maintenanceKeys.categories.list(),
+    queryFn: listCategories,
     enabled: canCreate,
   });
 
@@ -99,9 +110,9 @@ export default function CreateVisit() {
 
   // Create mutation
   const createMutation = useMutation({
-    mutationFn: createServiceVisit,
+    mutationFn: createVisit,
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["serviceVisits"] });
+      queryClient.invalidateQueries({ queryKey: maintenanceKeys.visits.all });
       toast({
         title: "Success",
         description: "Service visit created successfully",
@@ -157,6 +168,7 @@ export default function CreateVisit() {
       location_id: Number(formData.location_id),
       cleaner_id: Number(formData.cleaner_id),
       asset_id: formData.asset_id ? Number(formData.asset_id) : null,
+      maintenance_category_id: formData.category_id ? Number(formData.category_id) : null,
       manager_notes: formData.manager_notes || undefined,
     });
   };
@@ -341,6 +353,30 @@ export default function CreateVisit() {
               )}
               <p className="text-xs text-muted-foreground">
                 Link this visit to a specific asset for service tracking
+              </p>
+            </div>
+
+            {/* Category (optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="category_id">Category (optional)</Label>
+              <Select
+                value={formData.category_id}
+                onValueChange={(v) => setFormData({ ...formData, category_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No category</SelectItem>
+                  {categories.filter((c) => c.is_active).map((cat) => (
+                    <SelectItem key={cat.id} value={String(cat.id)}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Categorize this visit (e.g., Preventive, Corrective, Emergency)
               </p>
             </div>
 
