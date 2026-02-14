@@ -1016,7 +1016,7 @@ class ManagerJobsHistoryView(APIView):
                 scheduled_date__gte=date_from,
                 scheduled_date__lte=date_to,
             )
-            .select_related("location", "cleaner")
+            .select_related("location", "cleaner", "asset")
             .prefetch_related("photos", "checklist_items")
             .order_by("-scheduled_date", "-scheduled_start_time", "-id")
         )
@@ -1032,6 +1032,11 @@ class ManagerJobsHistoryView(APIView):
         location_id = request.query_params.get("location_id")
         if location_id:
             qs = qs.filter(location_id=location_id)
+
+        # Maintenance Context V1: filter by asset_id
+        asset_id = request.query_params.get("asset_id")
+        if asset_id:
+            qs = qs.filter(asset_id=asset_id)
 
         data = [build_planning_job_payload(job) for job in qs]
         return Response(data, status=status.HTTP_200_OK)
