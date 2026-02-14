@@ -183,6 +183,33 @@ export interface Location {
   [key: string]: any;
 }
 
+// ---------- Maintenance Context: Assets ----------
+
+export interface AssetType {
+  id: number;
+  name: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface Asset {
+  id: number;
+  name: string;
+  serial_number: string;
+  description: string;
+  is_active: boolean;
+  location: {
+    id: number;
+    name: string;
+  };
+  asset_type: {
+    id: number;
+    name: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- Auth state ----------
 
 type AuthState = {
@@ -1098,6 +1125,121 @@ export async function updateLocation(
   return apiFetch<Location>(`/api/manager/locations/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+// ---------- Asset Types API (Maintenance Context V1) ----------
+
+export async function getAssetTypes(): Promise<AssetType[]> {
+  await loginManager();
+  return apiFetch<AssetType[]>("/api/manager/asset-types/");
+}
+
+export async function getAssetType(id: number): Promise<AssetType> {
+  await loginManager();
+  return apiFetch<AssetType>(`/api/manager/asset-types/${id}/`);
+}
+
+export async function createAssetType(input: {
+  name: string;
+  description?: string;
+}): Promise<AssetType> {
+  await loginManager();
+  return apiFetch<AssetType>("/api/manager/asset-types/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAssetType(
+  id: number,
+  input: Partial<{
+    name: string;
+    description: string;
+    is_active: boolean;
+  }>
+): Promise<AssetType> {
+  await loginManager();
+  return apiFetch<AssetType>(`/api/manager/asset-types/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteAssetType(id: number): Promise<void> {
+  await loginManager();
+  await apiFetch(`/api/manager/asset-types/${id}/`, {
+    method: "DELETE",
+  });
+}
+
+// ---------- Assets API (Maintenance Context V1) ----------
+
+export async function getAssets(filters?: {
+  location_id?: number;
+  asset_type_id?: number;
+  is_active?: boolean;
+}): Promise<Asset[]> {
+  await loginManager();
+
+  const params = new URLSearchParams();
+  if (filters?.location_id) {
+    params.append("location_id", String(filters.location_id));
+  }
+  if (filters?.asset_type_id) {
+    params.append("asset_type_id", String(filters.asset_type_id));
+  }
+  if (filters?.is_active !== undefined) {
+    params.append("is_active", String(filters.is_active));
+  }
+
+  const query = params.toString();
+  const url = query ? `/api/manager/assets/?${query}` : "/api/manager/assets/";
+
+  return apiFetch<Asset[]>(url);
+}
+
+export async function getAsset(id: number): Promise<Asset> {
+  await loginManager();
+  return apiFetch<Asset>(`/api/manager/assets/${id}/`);
+}
+
+export async function createAsset(input: {
+  name: string;
+  location_id: number;
+  asset_type_id: number;
+  serial_number?: string;
+  description?: string;
+}): Promise<Asset> {
+  await loginManager();
+  return apiFetch<Asset>("/api/manager/assets/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAsset(
+  id: number,
+  input: Partial<{
+    name: string;
+    serial_number: string;
+    description: string;
+    is_active: boolean;
+    location_id: number;
+    asset_type_id: number;
+  }>
+): Promise<Asset> {
+  await loginManager();
+  return apiFetch<Asset>(`/api/manager/assets/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteAsset(id: number): Promise<void> {
+  await loginManager();
+  await apiFetch(`/api/manager/assets/${id}/`, {
+    method: "DELETE",
   });
 }
 
