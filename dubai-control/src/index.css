@@ -199,3 +199,56 @@
     font-weight: 500;
   }
 }
+
+/* ============================================
+   Lovable-style UI Components (Maintenance Context)
+   Imported from control-hub design system
+   ============================================ */
+
+@layer components {
+  /* Page layout utilities */
+  .page-header {
+    @apply flex items-center justify-between pb-4;
+  }
+
+  .page-title {
+    @apply text-lg font-semibold text-foreground;
+    letter-spacing: -0.01em;
+  }
+
+  /* Premium card wrapper */
+  .premium-card {
+    @apply bg-card rounded-md border border-border;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Data table styles */
+  .data-table {
+    @apply w-full;
+    font-size: 0.8125rem;
+    letter-spacing: -0.01em;
+  }
+
+  .data-table th {
+    @apply text-muted-foreground font-medium text-left px-3 py-2.5 border-b border-border uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    background: hsl(var(--muted) / 0.5);
+  }
+
+  .data-table td {
+    @apply px-3 py-2.5 border-b border-border;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors;
+  }
+
+  .data-table tbody tr:hover td {
+    @apply bg-muted/30;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}

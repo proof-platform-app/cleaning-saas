@@ -1,4 +1,9 @@
 // dubai-control/src/pages/maintenance/Assets.tsx
+// Layout imported from control-hub/src/pages/ObjectsPage.tsx (Lovable design)
+// Uses Lovable-style CSS classes: .page-header, .page-title, .premium-card, .data-table
+//
+// NOTE: Mock data removed - this page uses real API via React Query.
+// If backend unavailable, assets will show empty state.
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +28,10 @@ import {
   X,
   Wrench,
   Trash2,
+  ChevronRight,
+  MapPin,
 } from "lucide-react";
+import { format } from "date-fns";
 import {
   getAssets,
   getAssetTypes,
@@ -39,6 +47,15 @@ import {
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 
 type StatusFilter = "all" | "active" | "inactive";
+
+// Format date for display (Lovable pattern)
+function formatDate(dateStr: string): string {
+  try {
+    return format(new Date(dateStr), "MMM d, yyyy");
+  } catch {
+    return "—";
+  }
+}
 
 // RBAC: Check if user can write assets (owner/manager)
 function canWriteAssets(role: UserRole): boolean {
@@ -369,64 +386,47 @@ export default function Assets() {
   const activeTypes = assetTypes.filter((t) => t.is_active);
 
   return (
-    <div className="mx-auto max-w-6xl p-8">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Assets
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage physical assets for maintenance service visits
-          </p>
-        </div>
+    <div className="mx-auto max-w-6xl p-8 space-y-4">
+      {/* Header - Lovable style */}
+      <div className="page-header">
+        <h1 className="page-title">Assets</h1>
         {hasWriteAccess && (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowTypeModal(true)}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-medium" onClick={() => setShowTypeModal(true)}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
               New Type
             </Button>
-            <Button onClick={handleAddNew}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button size="sm" className="h-8 px-3 text-xs font-medium" onClick={handleAddNew}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
               Add Asset
             </Button>
           </div>
         )}
       </div>
 
-      {/* Info Banner */}
-      <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        <p className="font-medium">About Assets</p>
-        <ul className="mt-2 space-y-1 text-xs">
-          <li>• Assets represent physical equipment (HVAC, elevators, electrical systems, etc.)</li>
-          <li>• Each asset belongs to a location and has a type for classification</li>
-          <li>• Jobs can be linked to assets for service visit tracking</li>
-        </ul>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="mb-6 flex flex-wrap gap-4">
+      {/* Search and Filters - compact row */}
+      <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name, serial number..."
-            className="pl-10"
+            placeholder="Search assets..."
+            className="pl-10 h-8 text-sm"
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[130px] h-8 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All status</SelectItem>
-            <SelectItem value="active">Active only</SelectItem>
-            <SelectItem value="inactive">Inactive only</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
         <Select value={locationFilter} onValueChange={setLocationFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[150px] h-8 text-xs">
             <SelectValue placeholder="All locations" />
           </SelectTrigger>
           <SelectContent>
@@ -439,7 +439,7 @@ export default function Assets() {
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[130px] h-8 text-xs">
             <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
@@ -453,126 +453,101 @@ export default function Assets() {
         </Select>
       </div>
 
-      {/* Assets List */}
-      <div className="rounded-xl border border-border bg-card shadow-sm">
-        <div className="border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold text-foreground">Assets</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {filteredAssets.length} {filteredAssets.length === 1 ? "asset" : "assets"}
-          </p>
-        </div>
-
+      {/* Assets Table - Lovable premium-card style */}
+      <div className="premium-card overflow-hidden">
         {filteredAssets.length === 0 ? (
-          <div className="px-6 py-12 text-center">
-            <Wrench className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-4 text-lg font-semibold text-foreground">
-              {searchTerm || statusFilter !== "all" || locationFilter !== "all" || typeFilter !== "all"
-                ? "No assets found"
-                : "No assets yet"}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {searchTerm || statusFilter !== "all" || locationFilter !== "all" || typeFilter !== "all"
-                ? "Try adjusting your search or filters"
-                : "Get started by adding your first asset"}
-            </p>
-            {!searchTerm && statusFilter === "all" && locationFilter === "all" && typeFilter === "all" && hasWriteAccess && (
-              <Button onClick={handleAddNew} className="mt-4">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Asset
-              </Button>
-            )}
+          <div className="py-12 text-center text-muted-foreground">
+            {searchTerm || statusFilter !== "all" || locationFilter !== "all" || typeFilter !== "all"
+              ? "No assets found. Try adjusting your search or filters."
+              : "No assets yet. Add your first asset."}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-border bg-muted/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Location
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Serial #
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {filteredAssets.map((asset) => (
-                  <tr key={asset.id} className="transition-colors hover:bg-muted/30">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-foreground">{asset.name}</div>
-                      {asset.description && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                          {asset.description}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                        {asset.asset_type.name}
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Asset Name</th>
+                <th>Type</th>
+                <th>Location</th>
+                <th className="w-[120px]">Serial #</th>
+                <th className="w-[100px]">Created</th>
+                <th className="w-[80px]">Status</th>
+                <th className="w-[80px]"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredAssets.map((asset) => (
+                <tr
+                  key={asset.id}
+                  className="cursor-pointer group"
+                  onClick={() => hasWriteAccess && handleEdit(asset)}
+                >
+                  <td className="font-medium text-foreground">
+                    {asset.name}
+                    {asset.description && (
+                      <div className="text-xs text-muted-foreground/70 truncate max-w-[200px]">
+                        {asset.description}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                      {asset.asset_type.name}
+                    </span>
+                  </td>
+                  <td className="text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" strokeWidth={1.5} />
+                      <span>{asset.location.name}</span>
+                    </div>
+                  </td>
+                  <td className="text-muted-foreground font-mono text-xs">
+                    {asset.serial_number || "—"}
+                  </td>
+                  <td className="text-muted-foreground tabular-nums">
+                    {formatDate(asset.created_at)}
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={asset.is_active}
+                        onCheckedChange={() => handleToggleActive(asset)}
+                        disabled={!hasWriteAccess || updateMutation.isPending}
+                        className="scale-75"
+                      />
+                      <span className={`text-xs ${asset.is_active ? "text-green-600" : "text-muted-foreground"}`}>
+                        {asset.is_active ? "On" : "Off"}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">
-                        {asset.location.name}
+                    </div>
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {hasWriteAccess && (
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => handleEdit(asset)}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(asset)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-muted-foreground">
-                        {asset.serial_number || "—"}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={asset.is_active}
-                          onCheckedChange={() => handleToggleActive(asset)}
-                          disabled={!hasWriteAccess || updateMutation.isPending}
-                        />
-                        <span className="text-sm font-medium text-foreground">
-                          {asset.is_active ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {hasWriteAccess && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEdit(asset)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(asset)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    )}
+                    {!hasWriteAccess && (
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 

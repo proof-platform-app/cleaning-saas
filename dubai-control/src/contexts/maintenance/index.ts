@@ -5,11 +5,13 @@
 // Routes
 export { maintenanceRoutes, maintenancePaths } from "./routes";
 
-// UI Pages (static/preview - imported from Lovable pattern)
-// These pages use placeholder data for UI development
+// UI Pages (wired to real API)
 export { VisitsPage } from "./ui/VisitsPage";
 export { AssetsPage } from "./ui/AssetsPage";
 export { TechniciansPage } from "./ui/TechniciansPage";
+
+// Lovable Layout Components (reusable UI patterns)
+export { AssetsLovableLayout, type AssetLayoutItem } from "./ui/AssetsLovableLayout";
 
 // Components (imported from Lovable)
 // export { VisitCard } from "./components/VisitCard";
