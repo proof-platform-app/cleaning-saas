@@ -1,0 +1,3 @@
+# Maintenance API Adapters
+# Bridge layer between Lovable UI and platform API
+# Example: useServiceVisits.ts, useAssets.ts
