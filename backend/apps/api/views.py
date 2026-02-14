@@ -18,6 +18,7 @@ from .views_company import *  # noqa
 from .views_manager_company import *  # noqa
 from .views_manager_jobs import *  # noqa
 from .views_reports import *  # noqa
+from .views_maintenance import *  # noqa
 
 
 # === Default checklist templates for new companies ===

@@ -426,4 +426,29 @@ urlpatterns = [
         api_views.OwnerOverviewView.as_view(),
         name="owner-overview",
     ),
+
+    # =====================
+    # Maintenance Context (Assets)
+    # See: docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md
+    # =====================
+    path(
+        "manager/asset-types/",
+        api_views.AssetTypeListCreateView.as_view(),
+        name="manager-asset-types",
+    ),
+    path(
+        "manager/asset-types/<int:pk>/",
+        api_views.AssetTypeDetailView.as_view(),
+        name="manager-asset-type-detail",
+    ),
+    path(
+        "manager/assets/",
+        api_views.AssetListCreateView.as_view(),
+        name="manager-assets",
+    ),
+    path(
+        "manager/assets/<int:pk>/",
+        api_views.AssetDetailView.as_view(),
+        name="manager-asset-detail",
+    ),
 ]

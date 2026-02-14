@@ -1,8 +1,8 @@
 # API_CONTRACTS — CleanProof
 
 Status: ACTIVE
-Version: 1.10.0
-Last updated: 2026-02-13
+Version: 1.11.0
+Last updated: 2026-02-14
 
 Документ фиксирует **внешний контракт API** между Backend (Django / DRF) и клиентами:
 
@@ -27,6 +27,18 @@ Last updated: 2026-02-13
 - FIXED: уточнения, исправления, прояснение семантики.
 - DEPRECATED: (опционально) что объявлено устаревшим.
 - BREAKING: (опционально, ВСЕГДА ЯВНО) ломающие изменения.
+
+### 1.11.0 — 2026-02-14
+
+- NEW: Maintenance Context V1 — Asset management API endpoints.
+- NEW: `GET/POST /api/manager/asset-types/` — list and create asset types.
+- NEW: `GET/PATCH/DELETE /api/manager/asset-types/:id/` — asset type detail, update, delete.
+- NEW: `GET/POST /api/manager/assets/` — list and create assets (filterable by location_id, asset_type_id, is_active).
+- NEW: `GET/PATCH/DELETE /api/manager/assets/:id/` — asset detail, update, delete.
+- NEW: `asset` nullable FK added to Job model for service visit tracking.
+- NEW: AssetType, Asset models (company-scoped) in `apps.maintenance`.
+- CHANGED: RBAC for assets: owner/manager can write, staff can read, cleaner has no access.
+- Reference: docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md
 
 ### 1.10.0 — 2026-02-13
 
@@ -3145,5 +3157,454 @@ All Company API endpoints use a standardized error response format:
 Backend остаётся единственным источником истины по статусам, SLA, аналитике и отчётам.
 Фронты — только потребители этого контракта.
 
+---
+
+## 14. Maintenance Context — Assets API (V1)
+
+Maintenance Context v1 adds asset management capabilities for service visit tracking.
+See: `docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md`
+
+**RBAC:**
+- Owner, Manager: Full CRUD access
+- Staff: Read-only access
+- Cleaner: 403 Forbidden
+
+**Authentication:** All endpoints require Token authentication.
+
+**Error Format:** Standardized `{code, message, fields?}` format.
+
+---
+
+### 14.1. Asset Types — GET /api/manager/asset-types/
+
+**Purpose:** List all asset types for company.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager/Staff (read).
+
+**Request:**
+```http
+GET /api/manager/asset-types/ HTTP/1.1
+Authorization: Token <token>
 ```
+
+**Response 200:**
+```json
+[
+  {
+    "id": 1,
+    "name": "HVAC",
+    "description": "Heating, ventilation, and air conditioning systems",
+    "is_active": true
+  },
+  {
+    "id": 2,
+    "name": "Elevator",
+    "description": "Vertical transportation systems",
+    "is_active": true
+  }
+]
 ```
+
+**Errors:**
+- 403: Cleaner role
+  ```json
+  {
+    "code": "FORBIDDEN",
+    "message": "Only console users can access this resource."
+  }
+  ```
+- 401: Unauthorized
+
+---
+
+### 14.2. Asset Types — POST /api/manager/asset-types/
+
+**Purpose:** Create new asset type.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+POST /api/manager/asset-types/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "name": "Electrical",
+  "description": "Electrical systems and panels"
+}
+```
+
+**Fields:**
+- `name`: string, required, unique per company
+- `description`: string, optional
+
+**Response 201:**
+```json
+{
+  "id": 3,
+  "name": "Electrical",
+  "description": "Electrical systems and panels",
+  "is_active": true
+}
+```
+
+**Errors:**
+- 400: Validation error
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Name is required.",
+    "fields": {
+      "name": ["Name is required."]
+    }
+  }
+  ```
+- 400: Duplicate name
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Asset type with this name already exists.",
+    "fields": {
+      "name": ["Asset type with this name already exists."]
+    }
+  }
+  ```
+- 403: Staff/Cleaner role or trial expired
+- 401: Unauthorized
+
+---
+
+### 14.3. Asset Types — GET /api/manager/asset-types/:id/
+
+**Purpose:** Get asset type details.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager/Staff (read).
+
+**Request:**
+```http
+GET /api/manager/asset-types/1/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+{
+  "id": 1,
+  "name": "HVAC",
+  "description": "Heating, ventilation, and air conditioning systems",
+  "is_active": true
+}
+```
+
+**Errors:**
+- 404: Not found
+- 403: Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.4. Asset Types — PATCH /api/manager/asset-types/:id/
+
+**Purpose:** Update asset type.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+PATCH /api/manager/asset-types/1/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "name": "HVAC Systems",
+  "description": "Updated description",
+  "is_active": false
+}
+```
+
+**Fields (all optional):**
+- `name`: string, unique per company
+- `description`: string
+- `is_active`: boolean
+
+**Response 200:** Updated asset type object.
+
+**Errors:**
+- 400: Validation error
+- 404: Not found
+- 403: Staff/Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.5. Asset Types — DELETE /api/manager/asset-types/:id/
+
+**Purpose:** Delete asset type (only if no linked assets).
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+DELETE /api/manager/asset-types/1/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 204:** No content.
+
+**Errors:**
+- 409: Has linked assets
+  ```json
+  {
+    "code": "CONFLICT",
+    "message": "Cannot delete asset type with linked assets. Deactivate instead."
+  }
+  ```
+- 404: Not found
+- 403: Staff/Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.6. Assets — GET /api/manager/assets/
+
+**Purpose:** List all assets for company.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager/Staff (read).
+
+**Query Parameters (all optional):**
+- `location_id`: Filter by location
+- `asset_type_id`: Filter by asset type
+- `is_active`: Filter by active status (true/false)
+
+**Request:**
+```http
+GET /api/manager/assets/?location_id=1&is_active=true HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:**
+```json
+[
+  {
+    "id": 1,
+    "name": "AHU-01 Main Building",
+    "serial_number": "SN-12345",
+    "description": "Main air handling unit",
+    "is_active": true,
+    "location": {
+      "id": 1,
+      "name": "Dubai Marina Tower"
+    },
+    "asset_type": {
+      "id": 1,
+      "name": "HVAC"
+    },
+    "created_at": "2026-02-14T10:00:00+04:00",
+    "updated_at": "2026-02-14T10:00:00+04:00"
+  }
+]
+```
+
+**Errors:**
+- 403: Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.7. Assets — POST /api/manager/assets/
+
+**Purpose:** Create new asset.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+POST /api/manager/assets/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "name": "AHU-02 North Wing",
+  "location_id": 1,
+  "asset_type_id": 1,
+  "serial_number": "SN-67890",
+  "description": "Secondary air handling unit"
+}
+```
+
+**Fields:**
+- `name`: string, required
+- `location_id`: integer, required
+- `asset_type_id`: integer, required
+- `serial_number`: string, optional
+- `description`: string, optional
+
+**Response 201:**
+```json
+{
+  "id": 2,
+  "name": "AHU-02 North Wing",
+  "serial_number": "SN-67890",
+  "description": "Secondary air handling unit",
+  "is_active": true,
+  "location": {
+    "id": 1,
+    "name": "Dubai Marina Tower"
+  },
+  "asset_type": {
+    "id": 1,
+    "name": "HVAC"
+  },
+  "created_at": "2026-02-14T12:00:00+04:00",
+  "updated_at": "2026-02-14T12:00:00+04:00"
+}
+```
+
+**Errors:**
+- 400: Validation error (missing fields, invalid location/asset_type)
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed.",
+    "fields": {
+      "name": ["Name is required."],
+      "location_id": ["Location is required."]
+    }
+  }
+  ```
+- 400: Invalid location
+  ```json
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "Location not found.",
+    "fields": {
+      "location_id": ["Invalid location."]
+    }
+  }
+  ```
+- 403: Staff/Cleaner role or trial expired
+- 401: Unauthorized
+
+---
+
+### 14.8. Assets — GET /api/manager/assets/:id/
+
+**Purpose:** Get asset details.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager/Staff (read).
+
+**Request:**
+```http
+GET /api/manager/assets/1/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 200:** Full asset object (same as list item).
+
+**Errors:**
+- 404: Not found
+- 403: Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.9. Assets — PATCH /api/manager/assets/:id/
+
+**Purpose:** Update asset.
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+PATCH /api/manager/assets/1/ HTTP/1.1
+Authorization: Token <token>
+Content-Type: application/json
+
+{
+  "name": "Updated Name",
+  "serial_number": "NEW-SN-123",
+  "is_active": false
+}
+```
+
+**Fields (all optional):**
+- `name`: string
+- `serial_number`: string
+- `description`: string
+- `is_active`: boolean
+- `location_id`: integer
+- `asset_type_id`: integer
+
+**Response 200:** Updated asset object.
+
+**Errors:**
+- 400: Validation error
+- 404: Not found
+- 403: Staff/Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.10. Assets — DELETE /api/manager/assets/:id/
+
+**Purpose:** Delete asset (only if no linked jobs).
+
+**Auth:** Required (Token).
+
+**RBAC:** Owner/Manager only.
+
+**Request:**
+```http
+DELETE /api/manager/assets/1/ HTTP/1.1
+Authorization: Token <token>
+```
+
+**Response 204:** No content.
+
+**Errors:**
+- 409: Has linked jobs
+  ```json
+  {
+    "code": "CONFLICT",
+    "message": "Cannot delete asset with linked jobs. Deactivate instead."
+  }
+  ```
+- 404: Not found
+- 403: Staff/Cleaner role
+- 401: Unauthorized
+
+---
+
+### 14.11. RBAC Summary — Maintenance Assets
+
+| Endpoint | Owner | Manager | Staff | Cleaner |
+|----------|-------|---------|-------|---------|
+| `GET /api/manager/asset-types/` | ✅ | ✅ | ✅ | ❌ 403 |
+| `POST /api/manager/asset-types/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `PATCH /api/manager/asset-types/:id/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `DELETE /api/manager/asset-types/:id/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `GET /api/manager/assets/` | ✅ | ✅ | ✅ | ❌ 403 |
+| `POST /api/manager/assets/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `PATCH /api/manager/assets/:id/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+| `DELETE /api/manager/assets/:id/` | ✅ | ✅ | ❌ 403 | ❌ 403 |
+
+---

@@ -1,8 +1,38 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.10)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.11)
 
 Обновлено: 2026-02-14
 
 ## Changelog
+
+### v7.11 — 2026-02-14
+
+**Maintenance Context V1 — Backend Asset Layer — DONE ✅**
+
+Models:
+- AssetType model (company-scoped) — DONE ✅
+- Asset model (company-scoped, location FK, asset_type FK) — DONE ✅
+- Job.asset nullable FK for service visit tracking — DONE ✅
+
+API Endpoints:
+- GET/POST /api/manager/asset-types/ — list and create ✅
+- GET/PATCH/DELETE /api/manager/asset-types/:id/ — detail, update, delete ✅
+- GET/POST /api/manager/assets/ — list (filterable) and create ✅
+- GET/PATCH/DELETE /api/manager/assets/:id/ — detail, update, delete ✅
+
+RBAC:
+- owner/manager: full CRUD access ✅
+- staff: read-only access ✅
+- cleaner: 403 Forbidden ✅
+
+**Documentation:**
+- API_CONTRACTS.md updated to v1.11.0 (section 14)
+- docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md reference
+
+**Scope Boundaries (LOCKED):**
+- No new lifecycle states (Platform Layer protected)
+- No new roles (RBAC matrix locked)
+- No separate maintenance engine
+- Additive models only
 
 ### v7.10 — 2026-02-14
 
@@ -522,6 +552,28 @@ Status: ✅ enforced
   * Error format: `{code, message, fields?}` standardized
   * Verification script: `backend/verify_company_api.sh`
   * Documentation: API_CONTRACTS.md section 10
+
+---
+
+## 🔧 Maintenance Context V1 — Asset Layer
+
+**Статус:** ✅ Backend DONE
+
+* AssetType model (company-scoped) ✅
+* Asset model (company-scoped, location FK, asset_type FK) ✅
+* Job.asset nullable FK ✅
+* CRUD API endpoints ✅
+* RBAC enforcement (owner/manager write, staff read, cleaner blocked) ✅
+
+**Scope Boundaries:**
+* No new lifecycle states (Platform Layer locked)
+* No new roles (RBAC matrix locked)
+* No separate maintenance engine
+* Vocabulary layer only (Service Visit = Job, Technician = Cleaner)
+
+**Reference:** docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md
+
+**Frontend:** ⛔ pending (TASK 2)
 
 ---
 

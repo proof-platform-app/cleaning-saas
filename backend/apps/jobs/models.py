@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Company, User
 from apps.locations.models import Location, ChecklistTemplate
+# Note: Asset import deferred to avoid circular import - see asset FK below
 
 
 class Job(models.Model):
@@ -50,6 +51,17 @@ class Job(models.Model):
         null=True,
         blank=True,
         related_name="jobs",
+    )
+
+    # Maintenance Context V1: optional asset link for service visits
+    # See: docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md Section 4.2
+    asset = models.ForeignKey(
+        "apps_maintenance.Asset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="jobs",
+        help_text="Optional link to asset for maintenance service visits",
     )
 
     scheduled_date = models.DateField()
