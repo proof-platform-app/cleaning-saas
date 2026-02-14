@@ -23,6 +23,12 @@ from rest_framework.views import APIView
 from apps.accounts.models import Company, User
 from apps.api.models import AccessAuditLog
 
+# Console roles that can access the manager dashboard
+CONSOLE_ROLES = {User.ROLE_OWNER, User.ROLE_MANAGER, User.ROLE_STAFF}
+
+# Roles that can be invited (Owner is assigned on signup, cannot be invited)
+INVITABLE_ROLES = {User.ROLE_MANAGER, User.ROLE_STAFF}
+
 
 class CompanyView(APIView):
     """
@@ -512,3 +518,419 @@ class CompanyCleanerAuditLogView(APIView):
             )
 
         return Response(data, status=status.HTTP_200_OK)
+
+
+class CompanyUsersView(APIView):
+    """
+    Console users (team members) management.
+
+    GET  /api/company/users/     - List all console users (owner, manager, staff)
+    POST /api/company/users/     - Invite new user (manager or staff only)
+
+    RBAC: Owner/Manager can view, only Owner can invite
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _ensure_company_admin(self, request):
+        """Check if user is Owner or Manager and return company."""
+        user = request.user
+        role = getattr(user, "role", None)
+
+        if role not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
+            return None, Response(
+                {
+                    "code": "access_denied",
+                    "message": "Team management is restricted to administrators",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {
+                    "code": "company_not_found",
+                    "message": "Company not found for this user",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return company, None
+
+    def get(self, request):
+        """Get list of console users (owner, manager, staff)."""
+        company, error_response = self._ensure_company_admin(request)
+        if error_response is not None:
+            return error_response
+
+        users = (
+            User.objects.filter(company=company, role__in=CONSOLE_ROLES)
+            .order_by("role", "full_name", "id")
+        )
+
+        data = []
+        for user in users:
+            data.append(
+                {
+                    "id": user.id,
+                    "full_name": user.full_name or "",
+                    "email": user.email or "",
+                    "phone": user.phone or "",
+                    "role": user.role,
+                    "is_active": user.is_active,
+                    "is_current_user": user.id == request.user.id,
+                }
+            )
+        return Response(data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """Invite new console user (manager or staff)."""
+        company, error_response = self._ensure_company_admin(request)
+        if error_response is not None:
+            return error_response
+
+        # Only Owner can invite new users
+        if request.user.role != User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Only account owner can invite new team members",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Extract fields
+        full_name = (request.data.get("full_name") or "").strip()
+        email = (request.data.get("email") or "").strip().lower()
+        role = (request.data.get("role") or "").strip()
+
+        # Validation
+        errors = {}
+
+        if not full_name:
+            errors["full_name"] = ["Full name is required"]
+
+        if not email:
+            errors["email"] = ["Email is required"]
+        elif "@" not in email:
+            errors["email"] = ["Invalid email format"]
+
+        if not role:
+            errors["role"] = ["Role is required"]
+        elif role not in INVITABLE_ROLES:
+            errors["role"] = [f"Invalid role. Must be one of: {', '.join(INVITABLE_ROLES)}"]
+
+        # Check email uniqueness (across all console users in all companies)
+        if email and User.objects.filter(
+            email__iexact=email,
+            role__in=CONSOLE_ROLES,
+        ).exists():
+            errors["email"] = ["A user with this email already exists"]
+
+        if errors:
+            return Response(
+                {
+                    "code": "validation_error",
+                    "message": "Validation failed",
+                    "fields": errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Generate temporary password (8 chars: letters + digits)
+        temp_password = "".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(8)
+        )
+
+        # Create user
+        new_user = User.objects.create(
+            email=email,
+            full_name=full_name,
+            role=role,
+            company=company,
+            is_active=True,
+        )
+        new_user.set_password(temp_password)
+        new_user.must_change_password = True
+        new_user.save(update_fields=["password", "must_change_password"])
+
+        data = {
+            "id": new_user.id,
+            "full_name": new_user.full_name,
+            "email": new_user.email,
+            "role": new_user.role,
+            "is_active": new_user.is_active,
+            "temp_password": temp_password,
+        }
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class CompanyUserDetailView(APIView):
+    """
+    Individual console user management.
+
+    GET    /api/company/users/{id}/  - Get user details
+    PATCH  /api/company/users/{id}/  - Update user (role, is_active)
+    DELETE /api/company/users/{id}/  - Remove user from company
+
+    RBAC:
+    - GET: Owner/Manager can view
+    - PATCH/DELETE: Only Owner can modify (except can't modify themselves or other owners)
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _ensure_company_admin(self, request):
+        """Check if user is Owner or Manager and return company."""
+        user = request.user
+        role = getattr(user, "role", None)
+
+        if role not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
+            return None, Response(
+                {
+                    "code": "access_denied",
+                    "message": "Team management is restricted to administrators",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return None, Response(
+                {
+                    "code": "company_not_found",
+                    "message": "Company not found for this user",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return company, None
+
+    def get(self, request, pk):
+        """Get user details."""
+        company, error_response = self._ensure_company_admin(request)
+        if error_response is not None:
+            return error_response
+
+        target_user = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role__in=CONSOLE_ROLES,
+        )
+
+        data = {
+            "id": target_user.id,
+            "full_name": target_user.full_name or "",
+            "email": target_user.email or "",
+            "phone": target_user.phone or "",
+            "role": target_user.role,
+            "is_active": target_user.is_active,
+            "is_current_user": target_user.id == request.user.id,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        """Update user (role, is_active)."""
+        company, error_response = self._ensure_company_admin(request)
+        if error_response is not None:
+            return error_response
+
+        # Only Owner can modify users
+        if request.user.role != User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Only account owner can modify team members",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        target_user = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role__in=CONSOLE_ROLES,
+        )
+
+        # Can't modify Owner role
+        if target_user.role == User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Cannot modify account owner",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Can't modify yourself
+        if target_user.id == request.user.id:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Cannot modify your own account here. Use Account Settings.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Extract fields
+        update_fields = []
+
+        if "role" in request.data:
+            new_role = request.data["role"]
+            if new_role not in INVITABLE_ROLES:
+                return Response(
+                    {
+                        "code": "validation_error",
+                        "message": f"Invalid role. Must be one of: {', '.join(INVITABLE_ROLES)}",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            target_user.role = new_role
+            update_fields.append("role")
+
+        if "is_active" in request.data:
+            target_user.is_active = bool(request.data["is_active"])
+            update_fields.append("is_active")
+
+        if "full_name" in request.data:
+            target_user.full_name = request.data["full_name"]
+            update_fields.append("full_name")
+
+        if update_fields:
+            target_user.save(update_fields=update_fields)
+
+        data = {
+            "id": target_user.id,
+            "full_name": target_user.full_name or "",
+            "email": target_user.email or "",
+            "phone": target_user.phone or "",
+            "role": target_user.role,
+            "is_active": target_user.is_active,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        """Remove user from company (deactivate, not delete)."""
+        company, error_response = self._ensure_company_admin(request)
+        if error_response is not None:
+            return error_response
+
+        # Only Owner can remove users
+        if request.user.role != User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Only account owner can remove team members",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        target_user = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role__in=CONSOLE_ROLES,
+        )
+
+        # Can't remove Owner
+        if target_user.role == User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Cannot remove account owner",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Can't remove yourself
+        if target_user.id == request.user.id:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Cannot remove yourself from the team",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Deactivate user (don't delete to preserve audit trail)
+        target_user.is_active = False
+        target_user.save(update_fields=["is_active"])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CompanyUserResetPasswordView(APIView):
+    """
+    Reset password for a console user.
+
+    POST /api/company/users/{id}/reset-password/
+
+    RBAC: Only Owner can reset passwords
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        user = request.user
+        role = getattr(user, "role", None)
+
+        # Only Owner can reset passwords
+        if role != User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Only account owner can reset passwords",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company = getattr(user, "company", None)
+        if company is None:
+            return Response(
+                {
+                    "code": "company_not_found",
+                    "message": "Company not found for this user",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get user from same company
+        target_user = get_object_or_404(
+            User,
+            pk=pk,
+            company=company,
+            role__in=CONSOLE_ROLES,
+        )
+
+        # Can't reset Owner password (they should use "forgot password")
+        if target_user.role == User.ROLE_OWNER:
+            return Response(
+                {
+                    "code": "access_denied",
+                    "message": "Cannot reset owner password. Use 'Forgot Password' instead.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Generate temporary password
+        temp_password = "".join(
+            random.choice(string.ascii_letters + string.digits) for _ in range(8)
+        )
+
+        # Set password and must_change_password flag
+        target_user.set_password(temp_password)
+        target_user.must_change_password = True
+        target_user.save(update_fields=["password", "must_change_password"])
+
+        return Response(
+            {
+                "temp_password": temp_password,
+                "must_change_password": True,
+            },
+            status=status.HTTP_200_OK,
+        )

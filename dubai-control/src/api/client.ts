@@ -676,7 +676,7 @@ export async function fetchManagerJobsSummary(): Promise<ManagerJobSummary[]> {
   return raw.map((item) => normalizeJob(item));
 }
 
-// ---------- Jobs export (CSV, audit-only) ----------
+// ---------- Jobs export (Excel XLSX) ----------
 
 export type ManagerJobsExportParams = {
   from: string; // "YYYY-MM-DD"
@@ -686,7 +686,7 @@ export type ManagerJobsExportParams = {
   sla_status?: "ok" | "violated";
 };
 
-export async function exportManagerJobsCsv(
+export async function exportManagerJobsExcel(
   params: ManagerJobsExportParams
 ): Promise<Blob> {
   await loginManager();
@@ -709,9 +709,12 @@ export async function exportManagerJobsCsv(
 
   const path = `/api/manager/jobs/export/?${searchParams.toString()}`;
 
-  // read-only audit export: backend уже фильтрует только completed jobs
+  // Returns XLSX file with completed jobs for the date range
   return apiFetchBlob(path, { method: "GET" });
 }
+
+// Backward compatibility alias
+export const exportManagerJobsCsv = exportManagerJobsExcel;
 
 // ---------- Job details ----------
 

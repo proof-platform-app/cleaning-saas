@@ -47,7 +47,8 @@ class Company(models.Model):
         help_text="Короткая причина блокировки (видна только в админке).",
     )
 
-    # -------- TRIAL / PLAN --------
+    # -------- TRIAL / PLAN STATUS --------
+    # `plan` - subscription state (trial, active, blocked)
 
     PLAN_TRIAL = "trial"
     PLAN_ACTIVE = "active"
@@ -67,6 +68,26 @@ class Company(models.Model):
     trial_started_at = models.DateTimeField(null=True, blank=True)
     trial_expires_at = models.DateTimeField(null=True, blank=True)
 
+    # -------- PLAN TIER --------
+    # `plan_tier` - actual pricing tier (standard, pro, enterprise)
+
+    TIER_STANDARD = "standard"
+    TIER_PRO = "pro"
+    TIER_ENTERPRISE = "enterprise"
+
+    TIER_CHOICES = (
+        (TIER_STANDARD, "Standard"),
+        (TIER_PRO, "Pro"),
+        (TIER_ENTERPRISE, "Enterprise"),
+    )
+
+    plan_tier = models.CharField(
+        max_length=20,
+        choices=TIER_CHOICES,
+        default=TIER_STANDARD,
+        help_text="Pricing tier: standard ($29), pro ($79), enterprise ($199)",
+    )
+
     # -------- timestamps --------
 
     created_at = models.DateTimeField(default=timezone.now)
@@ -78,10 +99,7 @@ class Company(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    # ---- Trial / plans ----
-
-    PLAN_STANDARD = "standard"
-    PLAN_PRO = "pro"
+    # ---- Trial limits ----
 
     # Жёстко зашитые лимиты trial
     TRIAL_MAX_CLEANERS = 2
@@ -194,16 +212,26 @@ class Company(models.Model):
         self.trial_expires_at = now + timedelta(days=days)
         self.save(update_fields=["plan", "trial_started_at", "trial_expires_at"])
 
-    def upgrade_to_active(self) -> None:
+    def upgrade_to_active(self, tier: str | None = None) -> None:
         """
         Апгрейд с trial на active (платный) план.
-        Идёмпотентно: если уже active — ничего не делаем.
+        Опционально можно указать tier (standard, pro, enterprise).
+        Идёмпотентно: если уже active — только обновляем tier при необходимости.
         """
-        if self.plan == self.PLAN_ACTIVE:
-            return
+        update_fields = []
 
-        self.plan = self.PLAN_ACTIVE
-        self.save(update_fields=["plan"])
+        if self.plan != self.PLAN_ACTIVE:
+            self.plan = self.PLAN_ACTIVE
+            update_fields.append("plan")
+
+        # Update tier if provided
+        if tier and tier in [self.TIER_STANDARD, self.TIER_PRO, self.TIER_ENTERPRISE]:
+            if self.plan_tier != tier:
+                self.plan_tier = tier
+                update_fields.append("plan_tier")
+
+        if update_fields:
+            self.save(update_fields=update_fields)
 
     # --- Suspension helpers ---
 

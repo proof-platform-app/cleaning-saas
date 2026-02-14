@@ -1,7 +1,36 @@
-asgiref==3.11.0
-charset-normalizer==3.4.4
+# CleanProof Backend Requirements
+# Last updated: 2026-02-13
+
+# Core Framework
 Django==5.2.9
 djangorestframework==3.16.1
+
+# CORS headers
+django-cors-headers==4.9.0
+
+# Image processing
 pillow==12.1.0
+pillow_heif==1.1.1
+
+# PDF generation
 reportlab==4.4.9
+
+# Excel export
+openpyxl==3.1.5
+
+# Environment variables
+python-dotenv==1.2.1
+
+# Django internals
+asgiref==3.11.0
 sqlparse==0.5.5
+charset-normalizer==3.4.4
+
+# =============================================================================
+# Production Dependencies (install separately on server)
+# =============================================================================
+# gunicorn>=21.0.0        # WSGI server
+# psycopg2-binary>=2.9.0  # PostgreSQL adapter
+#
+# Install on production server:
+#   pip install gunicorn psycopg2-binary

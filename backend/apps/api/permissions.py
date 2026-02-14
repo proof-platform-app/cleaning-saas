@@ -19,11 +19,20 @@ class IsCompanyActive(BasePermission):
 
 class IsManagerUser(BasePermission):
     """
-    Разрешаем доступ только менеджерам.
+    Разрешаем доступ консольным пользователям (owner, manager, staff).
     Используется для manager / analytics / reports эндпоинтов.
+
+    Role hierarchy:
+    - owner: Billing Admin, full access
+    - manager: Ops Admin, full access to operations
+    - staff: Limited console access
+    - cleaner: Mobile app only (excluded)
     """
 
-    message = "Only managers can access this resource."
+    message = "Only console users (owner, manager, staff) can access this resource."
+
+    # Console roles that have access to manager endpoints
+    CONSOLE_ROLES = {"owner", "manager", "staff"}
 
     def has_permission(self, request, view):
         user = request.user
@@ -31,14 +40,9 @@ class IsManagerUser(BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        # Вариант 1: явный флаг
-        if hasattr(user, "is_manager"):
-            return bool(user.is_manager)
+        # Check if user has a console role
+        role = getattr(user, "role", None)
+        if role and role in self.CONSOLE_ROLES:
+            return True
 
-        # Вариант 2: role = "manager"
-        if hasattr(user, "role"):
-            return getattr(user, "role", None) == "manager"
-
-        # Временный fallback — пускаем аутентифицированных
-        # (пока роли не зафиксированы жёстко)
-        return True
+        return False

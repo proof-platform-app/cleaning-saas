@@ -24,6 +24,9 @@ from .pdf import generate_company_sla_report_pdf
 
 logger = logging.getLogger(__name__)
 
+# Console roles that have access to reports
+CONSOLE_ROLES = {User.ROLE_OWNER, User.ROLE_MANAGER, User.ROLE_STAFF}
+
 
 def _get_company_report(company: Company, days: int) -> dict:
     """
@@ -238,7 +241,7 @@ class OwnerOverviewView(APIView):
         user = request.user
 
         # Пока владельца представляем как manager-аккаунт компании
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can access owner overview."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -642,7 +645,7 @@ class ManagerReportEmailLogListView(APIView):
         user = request.user
         company = getattr(user, "company", None)
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can view report email logs."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -823,7 +826,7 @@ class ManagerWeeklyReportView(APIView):
     def get(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can access reports."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -847,7 +850,7 @@ class ManagerMonthlyReportView(APIView):
     def get(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can access reports."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -875,7 +878,7 @@ class ManagerWeeklyReportPdfView(APIView):
     def get(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can access reports."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -912,7 +915,7 @@ class ManagerMonthlyReportPdfView(APIView):
     def get(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can access reports."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -993,7 +996,7 @@ class MonthlyReportEmailView(APIView):
     def post(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can email reports."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -1076,7 +1079,7 @@ class WeeklyReportEmailView(APIView):
     def post(self, request):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
                 {"detail": "Only managers can email reports."},
                 status=status.HTTP_403_FORBIDDEN,

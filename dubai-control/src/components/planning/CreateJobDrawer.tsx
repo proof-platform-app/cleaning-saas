@@ -6,6 +6,8 @@ import {
   type PlanningMeta,
 } from "@/api/planning";
 import { Button } from "@/components/ui/button";
+import { TrialExpiredBanner } from "@/components/access";
+import { TRIAL_COPY } from "@/constants/copy";
 
 import { format, parseISO } from "date-fns";
 import { CalendarIcon } from "lucide-react";
@@ -312,9 +314,7 @@ export function CreateJobDrawer({
 
       if (isTrialExpired) {
         setTrialExpired(true);
-        setSubmitError(
-          "Your free trial has ended. You can still view existing jobs and reports, but creating new jobs requires an upgrade.",
-        );
+        setSubmitError(TRIAL_COPY.trialExpiredDescription);
         setSubmitErrorCode("trial_expired");
       } else if (apiCode === "company_blocked") {
         setCompanyBlocked(true);
@@ -601,10 +601,20 @@ export function CreateJobDrawer({
                   />
                 </div>
 
+                {/* Trial expired notice */}
+                {submitErrorCode === "trial_expired" && (
+                  <TrialExpiredBanner
+                    variant="inline"
+                    title={TRIAL_COPY.trialExpired}
+                    description={TRIAL_COPY.trialExpiredDescription}
+                    className="mt-3"
+                  />
+                )}
+
                 {/* company_blocked notice */}
                 {submitErrorCode === "company_blocked" && (
                   <div className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
-                    <div className="mb-1 font-medium">⚠️ Account suspended</div>
+                    <div className="mb-1 font-medium">Account suspended</div>
                     <p>
                       Your company account is currently suspended. You can view
                       existing jobs and reports, but creating new jobs is

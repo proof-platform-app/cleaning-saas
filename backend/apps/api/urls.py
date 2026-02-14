@@ -29,9 +29,10 @@ def health_view(request):
 
 urlpatterns = [
     # =====================
-    # Health
+    # Health (no auth, no DB — for load balancer/nginx health checks)
+    # Full path: /api/health/ (included under /api/ prefix)
     # =====================
-    path("api/health/", health_view),
+    path("health/", health_view, name="api-health"),
 
     # =====================
     # Auth
@@ -399,6 +400,22 @@ urlpatterns = [
         "company/cleaners/<int:pk>/audit-log/",
         api_views.CompanyCleanerAuditLogView.as_view(),
         name="company-cleaner-audit-log",
+    ),
+    # Console users (team members: owner, manager, staff)
+    path(
+        "company/users/",
+        api_views.CompanyUsersView.as_view(),
+        name="company-users",
+    ),
+    path(
+        "company/users/<int:pk>/",
+        api_views.CompanyUserDetailView.as_view(),
+        name="company-user-detail",
+    ),
+    path(
+        "company/users/<int:pk>/reset-password/",
+        api_views.CompanyUserResetPasswordView.as_view(),
+        name="company-user-reset-password",
     ),
 
     # =====================

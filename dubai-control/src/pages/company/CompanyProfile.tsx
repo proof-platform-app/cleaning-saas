@@ -6,19 +6,20 @@ import { ArrowLeft, Building2, Upload, Loader2, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
+import { useUserRole, canManageCompany } from "@/hooks/useUserRole";
 import {
   getCompanyProfile,
   updateCompanyProfile,
   uploadCompanyLogo,
   type CompanyProfile as CompanyProfileType,
 } from "@/api/client";
+import { AccessRestricted } from "@/components/access/AccessRestricted";
 
 export default function CompanyProfile() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const user = useUserRole();
-  const canAccess = canAccessBilling(user.role); // Owner/Manager only
+  const canAccess = canManageCompany(user.role); // Owner/Manager only
   const queryClient = useQueryClient();
 
   // Form state

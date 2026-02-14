@@ -32,15 +32,15 @@ class ManagerCompanyView(APIView):
 
     def _ensure_manager(self, request):
         user = request.user
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if getattr(user, "role", None) not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
             return None, Response(
-                {"detail": "Only managers can access company profile."},
+                {"detail": "Only administrators can access company profile."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         company = getattr(user, "company", None)
         if company is None:
             return None, Response(
-                {"detail": "Company not found for this manager."},
+                {"detail": "Company not found for this user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return company, None
@@ -103,16 +103,16 @@ class ManagerCompanyLogoUploadView(APIView):
 
     def post(self, request):
         user = request.user
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if getattr(user, "role", None) not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
             return Response(
-                {"detail": "Only managers can upload company logo."},
+                {"detail": "Only administrators can upload company logo."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         company = getattr(user, "company", None)
         if company is None:
             return Response(
-                {"detail": "Company not found for this manager."},
+                {"detail": "Company not found for this user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -148,15 +148,15 @@ class ManagerCleanersListCreateView(APIView):
 
     def _ensure_manager(self, request):
         user = request.user
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if getattr(user, "role", None) not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
             return None, Response(
-                {"detail": "Only managers can manage cleaners."},
+                {"detail": "Only administrators can manage cleaners."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         company = getattr(user, "company", None)
         if company is None:
             return None, Response(
-                {"detail": "Company not found for this manager."},
+                {"detail": "Company not found for this user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return company, None
@@ -306,9 +306,9 @@ class ManagerCleanerDetailView(APIView):
 
     def _get_cleaner(self, request, pk: int):
         user = request.user
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if getattr(user, "role", None) not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
             return None, Response(
-                {"detail": "Only managers can manage cleaners."},
+                {"detail": "Only administrators can manage cleaners."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         company = getattr(user, "company", None)
@@ -413,16 +413,16 @@ class ManagerCleanerResetPinView(APIView):
 
     def _get_cleaner(self, request, pk: int):
         user = request.user
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if getattr(user, "role", None) not in [User.ROLE_OWNER, User.ROLE_MANAGER]:
             return None, Response(
-                {"detail": "Only managers can reset cleaner PIN."},
+                {"detail": "Only administrators can reset cleaner PIN."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         company = getattr(user, "company", None)
         if company is None:
             return None, Response(
-                {"detail": "Company not found for this manager."},
+                {"detail": "Company not found for this user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 

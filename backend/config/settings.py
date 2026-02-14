@@ -12,9 +12,13 @@ Environment Variables:
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env file
+load_dotenv(BASE_DIR / ".env")
 
 
 # =============================================================================
@@ -108,14 +112,37 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
-# Database
+# =============================================================================
+# Database (Environment-driven)
+# =============================================================================
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Support DATABASE_URL for production (postgres://user:pass@host:port/db)
+_database_url = os.environ.get("DATABASE_URL")
+if _database_url:
+    import urllib.parse
+    url = urllib.parse.urlparse(_database_url)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': url.path[1:],  # Remove leading slash
+            'USER': url.username,
+            'PASSWORD': url.password,
+            'HOST': url.hostname,
+            'PORT': url.port or '5432',
+            'CONN_MAX_AGE': 600,  # Connection pooling
+            'OPTIONS': {
+                'connect_timeout': 10,
+            },
+        }
     }
-}
+else:
+    # Development: SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -149,6 +176,7 @@ USE_TZ = True
 # Static files
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 # Media (uploads)
@@ -179,21 +207,29 @@ REST_FRAMEWORK = {
 # =============================================================================
 # CORS Settings (Environment-driven)
 # =============================================================================
+#
+# PRODUCTION: Set CORS_ORIGINS env var to your frontend domain(s)
+#   Example: CORS_ORIGINS=https://app.cleanproof.com
+#
+# SECURITY: Wildcards (*) are NEVER allowed. Each origin must be explicit.
+# =============================================================================
 
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
 if _cors_origins_env:
     # Production: explicit origins from environment
     CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 else:
-    # Development defaults
+    # Development defaults (Vite default + legacy ports)
     CORS_ALLOWED_ORIGINS = [
-        "http://localhost:8080",
+        "http://localhost:5173",   # Vite default
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",   # Legacy/alternative
         "http://127.0.0.1:8080",
         "http://localhost:8081",
         "http://127.0.0.1:8081",
     ]
 
-# NEVER allow all origins in production
+# SECURITY: Never allow all origins — explicitly disabled
 CORS_ALLOW_ALL_ORIGINS = False
 # =============================================================================
 # Email (SMTP via Gmail)
@@ -309,3 +345,11 @@ if not DEBUG:
     # Other security headers
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
+
+    # CSRF trusted origins (required for Django 4.0+)
+    _csrf_trusted = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+    if _csrf_trusted:
+        CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(",") if o.strip()]
+    else:
+        # Default to CORS origins if not explicitly set
+        CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()

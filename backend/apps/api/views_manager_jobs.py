@@ -1,7 +1,11 @@
 import logging
-import csv
+import io
 from collections import defaultdict
 from datetime import datetime, timedelta, time
+
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -43,6 +47,10 @@ from .serializers import (
 )
 logger = logging.getLogger(__name__)
 
+# Console roles that have access to manager endpoints
+# Owner = Billing Admin, Manager = Ops Admin, Staff = Limited Access
+CONSOLE_ROLES = {User.ROLE_OWNER, User.ROLE_MANAGER, User.ROLE_STAFF}
+
 VALID_SLA_REASONS = {
     "missing_before_photo",
     "missing_after_photo",
@@ -67,9 +75,11 @@ class JobPdfReportView(APIView):
     def post(self, request, pk: int):
         user = request.user
 
-        if user.role not in (User.ROLE_CLEANER, User.ROLE_MANAGER):
+        # Allow cleaners (for their own jobs) and console users (for company jobs)
+        allowed_roles = {User.ROLE_CLEANER} | CONSOLE_ROLES
+        if user.role not in allowed_roles:
             return Response(
-                {"detail": "Only cleaners and managers can generate PDF reports."},
+                {"detail": "Only cleaners and console users can generate PDF reports."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -82,6 +92,7 @@ class JobPdfReportView(APIView):
         if user.role == User.ROLE_CLEANER:
             job = get_object_or_404(base_qs, pk=pk, cleaner=user)
         else:
+            # Console users can access any company job
             job = get_object_or_404(base_qs, pk=pk, company=user.company)
 
         pdf_bytes = generate_job_report_pdf(job)
@@ -108,9 +119,9 @@ class ManagerJobPdfEmailView(APIView):
     def post(self, request, pk: int):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can email PDF reports."},
+                {"detail": "Only console users can email PDF reports."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -291,9 +302,9 @@ class ManagerJobReportEmailLogListView(APIView):
     def get(self, request, pk: int):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can view report email history."},
+                {"detail": "Only console users can view report email history."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -349,9 +360,9 @@ class ManagerJobsTodayView(APIView):
     def get(self, request):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can view jobs overview."},
+                {"detail": "Only console users can view jobs overview."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -488,9 +499,9 @@ class ManagerJobsCreateView(APIView):
     def post(self, request):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can create jobs."},
+                {"detail": "Only console users can create jobs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -559,9 +570,9 @@ class ManagerJobDetailView(APIView):
     def get(self, request, pk: int):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can view job details."},
+                {"detail": "Only console users can view job details."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -768,16 +779,16 @@ class ManagerJobForceCompleteView(APIView):
     def post(self, request, pk: int):
         user = request.user
 
-        if getattr(user, "role", None) != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can force-complete jobs."},
+                {"detail": "Only console users can force-complete jobs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         company = getattr(user, "company", None)
         if company is None:
             return Response(
-                {"detail": "Manager has no company."},
+                {"detail": "User has no company."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -892,9 +903,9 @@ class ManagerPlanningJobsView(APIView):
     def get(self, request):
         user = request.user
 
-        if user.role != User.ROLE_MANAGER:
+        if user.role not in CONSOLE_ROLES:
             return Response(
-                {"detail": "Only managers can view planning jobs."},
+                {"detail": "Only console users can view planning jobs."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1002,27 +1013,37 @@ class ManagerJobsHistoryView(APIView):
 
 class ManagerJobsExportView(APIView):
     """
-    CSV-export completed jobs for audit.
+    XLSX export of completed jobs for managers.
 
     GET /api/manager/jobs/export/?from=YYYY-MM-DD&to=YYYY-MM-DD[&location_id=&cleaner_id=&sla_status=]
+
+    Exports both human-readable data (names, formatted dates) and technical IDs
+    for integration with other systems.
     """
 
-    # важно: используем тот же TokenAuthentication, что и в других manager-вьюхах
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated, IsManager]
 
+    # SLA reason codes → human-readable labels
+    SLA_REASON_LABELS = {
+        "missing_before_photo": "Missing Before Photo",
+        "missing_after_photo": "Missing After Photo",
+        "checklist_not_completed": "Checklist Incomplete",
+        "missing_check_in": "Missing Check-in",
+        "missing_check_out": "Missing Check-out",
+    }
+
     def get(self, request, *args, **kwargs):
         user = request.user
-
-        # базовая проверка, как в других manager-эндпоинтах
         company = getattr(user, "company", None)
+
         if not company:
             return Response(
                 {"detail": "Manager has no company."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 1. Валидация дат
+        # 1. Validate dates
         date_from_str = request.query_params.get("from")
         date_to_str = request.query_params.get("to")
 
@@ -1042,11 +1063,11 @@ class ManagerJobsExportView(APIView):
         if date_from > date_to:
             raise ValidationError({"detail": "`from` must be <= `to`."})
 
-        # 2. Дата-диапазон → aware datetime
+        # 2. Date range → aware datetime
         start_dt = timezone.make_aware(datetime.combine(date_from, time.min))
         end_dt = timezone.make_aware(datetime.combine(date_to, time.max))
 
-        # 3. Базовый queryset: только completed, только своя компания
+        # 3. Base queryset: only completed jobs for this company
         qs = (
             Job.objects.select_related("company", "location", "cleaner")
             .filter(
@@ -1055,9 +1076,10 @@ class ManagerJobsExportView(APIView):
                 actual_end_time__gte=start_dt,
                 actual_end_time__lte=end_dt,
             )
+            .order_by("-actual_end_time")
         )
 
-        # 4. Доп. фильтры
+        # 4. Additional filters
         location_id = request.query_params.get("location_id")
         if location_id:
             qs = qs.filter(location_id=location_id)
@@ -1066,75 +1088,159 @@ class ManagerJobsExportView(APIView):
         if cleaner_id:
             qs = qs.filter(cleaner_id=cleaner_id)
 
-        sla_status = request.query_params.get("sla_status")
-        if sla_status in ("ok", "violated"):
-            qs = qs.filter(sla_status=sla_status)
+        sla_status_filter = request.query_params.get("sla_status")
 
-        # 5. Готовим HttpResponse как CSV
-        filename = f"jobs_export_{date_from_str}_{date_to_str}.csv"
-        response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
+        # 5. Create Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Job History"
 
-        writer = csv.writer(response)
+        # 6. Define styles
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-        # 6. Заголовок
-        header = [
-            "job_id",
-            "company_id",
-            "location_id",
-            "cleaner_id",
-            "scheduled_start_datetime",
-            "scheduled_end_datetime",
-            "actual_start_time",
-            "actual_end_time",
-            "duration_minutes",
-            "sla_status",
-            "sla_reasons",
-            "force_completed",
-            "completed_at",
+        ok_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+        violated_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        # 7. Headers - human-readable + technical IDs
+        headers = [
+            "Job #",
+            "Date",
+            "Start Time",
+            "End Time",
+            "Location",
+            "Address",
+            "Cleaner",
+            "Duration (min)",
+            "SLA Status",
+            "SLA Issues",
+            "Override",
+            # Technical columns for integrations
+            "Job ID",
+            "Location ID",
+            "Cleaner ID",
+            "Actual Start",
+            "Actual End",
         ]
-        writer.writerow(header)
 
-        # 7. Строки
-        for job in qs.iterator():
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+
+        # 8. Data rows
+        row_num = 2
+        for job in qs:
+            # Compute SLA status dynamically
+            computed_sla_status = compute_sla_status_for_job(job)
+            computed_sla_reasons = compute_sla_reasons_for_job(job)
+
+            # Filter by sla_status if requested
+            if sla_status_filter in ("ok", "violated"):
+                if computed_sla_status != sla_status_filter:
+                    continue
+
+            # Calculate duration
             duration_minutes = None
             if job.actual_start_time and job.actual_end_time:
                 delta = job.actual_end_time - job.actual_start_time
                 duration_minutes = int(delta.total_seconds() // 60)
 
-            sla_reasons_value = ""
-            if hasattr(job, "sla_reasons") and job.sla_reasons:
-                if isinstance(job.sla_reasons, (list, tuple)):
-                    sla_reasons_value = ";".join(job.sla_reasons)
+            # Format SLA reasons as human-readable text
+            sla_issues_text = ""
+            if computed_sla_reasons:
+                if isinstance(computed_sla_reasons, (list, tuple)):
+                    labels = [
+                        self.SLA_REASON_LABELS.get(r, r.replace("_", " ").title())
+                        for r in computed_sla_reasons
+                    ]
+                    sla_issues_text = ", ".join(labels)
                 else:
-                    sla_reasons_value = str(job.sla_reasons)
+                    sla_issues_text = self.SLA_REASON_LABELS.get(
+                        computed_sla_reasons,
+                        str(computed_sla_reasons).replace("_", " ").title()
+                    )
 
-            writer.writerow(
-                [
-                    job.id,
-                    getattr(job, "company_id", ""),
-                    getattr(job, "location_id", ""),
-                    getattr(job, "cleaner_id", ""),
-                    job.scheduled_start_datetime.isoformat()
-                    if getattr(job, "scheduled_start_datetime", None)
-                    else "",
-                    job.scheduled_end_datetime.isoformat()
-                    if getattr(job, "scheduled_end_datetime", None)
-                    else "",
-                    job.actual_start_time.isoformat()
-                    if job.actual_start_time
-                    else "",
-                    job.actual_end_time.isoformat()
-                    if job.actual_end_time
-                    else "",
-                    duration_minutes,
-                    getattr(job, "sla_status", ""),
-                    sla_reasons_value,
-                    getattr(job, "force_completed", False),
-                    job.actual_end_time.isoformat()
-                    if job.actual_end_time
-                    else "",
-                ]
-            )
+            # Location and cleaner info
+            location = job.location
+            cleaner = job.cleaner
+
+            location_name = getattr(location, "name", "") or ""
+            location_address = getattr(location, "address", "") or ""
+            cleaner_name = getattr(cleaner, "full_name", "") or ""
+
+            # Format times
+            scheduled_date = job.scheduled_date.strftime("%Y-%m-%d") if job.scheduled_date else ""
+            start_time = job.scheduled_start_time.strftime("%H:%M") if job.scheduled_start_time else ""
+            end_time = job.scheduled_end_time.strftime("%H:%M") if job.scheduled_end_time else ""
+
+            # SLA status display
+            sla_display = "OK" if computed_sla_status == "ok" else "Issues Found"
+            override_display = "Yes" if getattr(job, "verification_override", False) else "No"
+
+            # Row data
+            row_data = [
+                f"JOB-{job.id:03d}",
+                scheduled_date,
+                start_time,
+                end_time,
+                location_name,
+                location_address,
+                cleaner_name,
+                duration_minutes,
+                sla_display,
+                sla_issues_text,
+                override_display,
+                # Technical columns
+                job.id,
+                getattr(job, "location_id", ""),
+                getattr(job, "cleaner_id", ""),
+                job.actual_start_time.isoformat() if job.actual_start_time else "",
+                job.actual_end_time.isoformat() if job.actual_end_time else "",
+            ]
+
+            for col_num, value in enumerate(row_data, 1):
+                cell = ws.cell(row=row_num, column=col_num, value=value)
+                cell.border = thin_border
+
+                # Color SLA status column
+                if col_num == 9:  # SLA Status column
+                    if computed_sla_status == "ok":
+                        cell.fill = ok_fill
+                    else:
+                        cell.fill = violated_fill
+
+            row_num += 1
+
+        # 9. Auto-adjust column widths
+        column_widths = [12, 12, 10, 10, 25, 30, 20, 14, 14, 35, 10, 10, 12, 12, 22, 22]
+        for i, width in enumerate(column_widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        # 10. Freeze header row
+        ws.freeze_panes = "A2"
+
+        # 11. Save to bytes buffer
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        # 12. Return response
+        filename = f"jobs_export_{date_from_str}_{date_to_str}.xlsx"
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
         return response

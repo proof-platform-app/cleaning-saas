@@ -4,11 +4,23 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useNavigate } from "react-router-dom";
 import type { PricingMode } from "@/pages/PricingPage";
-import { upgradeToActive } from "@/api/client";
+import { upgradeToActive, type PlanTier } from "@/api/client";
 
-const plans = [
+const plans: {
+  name: string;
+  tier: PlanTier;
+  price: string;
+  description: string;
+  features: string[];
+  cta: string;
+  ctaLink: string | null;
+  note: string | null;
+  badge: string | null;
+  highlighted: boolean;
+}[] = [
   {
     name: "Standard",
+    tier: "standard",
     price: "$79",
     description: "For small teams that need reliable proof.",
     features: [
@@ -27,6 +39,7 @@ const plans = [
   },
   {
     name: "Pro",
+    tier: "pro",
     price: "$149",
     description: "For growing operations with higher volume.",
     features: [
@@ -87,10 +100,10 @@ const PricingPlansSection = ({ mode }: Props) => {
 
   const standardCta = getStandardCta();
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (tier: PlanTier) => {
     setIsUpgrading(true);
     try {
-      await upgradeToActive();
+      await upgradeToActive(tier);
       // После успешного апгрейда перенаправляем на dashboard
       navigate("/dashboard");
     } catch (error) {
@@ -220,11 +233,11 @@ const PricingPlansSection = ({ mode }: Props) => {
                           isStandard
                             ? () => {
                                 if (mode === "trial_expired") {
-                                  // trial закончился → апгрейд
-                                  handleUpgrade();
+                                  // trial закончился → апгрейд с выбранным tier
+                                  handleUpgrade(plan.tier);
                                 } else if (mode === "anonymous") {
-                                  // гость → в триал-флоу
-                                  navigate("/?trial=standard");
+                                  // гость → в триал-флоу с выбранным tier
+                                  navigate(`/?trial=${plan.tier}`);
                                 }
                                 // trial_active или other → кнопка disabled
                               }

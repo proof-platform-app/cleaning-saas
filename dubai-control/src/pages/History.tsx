@@ -19,7 +19,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { exportManagerJobsCsv } from "@/api/client";
+import { exportManagerJobsExcel } from "@/api/client";
 
 type DateRange = {
   from: Date;
@@ -195,7 +195,7 @@ export default function History() {
     setLocationFilterId(null);
   };
 
-  const handleExportCsv = async () => {
+  const handleExportExcel = async () => {
     try {
       setExportLoading(true);
 
@@ -222,19 +222,19 @@ export default function History() {
         payload.sla_status = "violated";
       }
 
-      const blob = await exportManagerJobsCsv(payload);
+      const blob = await exportManagerJobsExcel(payload);
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `jobs_export_${dateFromStr}_${dateToStr}.csv`;
+      a.download = `jobs_export_${dateFromStr}_${dateToStr}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("[History] Failed to export jobs CSV", e);
-      window.alert("Failed to export CSV. Please try again.");
+      console.error("[History] Failed to export jobs", e);
+      window.alert("Failed to export. Please try again.");
     } finally {
       setExportLoading(false);
     }
@@ -327,10 +327,10 @@ export default function History() {
                   type="button"
                   variant="outline"
                   className="w-full mt-2"
-                  onClick={handleExportCsv}
+                  onClick={handleExportExcel}
                   disabled={exportLoading}
                 >
-                  {exportLoading ? "Exporting CSV…" : "Download CSV"}
+                  {exportLoading ? "Exporting…" : "Download Excel"}
                 </Button>
               </div>
 

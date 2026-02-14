@@ -1,1 +1,55 @@
+# =============================================================================
+# CleanProof Backend .gitignore
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Environment files (NEVER commit production secrets)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# Exports and temporary files
 jobs_export.csv
+*.csv
+*.xlsx
+/tmp/

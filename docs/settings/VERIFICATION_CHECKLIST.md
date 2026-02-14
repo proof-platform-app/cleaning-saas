@@ -1,5 +1,62 @@
 # Settings v1.1 Verification Checklist
 
+## Quick Automated Verification
+
+Run the RBAC smoke test script to verify all role-based access controls:
+
+```bash
+cd backend
+./verify_roles.sh
+```
+
+**Expected output:**
+- 17/17 tests pass
+- Exit code 0
+- "ALL PASSED" message
+
+The script tests:
+- Auth/Me endpoints for all roles
+- Billing access (Owner/Manager allowed, Staff/Cleaner blocked)
+- Invoice download (Owner-only, Manager/Staff get 403)
+- Company profile access
+- Trial enforcement (job creation blocked when trial expired)
+
+---
+
+## Quick UI Checks (5 minutes)
+
+### 1. Staff Billing Access (blocked)
+- [ ] Login as **staff@test.com**
+- [ ] Navigate to `/settings/billing` (direct URL or dropdown)
+- [ ] **Expected:** Redirect to `/settings` with "Access restricted" toast
+- [ ] **Expected:** "Billing" not visible in account dropdown
+
+### 2. Manager Billing Access (read-only)
+- [ ] Login as **manager@test.com**
+- [ ] Navigate to `/settings/billing`
+- [ ] **Expected:** Page loads with blue info banner "Billing management restricted..."
+- [ ] **Expected:** NO "Manage plan" button visible
+- [ ] **Expected:** NO "Change payment method" button visible
+- [ ] **Expected:** Can view plan, usage, payment info (read-only)
+
+### 3. Owner Billing Access (full)
+- [ ] Login as **owner@test.com**
+- [ ] Navigate to `/settings/billing`
+- [ ] **Expected:** Page loads without restriction banner
+- [ ] **Expected:** "Contact to upgrade" button visible
+- [ ] **Expected:** Can access all billing features
+
+### 4. Invoice Download (Owner-only)
+- [ ] As **owner@test.com**: Click invoice download → 501 "Not available yet"
+- [ ] As **manager@test.com**: Invoices section visible, but download → 403
+
+### 5. Trial Expired Job Creation (blocked)
+- [ ] Company with expired trial attempts job creation
+- [ ] **Expected:** 403 error with `code: "trial_expired"`
+- [ ] **Expected:** UI shows trial expired message with upgrade CTA
+
+---
+
 ## Prerequisites
 
 ```bash
@@ -18,6 +75,7 @@ npm run dev
 - **Owner**: owner@test.com / testpass123!
 - **Manager**: manager@test.com / testpass123!
 - **Staff**: staff@test.com / testpass123!
+- **Cleaner**: +971500000001 / PIN 1234
 - **SSO Owner**: sso@test.com / testpass123!
 
 ---
@@ -262,19 +320,28 @@ npm run dev
 ## Manual Verification Commands
 
 ```bash
-# Backend verification
+# Backend RBAC verification (automated)
 cd backend
-./verify_rbac.sh
+./verify_roles.sh
 
 # Expected output:
-# ✓ Owner billing access (can_manage=true)
-# ✓ Manager billing access (can_manage=false)
-# ✓ Staff billing blocked (403 FORBIDDEN)
-# ✓ Invoice download 501 for Owner/Manager
-# ✓ Invoice download 403 for Staff
-# ✓ SSO user password change blocked (403 FORBIDDEN)
-# ✓ Validation error format standardized
-# ✓ Deterministic payload keys present
+# ============================================================
+# RBAC SMOKE TEST — verify_roles.sh
+# ============================================================
+# [1/7] Setting up test users ... OK
+# [2/7] Checking server ... OK
+# [3/7] Getting auth tokens ... OK
+# [4/7] Testing Auth/Me endpoints ... PASS (4 tests)
+# [5/7] Testing Settings/Billing endpoints ... PASS (7 tests)
+# [6/7] Testing Company/Team endpoints ... PASS (5 tests)
+# [7/7] Testing Trial enforcement ... PASS (1 test)
+# ============================================================
+# Total tests: 17
+# Passed: 17
+# Failed: 0
+# ALL PASSED
+# ============================================================
+# Exit code: 0
 
 # Frontend build
 cd dubai-control
@@ -290,23 +357,28 @@ npm run build
 
 ## Summary Checklist
 
+- [ ] `./verify_roles.sh` passes (17/17 tests, exit code 0)
 - [ ] All Account Settings features work
 - [ ] Password section respects auth_type (password vs sso)
 - [ ] Notifications auto-save correctly
-- [ ] Billing RBAC enforced (Owner/Manager/Staff)
-- [ ] Invoice download handles 501 gracefully
+- [ ] Billing RBAC enforced:
+  - [ ] Staff blocked (403)
+  - [ ] Manager read-only (`can_manage=false`)
+  - [ ] Owner full access (`can_manage=true`)
+- [ ] Invoice download RBAC enforced:
+  - [ ] Owner gets 501 (stub)
+  - [ ] Manager gets 403 (owner-only action)
+- [ ] Trial enforcement works:
+  - [ ] Job creation blocked when trial expired (403, `code: "trial_expired"`)
 - [ ] AccountDropdown hides Billing for Staff
 - [ ] Error handling uses standardized format
 - [ ] Loading and error states display correctly
 - [ ] Frontend builds successfully
-- [ ] Backend RBAC verification passes
 
 ---
 
-**Status**: All features verified ✓
+**Status**: All features verified ✅
 
-**Commits**:
-- b0d966b - feat(api): settings account and billing endpoints v1.1
-- 2800c50 - fix(api): settings api endpoint fixes and owner role login support
-- f62c02c - chore(api): stabilize settings v1.1 errors and RBAC docs
-- d2184bb - feat(frontend): wire Settings v1.1 to backend API
+**Last verified**: 2026-02-13
+
+**Verification script**: `backend/verify_roles.sh`

@@ -29,11 +29,18 @@ export default function Login() {
   const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Если пришли с /?trial=standard — показываем текст про trial
-  const isTrialFlow = useMemo(() => {
+  // Если пришли с /?trial=<tier> — показываем текст про trial и сохраняем tier
+  const trialTier = useMemo(() => {
     const params = new URLSearchParams(location.search);
-    return params.get("trial") === "standard";
+    const tier = params.get("trial");
+    // Accept standard, pro, enterprise
+    if (tier === "standard" || tier === "pro" || tier === "enterprise") {
+      return tier;
+    }
+    return null;
   }, [location.search]);
+
+  const isTrialFlow = trialTier !== null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,8 +99,8 @@ export default function Login() {
       }
 
       // Помечаем, что зашли через trial-флоу — пригодится для баннера
-      if (isTrialFlow) {
-        localStorage.setItem("cleanproof_trial_entry", "standard");
+      if (isTrialFlow && trialTier) {
+        localStorage.setItem("cleanproof_trial_entry", trialTier);
       }
 
       navigate("/dashboard");
