@@ -1,7 +1,7 @@
 # MAINTENANCE CONTEXT — V1 SCOPE
 
 **Status:** LOCKED
-**Version:** 1.0
+**Version:** 1.0.1
 **Last Updated:** 2026-02-14
 
 This document defines the strict scope for Maintenance Context v1 within Proof Platform. It establishes boundaries to protect Platform Layer and Proof Engine integrity.
@@ -23,6 +23,9 @@ Maintenance Context v1 is an **operational context** of Proof Platform designed 
 Maintenance Context applies the existing Proof Platform verification model to technical service work. It answers: *"Which service visits were actually performed, on which assets, and with what evidence?"*
 
 This is a **proof-of-work layer**, not a CMMS, ticketing system, or asset management platform.
+
+> **Maintenance v1 is an execution verification layer, not a ticketing or reactive service dispatch system.**
+> It does not introduce incident intake, priority routing, escalation, or reactive ticket workflows.
 
 ---
 
@@ -223,6 +226,7 @@ The following features are **explicitly excluded** from Maintenance Context V1:
 
 | Feature | Rationale |
 |---------|-----------|
+| Reactive ticket workflows (dispatch, incident intake, escalation) | Requires workflow engine — belongs to V2+ |
 | Recurring scheduling engine | Requires new scheduling infrastructure |
 | SLA tiers | Requires SLA engine modification |
 | Warranty tracking | Requires contract management system |
@@ -238,6 +242,8 @@ The following features are **explicitly excluded** from Maintenance Context V1:
 | Approval workflows | Requires workflow engine |
 
 > **These features belong to Maintenance V2+.**
+
+> **Maintenance v1 does not introduce reactive ticket workflows.**
 
 ---
 
@@ -332,6 +338,7 @@ Any modification to this scope document requires:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.0.1 | 2026-02-14 | Add anti-ticketing guardrails (reactive dispatch, incident intake explicitly forbidden) |
 | 1.0 | 2026-02-14 | Initial V1 scope definition |
 
 ---
