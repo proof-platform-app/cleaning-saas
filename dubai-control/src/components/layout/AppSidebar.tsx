@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Building2,
   Wrench,
+  ClipboardList,
 } from "lucide-react";
 import { useUserRole, canAccessBilling } from "@/hooks/useUserRole";
 
@@ -39,6 +40,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
     { name: "Reports", href: "/reports", icon: FileText },
     { name: "Locations", href: "/locations", icon: MapPin },
     { name: "Assets", href: "/assets", icon: Wrench },
+    { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
     ...(canSeeCompany
       ? [{ name: "Company", href: "/company/profile", icon: Building2 }]
       : []),

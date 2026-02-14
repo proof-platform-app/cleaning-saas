@@ -577,7 +577,7 @@ class ManagerJobDetailView(APIView):
             )
 
         job = get_object_or_404(
-            Job.objects.select_related("location", "cleaner").prefetch_related(
+            Job.objects.select_related("location", "cleaner", "asset").prefetch_related(
                 "checklist_items",
                 "check_events",
                 "photos__file",
@@ -588,6 +588,7 @@ class ManagerJobDetailView(APIView):
 
         location = job.location
         cleaner = job.cleaner
+        asset = job.asset
 
         photos_data = []
         for p in job.photos.all().select_related("file").order_by("photo_type", "id"):
@@ -614,6 +615,18 @@ class ManagerJobDetailView(APIView):
             many=True,
         ).data
 
+        # Maintenance Context V1: asset info
+        asset_data = None
+        if asset:
+            asset_data = {
+                "id": asset.id,
+                "name": asset.name,
+                "asset_type": {
+                    "id": asset.asset_type_id,
+                    "name": asset.asset_type.name if asset.asset_type else None,
+                },
+            }
+
         data = {
             "id": job.id,
             "status": job.status,
@@ -634,6 +647,7 @@ class ManagerJobDetailView(APIView):
                 "full_name": getattr(cleaner, "full_name", None),
                 "phone": getattr(cleaner, "phone", None),
             },
+            "asset": asset_data,
             "manager_notes": job.manager_notes,
             "cleaner_notes": job.cleaner_notes,
             "photos": photos_data,
@@ -725,6 +739,15 @@ def build_planning_job_payload(job: Job):
             "name": checklist_template.name,
         }
 
+    # Maintenance Context V1: include asset info
+    asset = getattr(job, "asset", None)
+    asset_payload = None
+    if asset is not None:
+        asset_payload = {
+            "id": asset.id,
+            "name": asset.name,
+        }
+
     return {
         "id": job.id,
         "scheduled_date": job.scheduled_date,
@@ -752,6 +775,8 @@ def build_planning_job_payload(job: Job):
         "sla_reasons": sla_reasons,
         "checklist_template": checklist_template_payload,
         "checklist_items": checklist_items_texts,
+        "asset": asset_payload,
+        "manager_notes": getattr(job, "manager_notes", "") or "",
     }
 
 

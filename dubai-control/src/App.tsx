@@ -31,6 +31,9 @@ import ViolationJobsPage from "./pages/ViolationJobsPage";
 import ReportEmailLogsPage from "./pages/ReportEmailLogs";
 import Analytics from "./pages/Analytics";
 import Assets from "./pages/maintenance/Assets";
+import VisitList from "./pages/maintenance/VisitList";
+import CreateVisit from "./pages/maintenance/CreateVisit";
+import VisitDetail from "./pages/maintenance/VisitDetail";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -108,6 +111,9 @@ const App = () => (
               <Route path="/assets" element={<Assets />} />
               <Route path="/assets/new" element={<Assets />} />
               <Route path="/assets/:id" element={<Assets />} />
+              <Route path="/maintenance/visits" element={<VisitList />} />
+              <Route path="/maintenance/visits/new" element={<CreateVisit />} />
+              <Route path="/maintenance/visits/:id" element={<VisitDetail />} />
 
               <Route path="/company/profile" element={<CompanyProfile />} />
               <Route path="/company/team" element={<CompanyTeam />} />

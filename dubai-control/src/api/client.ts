@@ -1333,7 +1333,20 @@ export type ManagerPlanningJob = {
     after_photo: boolean;
     checklist: boolean;
   };
+  // Maintenance Context V1
+  asset?: {
+    id: number;
+    name: string;
+  } | null;
+  manager_notes?: string;
+  sla_status?: string;
+  sla_reasons?: string[];
 };
+
+// ---------- Service Visits (Maintenance Context V1) ----------
+// Service Visits are Jobs with maintenance-specific terminology
+
+export type ServiceVisit = ManagerPlanningJob;
 
 // ---------- Reports types ----------
 
@@ -1721,5 +1734,70 @@ export async function downloadInvoice(invoiceId: number): Promise<Blob> {
   await loginManager();
   return apiFetchBlob(`/api/settings/billing/invoices/${invoiceId}/download/`, {
     method: "GET",
+  });
+}
+
+// ---------- Service Visits API (Maintenance Context V1) ----------
+// Service Visits use the same Jobs API endpoints but with maintenance terminology
+
+export type CreateServiceVisitInput = {
+  scheduled_date: string; // "YYYY-MM-DD"
+  scheduled_start_time?: string | null; // "HH:MM"
+  scheduled_end_time?: string | null;
+  location_id: number;
+  cleaner_id: number; // "technician" in UI
+  asset_id?: number | null;
+  checklist_template_id?: number | null;
+  manager_notes?: string;
+};
+
+export async function getServiceVisits(filters?: {
+  date_from?: string;
+  date_to?: string;
+  status?: string;
+  cleaner_id?: number;
+  location_id?: number;
+}): Promise<ServiceVisit[]> {
+  await loginManager();
+
+  const params = new URLSearchParams();
+
+  // Default to last 30 days if no dates provided
+  if (filters?.date_from) {
+    params.append("date_from", filters.date_from);
+  }
+  if (filters?.date_to) {
+    params.append("date_to", filters.date_to);
+  }
+  if (filters?.status) {
+    params.append("status", filters.status);
+  }
+  if (filters?.cleaner_id) {
+    params.append("cleaner_id", String(filters.cleaner_id));
+  }
+  if (filters?.location_id) {
+    params.append("location_id", String(filters.location_id));
+  }
+
+  const query = params.toString();
+  const url = query
+    ? `/api/manager/jobs/history/?${query}`
+    : "/api/manager/jobs/history/";
+
+  return apiFetch<ServiceVisit[]>(url);
+}
+
+export async function getServiceVisit(id: number): Promise<ManagerJobDetail> {
+  await loginManager();
+  return apiFetch<ManagerJobDetail>(`/api/manager/jobs/${id}/`);
+}
+
+export async function createServiceVisit(
+  input: CreateServiceVisitInput
+): Promise<ServiceVisit> {
+  await loginManager();
+  return apiFetch<ServiceVisit>("/api/manager/jobs/", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }

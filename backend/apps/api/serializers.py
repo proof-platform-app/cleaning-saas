@@ -5,6 +5,7 @@ from rest_framework import serializers
 from apps.jobs.models import Job, JobChecklistItem, JobCheckEvent, JobPhoto
 from apps.locations.models import Location, ChecklistTemplate, ChecklistTemplateItem
 from apps.marketing.models import ReportEmailLog
+from apps.maintenance.models import Asset
 
 User = get_user_model()
 
@@ -226,6 +227,8 @@ class JobPhotoSerializer(serializers.Serializer):
 class ManagerJobCreateSerializer(serializers.Serializer):
     """
     Payload для создания Job менеджером.
+
+    Maintenance Context V1: accepts optional asset_id for service visit tracking.
     """
     scheduled_date = serializers.DateField()
     scheduled_start_time = serializers.TimeField(required=False, allow_null=True)
@@ -234,6 +237,10 @@ class ManagerJobCreateSerializer(serializers.Serializer):
     location_id = serializers.IntegerField()
     cleaner_id = serializers.IntegerField()
     checklist_template_id = serializers.IntegerField(required=False, allow_null=True)
+
+    # Maintenance Context V1: optional asset binding
+    asset_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate(self, attrs):
         request = self.context["request"]
@@ -279,15 +286,35 @@ class ManagerJobCreateSerializer(serializers.Serializer):
                     {"checklist_template_id": "Invalid checklist template"}
                 )
 
+        # Maintenance Context V1: validate asset_id
+        asset = None
+        asset_id = attrs.get("asset_id")
+        if asset_id:
+            try:
+                asset = Asset.objects.get(
+                    id=asset_id,
+                    company=company,
+                )
+            except Asset.DoesNotExist:
+                raise serializers.ValidationError({"asset_id": "Invalid asset"})
+
+            # Optional strict: check asset.location matches job location
+            if asset.location_id != location.id:
+                raise serializers.ValidationError(
+                    {"asset_id": "Asset location does not match job location"}
+                )
+
         attrs["_location"] = location
         attrs["_cleaner"] = cleaner
         attrs["_template"] = template
+        attrs["_asset"] = asset
         return attrs
 
     def create(self, validated_data):
         location = validated_data["_location"]
         cleaner = validated_data["_cleaner"]
         template = validated_data.get("_template")
+        asset = validated_data.get("_asset")
 
         job = Job.objects.create(
             company=location.company,
@@ -297,6 +324,8 @@ class ManagerJobCreateSerializer(serializers.Serializer):
             scheduled_start_time=validated_data.get("scheduled_start_time"),
             scheduled_end_time=validated_data.get("scheduled_end_time"),
             status="scheduled",
+            asset=asset,
+            manager_notes=validated_data.get("manager_notes") or "",
         )
 
         if template:
@@ -319,10 +348,13 @@ class ManagerJobCreateSerializer(serializers.Serializer):
 class PlanningJobSerializer(serializers.ModelSerializer):
     """
     Минимальный ответ для Job Planning таблицы после создания job.
+
+    Maintenance Context V1: includes asset info for service visits.
     """
     location = serializers.SerializerMethodField()
     cleaner = serializers.SerializerMethodField()
     proof = serializers.SerializerMethodField()
+    asset = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -335,6 +367,8 @@ class PlanningJobSerializer(serializers.ModelSerializer):
             "location",
             "cleaner",
             "proof",
+            "asset",
+            "manager_notes",
         ]
 
     def get_location(self, obj):
@@ -361,6 +395,16 @@ class PlanningJobSerializer(serializers.ModelSerializer):
             "before_photo": False,
             "after_photo": False,
             "checklist": False,
+        }
+
+    def get_asset(self, obj):
+        """Maintenance Context V1: return asset info if present."""
+        asset = getattr(obj, "asset", None)
+        if not asset:
+            return None
+        return {
+            "id": asset.id,
+            "name": asset.name,
         }
 
 
