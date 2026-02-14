@@ -32,6 +32,15 @@
 | **Paid Activation Flow** | [docs/product/PAID_ACTIVATION_FLOW_v1.md](product/PAID_ACTIVATION_FLOW_v1.md) | Manual paid plan activation (pre-Paddle) |
 | **PDF Reports** | [docs/reports/PDF_REPORTS.md](reports/PDF_REPORTS.md) | Job Report, Company SLA Report, XLSX Export |
 
+### Product Contexts
+
+| Document | Path | Content |
+|----------|------|---------|
+| **Cleaning Context** | [docs/product/context_cleaning.md](product/context_cleaning.md) | Cleaning services operational context |
+| **Maintenance Context V1 Scope** | [docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md](product/MAINTENANCE_CONTEXT_V1_SCOPE.md) | Strict V1 scope definition (assets, visits, boundaries) |
+| **Fit-out Context** | [docs/product/context_fitout.md](product/context_fitout.md) | Fit-out/construction operational context |
+| **Property Context** | [docs/product/context_property.md](product/context_property.md) | Property management operational context |
+
 ### Deployment
 
 | Document | Path | Content |
@@ -90,7 +99,12 @@ docs/
 │   ├── PROJECT_STATE.md    # Implementation status
 │   └── WORKING_MODE_PROTOCOL.md # Parallel agent rules
 ├── product/
-│   └── PAID_ACTIVATION_FLOW_v1.md # Manual paid activation spec
+│   ├── PAID_ACTIVATION_FLOW_v1.md # Manual paid activation spec
+│   ├── MAINTENANCE_CONTEXT_V1_SCOPE.md # Maintenance V1 strict scope
+│   ├── context_cleaning.md     # Cleaning operational context
+│   ├── context_maintenance.md  # Maintenance operational context
+│   ├── context_fitout.md       # Fit-out operational context
+│   └── context_property.md     # Property operational context
 ├── settings/
 │   └── VERIFICATION_CHECKLIST.md # Testing checklist
 ├── reports/
