@@ -582,4 +582,18 @@ urlpatterns = [
         api_views.ServiceContractDetailView.as_view(),
         name="maintenance-contract-detail",
     ),
+
+    # =====================
+    # Stage 6: Notifications Layer
+    # =====================
+    path(
+        "maintenance/visits/<int:pk>/notify/",
+        api_views.ServiceVisitNotifyView.as_view(),
+        name="maintenance-visit-notify",
+    ),
+    path(
+        "maintenance/notifications/",
+        api_views.MaintenanceNotificationLogListView.as_view(),
+        name="maintenance-notifications",
+    ),
 ]

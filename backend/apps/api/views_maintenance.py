@@ -20,7 +20,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.maintenance.models import AssetType, Asset, MaintenanceCategory, ServiceContract
+from apps.maintenance.models import (
+    AssetType,
+    Asset,
+    MaintenanceCategory,
+    ServiceContract,
+    MaintenanceNotificationLog,
+)
+from apps.maintenance.notifications import (
+    send_maintenance_notification,
+    send_assignment_notification,
+)
 from apps.locations.models import Location
 from apps.jobs.models import Job
 from apps.api.views_reports import compute_sla_status_and_reasons_for_job
@@ -2994,3 +3004,173 @@ class ServiceContractDetailView(MaintenancePermissionMixin, APIView):
             "deleted": True,
             "id": contract_id,
         }, status=status.HTTP_200_OK)
+
+
+# =============================================================================
+# Stage 6: Notifications Layer
+# =============================================================================
+
+class ServiceVisitNotifyView(MaintenancePermissionMixin, APIView):
+    """
+    Send manual notification for a service visit.
+
+    POST /api/maintenance/visits/{id}/notify/
+    Body: { "kind": "visit_reminder" | "sla_warning" | "assignment" }
+
+    Sends notification to the technician assigned to the visit.
+    Manager-triggered notifications are logged with triggered_by.
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    ALLOWED_KINDS = [
+        MaintenanceNotificationLog.KIND_VISIT_REMINDER,
+        MaintenanceNotificationLog.KIND_SLA_WARNING,
+        MaintenanceNotificationLog.KIND_ASSIGNMENT,
+    ]
+
+    def post(self, request, pk):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        # Get the visit (job)
+        job = get_object_or_404(
+            Job.objects.select_related("location", "asset", "cleaner"),
+            pk=pk,
+            company=company,
+            context=Job.CONTEXT_MAINTENANCE,
+        )
+
+        # Validate kind
+        kind = request.data.get("kind")
+        if not kind or kind not in self.ALLOWED_KINDS:
+            return Response(
+                {
+                    "code": "INVALID_KIND",
+                    "message": f"Invalid notification kind. Allowed: {', '.join(self.ALLOWED_KINDS)}",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if technician is assigned
+        if not job.cleaner:
+            return Response(
+                {
+                    "code": "NO_TECHNICIAN",
+                    "message": "Cannot send notification: no technician assigned.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if technician has email
+        if not job.cleaner.email:
+            return Response(
+                {
+                    "code": "NO_EMAIL",
+                    "message": "Cannot send notification: technician has no email address.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Send notification
+        success = send_maintenance_notification(
+            company=company,
+            kind=kind,
+            job=job,
+            to_email=job.cleaner.email,
+            recipient_user=job.cleaner,
+            triggered_by=request.user,
+        )
+
+        if success:
+            return Response({
+                "success": True,
+                "message": f"Notification sent to {job.cleaner.email}",
+                "kind": kind,
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "success": False,
+                "message": "Failed to send notification. Check notification logs for details.",
+                "kind": kind,
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MaintenanceNotificationLogListView(MaintenancePermissionMixin, APIView):
+    """
+    List maintenance notification logs.
+
+    GET /api/maintenance/notifications/
+    Query params:
+    - kind: filter by notification kind
+    - status: filter by send status (sent/failed)
+    - job_id: filter by job ID
+    - date_from: filter by created_at >= date
+    - date_to: filter by created_at <= date
+    - limit: max results (default 100)
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        qs = MaintenanceNotificationLog.objects.filter(
+            company=company
+        ).select_related("job", "recipient_user", "triggered_by")
+
+        # Filters
+        kind = request.query_params.get("kind")
+        if kind:
+            qs = qs.filter(kind=kind)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        job_id = request.query_params.get("job_id")
+        if job_id:
+            qs = qs.filter(job_id=job_id)
+
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        # Limit
+        limit = int(request.query_params.get("limit", 100))
+        qs = qs[:limit]
+
+        # Serialize
+        data = []
+        for log in qs:
+            data.append({
+                "id": log.id,
+                "kind": log.kind,
+                "kind_display": log.get_kind_display(),
+                "status": log.status,
+                "status_display": log.get_status_display(),
+                "job_id": log.job_id,
+                "to_email": log.to_email,
+                "subject": log.subject,
+                "error_message": log.error_message,
+                "recipient": {
+                    "id": log.recipient_user.id,
+                    "name": log.recipient_user.full_name or log.recipient_user.email,
+                } if log.recipient_user else None,
+                "triggered_by": {
+                    "id": log.triggered_by.id,
+                    "name": log.triggered_by.full_name or log.triggered_by.email,
+                } if log.triggered_by else None,
+                "created_at": log.created_at.isoformat(),
+            })
+
+        return Response(data, status=status.HTTP_200_OK)

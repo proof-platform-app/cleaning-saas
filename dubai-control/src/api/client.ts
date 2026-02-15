@@ -2055,3 +2055,80 @@ export async function deleteServiceContract(id: number): Promise<void> {
     method: "DELETE",
   });
 }
+
+// ---------- Stage 6: Notifications Layer API ----------
+
+export type NotificationKind =
+  | "visit_reminder"
+  | "sla_warning"
+  | "assignment"
+  | "completion";
+
+export type NotificationStatus = "sent" | "failed";
+
+export type MaintenanceNotificationLog = {
+  id: number;
+  kind: NotificationKind;
+  kind_display: string;
+  status: NotificationStatus;
+  status_display: string;
+  job_id: number | null;
+  to_email: string;
+  subject: string;
+  error_message: string;
+  recipient: {
+    id: number;
+    name: string;
+  } | null;
+  triggered_by: {
+    id: number;
+    name: string;
+  } | null;
+  created_at: string;
+};
+
+export type SendNotificationResult = {
+  success: boolean;
+  message: string;
+  kind: NotificationKind;
+};
+
+export type NotificationFilters = {
+  kind?: NotificationKind;
+  status?: NotificationStatus;
+  job_id?: number;
+  date_from?: string;
+  date_to?: string;
+  limit?: number;
+};
+
+export async function sendVisitNotification(
+  visitId: number,
+  kind: NotificationKind
+): Promise<SendNotificationResult> {
+  await loginManager();
+  return apiFetch<SendNotificationResult>(
+    `/api/maintenance/visits/${visitId}/notify/`,
+    {
+      method: "POST",
+      body: JSON.stringify({ kind }),
+    }
+  );
+}
+
+export async function getMaintenanceNotificationLogs(
+  filters?: NotificationFilters
+): Promise<MaintenanceNotificationLog[]> {
+  await loginManager();
+  const params = new URLSearchParams();
+  if (filters?.kind) params.set("kind", filters.kind);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.job_id) params.set("job_id", String(filters.job_id));
+  if (filters?.date_from) params.set("date_from", filters.date_from);
+  if (filters?.date_to) params.set("date_to", filters.date_to);
+  if (filters?.limit) params.set("limit", String(filters.limit));
+
+  const queryString = params.toString();
+  const url = `/api/maintenance/notifications/${queryString ? `?${queryString}` : ""}`;
+  return apiFetch<MaintenanceNotificationLog[]>(url);
+}

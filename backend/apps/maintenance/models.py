@@ -489,3 +489,92 @@ class GeneratedVisitLog(models.Model):
 
     def __str__(self):
         return f"{self.template.name} -> Job #{self.job_id} ({self.scheduled_date})"
+
+
+# =============================================================================
+# Stage 6: Notifications Layer
+# =============================================================================
+
+class MaintenanceNotificationLog(models.Model):
+    """
+    Audit log for sent maintenance notifications.
+
+    Tracks all email notifications sent for maintenance visits.
+    Notifications are sent:
+    - Automatically on assignment and completion
+    - Manually via "Send Notification" button
+
+    See: docs/product/MAINTENANCE_V2_STRATEGY.md (Stage 6)
+    """
+
+    KIND_VISIT_REMINDER = "visit_reminder"
+    KIND_SLA_WARNING = "sla_warning"
+    KIND_ASSIGNMENT = "assignment"
+    KIND_COMPLETION = "completion"
+
+    KIND_CHOICES = [
+        (KIND_VISIT_REMINDER, "Visit Reminder"),
+        (KIND_SLA_WARNING, "SLA Warning"),
+        (KIND_ASSIGNMENT, "Assignment Alert"),
+        (KIND_COMPLETION, "Completion Notification"),
+    ]
+
+    STATUS_SENT = "sent"
+    STATUS_FAILED = "failed"
+
+    STATUS_CHOICES = [
+        (STATUS_SENT, "Sent"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    # Company scope
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="maintenance_notifications"
+    )
+
+    # Notification type and status
+    kind = models.CharField(max_length=30, choices=KIND_CHOICES)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
+
+    # Target job
+    job = models.ForeignKey(
+        'apps_jobs.Job',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="maintenance_notifications"
+    )
+
+    # Recipient
+    to_email = models.EmailField()
+    recipient_user = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="received_maintenance_notifications"
+    )
+
+    # Content (stored for audit)
+    subject = models.CharField(max_length=200)
+    error_message = models.TextField(blank=True)
+
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    triggered_by = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="triggered_maintenance_notifications"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Maintenance Notification Log"
+        verbose_name_plural = "Maintenance Notification Logs"
+        indexes = [
+            models.Index(fields=["company", "kind", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} -> {self.to_email} ({self.status})"

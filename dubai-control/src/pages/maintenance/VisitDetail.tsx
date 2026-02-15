@@ -8,6 +8,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/components/ui/use-toast";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ArrowLeft,
   Loader2,
   ClipboardList,
@@ -24,9 +30,16 @@ import {
   Download,
   AlertTriangle,
   Timer,
+  Bell,
+  ChevronDown,
 } from "lucide-react";
 import { getServiceVisit } from "@/api/client";
-import { toggleChecklistItem, downloadVisitReport } from "@/api/maintenance";
+import {
+  toggleChecklistItem,
+  downloadVisitReport,
+  sendNotification,
+  type NotificationKind,
+} from "@/api/maintenance";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 import { MaintenanceLayout } from "@/contexts/maintenance/ui/MaintenanceLayout";
 import { CompletionBlockersPanel } from "@/contexts/maintenance/ui/ApiErrorPanel";
@@ -191,8 +204,10 @@ export default function VisitDetail() {
 
   const hasAccess = canAccessVisits(user.role);
   const canEditChecklist = isTechnician(user.role);
+  const isManager = user.role === "owner" || user.role === "manager";
   const visitId = Number(id);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
 
   // Fetch visit details
   const {
@@ -273,6 +288,35 @@ export default function VisitDetail() {
     }
   };
 
+  // Send notification handler (Stage 6)
+  const handleSendNotification = async (kind: NotificationKind) => {
+    if (isSendingNotification) return;
+    setIsSendingNotification(true);
+    try {
+      const result = await sendNotification(visitId, kind);
+      if (result.success) {
+        toast({
+          title: "Notification sent",
+          description: result.message,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Notification failed",
+          description: result.message,
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to send notification. Please try again.",
+      });
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
   // Access restricted view
   if (!hasAccess) {
     return (
@@ -350,6 +394,37 @@ export default function VisitDetail() {
             </div>
           </div>
           <div className="flex gap-2">
+            {/* Send Notification dropdown (Stage 6) - only for managers */}
+            {isManager && visit.status !== "completed" && visit.status !== "cancelled" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSendingNotification}
+                  >
+                    {isSendingNotification ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Bell className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Notify
+                    <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleSendNotification("visit_reminder")}>
+                    Send Reminder
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSendNotification("sla_warning")}>
+                    Send SLA Warning
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSendNotification("assignment")}>
+                    Resend Assignment
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {visit.status === "completed" && (
               <Button
                 variant="outline"

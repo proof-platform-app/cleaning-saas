@@ -64,6 +64,14 @@ import {
   type ServiceContractType,
   type ServiceContractStatus,
   type CreateServiceContractInput,
+  // Stage 6: Notifications
+  sendVisitNotification,
+  getMaintenanceNotificationLogs,
+  type NotificationKind,
+  type NotificationStatus,
+  type MaintenanceNotificationLog,
+  type SendNotificationResult,
+  type NotificationFilters,
 } from "./client";
 
 // =============================================================================
@@ -106,6 +114,12 @@ export type {
   ServiceContractType,
   ServiceContractStatus,
   CreateServiceContractInput,
+  // Stage 6: Notifications
+  NotificationKind,
+  NotificationStatus,
+  MaintenanceNotificationLog,
+  SendNotificationResult,
+  NotificationFilters,
 };
 
 // =============================================================================
@@ -903,4 +917,28 @@ export const maintenanceKeys = {
     list: (filters?: ContractFilters) => [...maintenanceKeys.contracts.all, "list", filters] as const,
     detail: (id: number) => [...maintenanceKeys.contracts.all, "detail", id] as const,
   },
+  // Notifications (Stage 6)
+  notifications: {
+    all: ["maintenance", "notifications"] as const,
+    list: (filters?: NotificationFilters) => [...maintenanceKeys.notifications.all, "list", filters] as const,
+  },
 } as const;
+
+// =============================================================================
+// Notifications API (Stage 6)
+// =============================================================================
+
+export { sendVisitNotification, getMaintenanceNotificationLogs };
+
+export async function sendNotification(
+  visitId: number,
+  kind: NotificationKind
+): Promise<SendNotificationResult> {
+  return sendVisitNotification(visitId, kind);
+}
+
+export async function listNotificationLogs(
+  filters?: NotificationFilters
+): Promise<MaintenanceNotificationLog[]> {
+  return getMaintenanceNotificationLogs(filters);
+}
