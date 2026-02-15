@@ -1,5 +1,6 @@
 // dubai-control/src/pages/maintenance/VisitDetail.tsx
 
+import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -20,9 +21,10 @@ import {
   RefreshCw,
   CheckCircle2,
   Circle,
+  Download,
 } from "lucide-react";
 import { getServiceVisit } from "@/api/client";
-import { toggleChecklistItem } from "@/api/maintenance";
+import { toggleChecklistItem, downloadVisitReport } from "@/api/maintenance";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 import { MaintenanceLayout } from "@/contexts/maintenance/ui/MaintenanceLayout";
 import { CompletionBlockersPanel } from "@/contexts/maintenance/ui/ApiErrorPanel";
@@ -102,6 +104,7 @@ export default function VisitDetail() {
   const hasAccess = canAccessVisits(user.role);
   const canEditChecklist = isTechnician(user.role);
   const visitId = Number(id);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Fetch visit details
   const {
@@ -152,6 +155,35 @@ export default function VisitDetail() {
       queryClient.invalidateQueries({ queryKey: ["serviceVisit", visitId] });
     },
   });
+
+  // Download PDF handler
+  const handleDownloadPdf = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const blob = await downloadVisitReport(visitId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `maintenance_visit_${visitId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Download complete",
+        description: "PDF report has been downloaded.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Download failed",
+        description: "Failed to download PDF report. Please try again.",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Access restricted view
   if (!hasAccess) {
@@ -227,14 +259,23 @@ export default function VisitDetail() {
               <SLABadge status={visit.sla_status} />
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/jobs/${visit.id}`)}
-            size="sm"
-          >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            Open in Job Detail
-          </Button>
+          <div className="flex gap-2">
+            {visit.status === "completed" && (
+              <Button
+                variant="outline"
+                onClick={handleDownloadPdf}
+                disabled={isDownloading}
+                size="sm"
+              >
+                {isDownloading ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Download PDF
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -405,300 +446,241 @@ export default function VisitDetail() {
         </div>
       )}
 
-      {/* Checklist Section */}
-      {visit.checklist_items && visit.checklist_items.length > 0 && (() => {
-        const completedCount = visit.checklist_items.filter((item: any) => item.is_completed).length;
-        const totalCount = visit.checklist_items.length;
-        const progressPercent = Math.round((completedCount / totalCount) * 100);
-        const canToggle = canEditChecklist && visit.status === "in_progress";
+      {/* Checklist + Completion Blockers Row */}
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        {/* Checklist Section */}
+        {visit.checklist_items && visit.checklist_items.length > 0 ? (() => {
+          const completedCount = visit.checklist_items.filter((item: any) => item.is_completed).length;
+          const totalCount = visit.checklist_items.length;
+          const progressPercent = Math.round((completedCount / totalCount) * 100);
+          const canToggle = canEditChecklist && visit.status === "in_progress";
 
-        return (
-          <div className="detail-card mt-4">
-            <div className="flex items-center justify-between">
-              <h2 className="detail-card-title">
-                <ClipboardList />
-                Checklist
-              </h2>
-              <span className="text-sm font-medium text-muted-foreground">
-                {completedCount}/{totalCount} complete
-              </span>
-            </div>
+          return (
+            <div className="detail-card">
+              <div className="flex items-center justify-between">
+                <h2 className="detail-card-title">
+                  <ClipboardList />
+                  Checklist
+                </h2>
+                <span className="text-xs font-medium text-muted-foreground">
+                  {completedCount}/{totalCount}
+                </span>
+              </div>
 
-            {/* Progress bar */}
-            <div className="mt-3">
-              <Progress value={progressPercent} className="h-2" />
-            </div>
+              {/* Progress bar */}
+              <div className="mt-2">
+                <Progress value={progressPercent} className="h-1.5" />
+              </div>
 
-            {/* Checklist items */}
-            <div className="mt-4 space-y-2">
-              {visit.checklist_items.map((item: any) => (
-                <div
-                  key={item.id}
-                  className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${
-                    item.is_completed
-                      ? "border-green-200 bg-green-50"
-                      : "border-border bg-card"
-                  } ${canToggle ? "cursor-pointer hover:bg-muted/50" : ""}`}
-                  onClick={() => {
-                    if (canToggle && !toggleMutation.isPending) {
-                      toggleMutation.mutate({
-                        itemId: item.id,
-                        isCompleted: !item.is_completed,
-                      });
-                    }
-                  }}
-                >
-                  {canToggle ? (
-                    <Checkbox
-                      checked={item.is_completed}
-                      disabled={toggleMutation.isPending}
-                      onCheckedChange={(checked) => {
+              {/* Checklist items - compact 2-column layout */}
+              <div className="mt-2 grid grid-cols-1 gap-1">
+                {visit.checklist_items.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-1.5 rounded border px-2 py-1 transition-colors text-xs ${
+                      item.is_completed
+                        ? "border-green-200 bg-green-50/50"
+                        : "border-border bg-card"
+                    } ${canToggle ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                    onClick={() => {
+                      if (canToggle && !toggleMutation.isPending) {
                         toggleMutation.mutate({
                           itemId: item.id,
-                          isCompleted: Boolean(checked),
+                          isCompleted: !item.is_completed,
                         });
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5"
-                    />
-                  ) : (
-                    <div className="mt-0.5">
-                      {item.is_completed ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <Circle className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex-1">
+                      }
+                    }}
+                  >
+                    {canToggle ? (
+                      <Checkbox
+                        checked={item.is_completed}
+                        disabled={toggleMutation.isPending}
+                        onCheckedChange={(checked) => {
+                          toggleMutation.mutate({
+                            itemId: item.id,
+                            isCompleted: Boolean(checked),
+                          });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-3.5 w-3.5"
+                      />
+                    ) : (
+                      <div className="flex-shrink-0">
+                        {item.is_completed ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                      </div>
+                    )}
                     <span
-                      className={`text-sm ${
-                        item.is_completed
-                          ? "text-muted-foreground line-through"
-                          : "text-foreground"
+                      className={`flex-1 truncate ${
+                        item.is_completed ? "text-muted-foreground line-through" : "text-foreground"
                       }`}
                     >
                       {item.text}
                     </span>
                     {item.is_required && !item.is_completed && (
-                      <span className="ml-2 text-xs text-destructive">Required</span>
+                      <span className="text-[10px] text-destructive font-medium shrink-0">Req</span>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* Technician hint */}
-            {canEditChecklist && visit.status !== "in_progress" && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Checklist can only be edited when the visit is in progress.
-              </p>
-            )}
-            {!canEditChecklist && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Only the assigned technician can complete checklist items.
-              </p>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* No checklist message */}
-      {(!visit.checklist_items || visit.checklist_items.length === 0) && (
-        <div className="detail-card mt-4">
-          <h2 className="detail-card-title">
-            <ClipboardList />
-            Checklist
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            No checklist assigned to this visit.
-          </p>
-        </div>
-      )}
-
-      {/* Completion Blockers - shown when visit is in progress */}
-      {visit.status === "in_progress" && (
-        <CompletionBlockersPanel
-          blockers={buildCompletionBlockers({
-            photos: visit.photos,
-            checklist_items: visit.checklist_items,
-          })}
-          className="mt-4"
-        />
-      )}
-
-      {/* Evidence Section - Photos */}
-      <div className="detail-card mt-4">
-        <h2 className="detail-card-title">Evidence Photos</h2>
-
-        {/* Photos Grid */}
-        {(visit.photos?.before || visit.photos?.after) ? (
-          <div className="mt-3 grid grid-cols-2 gap-4">
-            {/* Before Photo */}
-            <div>
-              <div className="text-xs font-medium text-muted-foreground mb-2">BEFORE</div>
-              {visit.photos?.before ? (
-                <a
-                  href={visit.photos.before.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={visit.photos.before.url}
-                    alt="Before"
-                    className="w-full h-32 object-cover rounded-lg border border-border hover:opacity-90 transition-opacity cursor-pointer"
-                  />
-                  {visit.photos.before.uploaded_at && (
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {new Date(visit.photos.before.uploaded_at).toLocaleString()}
-                    </div>
-                  )}
-                </a>
-              ) : (
-                <div className="w-full h-32 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center">
-                  <span className="text-xs text-muted-foreground">No photo</span>
-                </div>
+              {/* Technician hint */}
+              {!canEditChecklist && (
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Only technician can edit
+                </p>
               )}
             </div>
-
-            {/* After Photo */}
-            <div>
-              <div className="text-xs font-medium text-muted-foreground mb-2">AFTER</div>
-              {visit.photos?.after ? (
-                <a
-                  href={visit.photos.after.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={visit.photos.after.url}
-                    alt="After"
-                    className="w-full h-32 object-cover rounded-lg border border-border hover:opacity-90 transition-opacity cursor-pointer"
-                  />
-                  {visit.photos.after.uploaded_at && (
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {new Date(visit.photos.after.uploaded_at).toLocaleString()}
-                    </div>
-                  )}
-                </a>
-              ) : (
-                <div className="w-full h-32 rounded-lg border border-dashed border-border bg-muted/30 flex items-center justify-center">
-                  <span className="text-xs text-muted-foreground">No photo</span>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-3 py-6 text-center">
-            <div className="text-sm text-muted-foreground">No photos uploaded yet</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Technician will upload before/after photos during the visit
+          );
+        })() : (
+          <div className="detail-card">
+            <h2 className="detail-card-title">
+              <ClipboardList />
+              Checklist
+            </h2>
+            <p className="mt-2 text-xs text-muted-foreground">
+              No checklist assigned
             </p>
           </div>
         )}
 
-        {/* Link to full Job Detail */}
-        <div className="mt-4 pt-3 border-t border-border">
-          <Button onClick={() => navigate(`/jobs/${visit.id}`)} variant="outline" size="sm">
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            View Full Job Detail
-          </Button>
-        </div>
+        {/* Completion Blockers or SLA Status */}
+        {visit.status === "in_progress" ? (
+          <CompletionBlockersPanel
+            blockers={buildCompletionBlockers({
+              photos: visit.photos,
+              checklist_items: visit.checklist_items,
+            })}
+          />
+        ) : (
+          <div className="detail-card">
+            <h2 className="detail-card-title">SLA Status</h2>
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    visit.sla_status === "violated"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-green-100 text-green-800"
+                  }`}
+                >
+                  {visit.sla_status === "violated" ? "Violated" : "OK"}
+                </span>
+              </div>
+              {visit.sla_status === "violated" && visit.sla_reasons && visit.sla_reasons.length > 0 && (
+                <ul className="space-y-0.5">
+                  {visit.sla_reasons.map((reason: string, idx: number) => (
+                    <li key={idx} className="flex items-center gap-1.5 text-xs text-red-700">
+                      <span className="h-1 w-1 rounded-full bg-red-400" />
+                      {SLA_REASON_LABELS[reason] ?? reason.replace(/_/g, " ")}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Check Events Summary */}
-      {visit.check_events && visit.check_events.length > 0 && (
-        <div className="detail-card mt-4">
-          <h2 className="detail-card-title">Check-in / Check-out</h2>
-          <div className="mt-3 space-y-2">
-            {visit.check_events.map((event, idx) => (
-              <div key={idx} className="flex items-center justify-between text-sm">
-                <span className={`font-medium ${event.event_type === 'check_in' ? 'text-green-600' : 'text-blue-600'}`}>
-                  {event.event_type === 'check_in' ? 'Check-in' : 'Check-out'}
-                </span>
-                <span className="text-muted-foreground">
-                  {new Date(event.created_at).toLocaleString()}
-                </span>
+      {/* Evidence + Timing Row */}
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        {/* Evidence Photos */}
+        <div className="detail-card">
+          <h2 className="detail-card-title">Evidence Photos</h2>
+          {(visit.photos?.before || visit.photos?.after) ? (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[10px] font-medium text-muted-foreground mb-1">BEFORE</div>
+                {visit.photos?.before ? (
+                  <a href={visit.photos.before.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={visit.photos.before.url}
+                      alt="Before"
+                      className="w-full h-20 object-cover rounded border border-border hover:opacity-90"
+                    />
+                  </a>
+                ) : (
+                  <div className="w-full h-20 rounded border border-dashed border-border bg-muted/30 flex items-center justify-center">
+                    <span className="text-[10px] text-muted-foreground">No photo</span>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* SLA & Proof Section */}
-      <div className="detail-card mt-4">
-        <h2 className="detail-card-title">SLA & Proof</h2>
-        <div className="mt-3 space-y-3">
-          {/* SLA Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Status
-            </span>
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                visit.sla_status === "violated"
-                  ? "bg-red-100 text-red-800"
-                  : "bg-green-100 text-green-800"
-              }`}
-            >
-              {visit.sla_status === "violated" ? "SLA Violated" : "SLA OK"}
-            </span>
-          </div>
-
-          {/* SLA Reasons if violated */}
-          {visit.sla_status === "violated" && visit.sla_reasons && visit.sla_reasons.length > 0 && (
-            <div>
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Reasons
-              </span>
-              <ul className="mt-1 space-y-1">
-                {visit.sla_reasons.map((reason, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-xs text-red-700">
-                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                    <span>
-                      {SLA_REASON_LABELS[reason] ?? reason.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div>
+                <div className="text-[10px] font-medium text-muted-foreground mb-1">AFTER</div>
+                {visit.photos?.after ? (
+                  <a href={visit.photos.after.url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={visit.photos.after.url}
+                      alt="After"
+                      className="w-full h-20 object-cover rounded border border-border hover:opacity-90"
+                    />
+                  </a>
+                ) : (
+                  <div className="w-full h-20 rounded border border-dashed border-border bg-muted/30 flex items-center justify-center">
+                    <span className="text-[10px] text-muted-foreground">No photo</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 py-4 text-center">
+              <div className="text-xs text-muted-foreground">No photos uploaded</div>
             </div>
           )}
+        </div>
 
-          {/* Timing Summary */}
-          <div className="rounded-lg bg-muted/50 p-3">
-            <div className="grid grid-cols-2 gap-3 text-xs">
+        {/* Timing & Check Events */}
+        <div className="detail-card">
+          <h2 className="detail-card-title">Timing</h2>
+          <div className="mt-2 space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <span className="text-muted-foreground">Scheduled:</span>
-                <div className="font-medium text-foreground">
-                  {visit.scheduled_date}
-                  {visit.scheduled_start_time && ` ${visit.scheduled_start_time}`}
-                </div>
+                <div className="font-medium">{visit.scheduled_date}</div>
               </div>
               <div>
-                <span className="text-muted-foreground">Check-in:</span>
-                <div className="font-medium text-foreground">
-                  {visit.actual_start_time
-                    ? new Date(visit.actual_start_time).toLocaleString()
-                    : "—"}
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Scheduled End:</span>
-                <div className="font-medium text-foreground">
-                  {visit.scheduled_end_time || "—"}
-                </div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Check-out:</span>
-                <div className="font-medium text-foreground">
-                  {visit.actual_end_time
-                    ? new Date(visit.actual_end_time).toLocaleString()
-                    : "—"}
+                <span className="text-muted-foreground">Time:</span>
+                <div className="font-medium">
+                  {visit.scheduled_start_time || "—"}{visit.scheduled_end_time && ` - ${visit.scheduled_end_time}`}
                 </div>
               </div>
             </div>
+            {(visit.actual_start_time || visit.actual_end_time) && (
+              <div className="rounded bg-muted/50 p-2">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Check-in:</span>
+                    <div className="font-medium text-green-600">
+                      {visit.actual_start_time ? new Date(visit.actual_start_time).toLocaleTimeString() : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Check-out:</span>
+                    <div className="font-medium text-blue-600">
+                      {visit.actual_end_time ? new Date(visit.actual_end_time).toLocaleTimeString() : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* SLA for completed visits */}
+            {visit.status === "completed" && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-muted-foreground">SLA:</span>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    visit.sla_status === "violated"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-green-100 text-green-800"
+                  }`}
+                >
+                  {visit.sla_status === "violated" ? "Violated" : "OK"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

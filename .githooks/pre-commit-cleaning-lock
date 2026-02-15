@@ -1,0 +1,36 @@
+#!/bin/bash
+# Pre-commit hook: Block unauthorized Cleaning changes
+# Install: cp .githooks/pre-commit-cleaning-lock .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+LOCKED_PATTERNS=(
+    "dubai-control/src/pages/Dashboard.tsx"
+    "dubai-control/src/pages/Jobs.tsx"
+    "dubai-control/src/pages/JobPlanning.tsx"
+    "dubai-control/src/pages/JobDetails.tsx"
+    "dubai-control/src/pages/History.tsx"
+    "dubai-control/src/pages/Performance.tsx"
+    "dubai-control/src/pages/Analytics.tsx"
+    "dubai-control/src/pages/Reports.tsx"
+    "dubai-control/src/components/planning/"
+    "dubai-control/src/components/analytics/"
+    "dubai-control/src/api/planning.ts"
+    "dubai-control/src/api/analytics.ts"
+    "dubai-control/src/index.css"
+)
+
+STAGED_FILES=$(git diff --cached --name-only)
+
+for pattern in "${LOCKED_PATTERNS[@]}"; do
+    if echo "$STAGED_FILES" | grep -q "$pattern"; then
+        echo "ERROR: Attempting to modify LOCKED Cleaning file: $pattern"
+        echo ""
+        echo "Cleaning product is READ-ONLY."
+        echo "See: docs/execution/PRODUCT_BOUNDARY_LOCK.md"
+        echo ""
+        echo "To bypass (with explicit approval): git commit --no-verify"
+        exit 1
+    fi
+done
+
+echo "Pre-commit check passed: No locked Cleaning files modified."
+exit 0

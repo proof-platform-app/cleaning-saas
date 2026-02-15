@@ -1,7 +1,7 @@
 # MAINTENANCE CONTEXT — V1 SCOPE
 
 **Status:** LOCKED
-**Version:** 1.0.2
+**Version:** 1.2
 **Last Updated:** 2026-02-15
 
 This document defines the strict scope for Maintenance Context v1 within Proof Platform. It establishes boundaries to protect Platform Layer and Proof Engine integrity.
@@ -26,6 +26,8 @@ This is a **proof-of-work layer**, not a CMMS, ticketing system, or asset manage
 
 > **Maintenance v1 is an execution verification layer, not a ticketing or reactive service dispatch system.**
 > It does not introduce incident intake, priority routing, escalation, or reactive ticket workflows.
+
+Maintenance v1 does not introduce reactive ticket workflows. All visit scheduling is manager-initiated (like Cleaning). There is no dispatch queue, no incident creation by end-users, and no ticket assignment logic.
 
 ---
 
@@ -256,9 +258,41 @@ The following features are **explicitly excluded** from Maintenance Context V1:
 
 ---
 
-## 9. Context Boundary Rules
+## 9. Proof Parity Requirements (Maintenance v1 must match Cleaning)
 
-### 9.1 Maintenance Context CANNOT
+Maintenance Context v1 MUST achieve **proof parity** with Cleaning Context. This means Maintenance visits use the **same proof primitives** already in the platform — no new proof engine, no alternative verification model.
+
+### 9.1 Proof Parity Matrix
+
+| Capability | Platform Primitive | Maintenance Requirement | Status |
+|------------|-------------------|------------------------|--------|
+| **Checklist execution** | `ChecklistTemplate`, `JobChecklistItem` | Maintenance visits support checklists (manager configures template, technician completes items) | Required |
+| **Evidence layer (photos)** | `JobPhoto` model | Before/after photos attached to visit using existing JobPhoto infrastructure | Required |
+| **Completion enforcement** | Job validation rules | Visit cannot be completed without required proof (if configured): photos, checklist items, check-in | Required |
+| **SLA interpretation** | `compute_sla_status_and_reasons_for_job()` | Maintenance visits evaluated by same SLA helper; display same `sla_status` + `sla_reasons[]` | Required |
+| **Immutability rules** | Completed Job read-only | Completed visits are immutable (same rules as Cleaning); `JobCheckEvent` immutable | Required |
+| **PDF / Reports** | Existing report pipeline | Visit Detail PDF uses same report generation as Job PDF; Asset History uses existing aggregation | Required |
+| **Force-complete** | `force_complete` endpoint | Maintenance visits support force-complete with same rules (in_progress only, creates `completed_unverified`) | Required |
+| **Audit trail** | `JobCheckEvent` model | All visit events (check-in, check-out, photo upload) logged via same audit infrastructure | Required |
+
+### 9.2 Proof Parity Principle
+
+> **Maintenance v1 does NOT create parallel proof infrastructure.**
+> All verification primitives are reused from the existing Proof Engine.
+> If Cleaning can do it, Maintenance can do it — using the same code paths.
+
+### 9.3 What Proof Parity Does NOT Include
+
+- New SLA tiers or custom SLA rules (V2+)
+- Asset-specific proof requirements beyond standard Job proof (V2+)
+- Multi-asset proof aggregation (V2+)
+- Technician certification validation (V2+)
+
+---
+
+## 10. Context Boundary Rules
+
+### 10.1 Maintenance Context CANNOT
 
 | Action | Status |
 |--------|--------|
@@ -271,7 +305,7 @@ The following features are **explicitly excluded** from Maintenance Context V1:
 | Modify Proof Engine | **FORBIDDEN** |
 | Change error response format | **FORBIDDEN** |
 
-### 9.2 Maintenance Context CAN
+### 10.2 Maintenance Context CAN
 
 | Action | Status |
 |--------|--------|
@@ -281,10 +315,11 @@ The following features are **explicitly excluded** from Maintenance Context V1:
 | Add checklist templates | **ALLOWED** |
 | Filter existing views by context | **ALLOWED** |
 | Add vocabulary/labels layer | **ALLOWED** |
+| Reuse existing proof primitives (photos, checklists, SLA) | **ALLOWED** |
 
 ---
 
-## 10. Roadmap (Future, Not Implemented)
+## 11. Roadmap (Future, Not Implemented)
 
 The following features are planned for future versions:
 
@@ -309,24 +344,41 @@ The following features are planned for future versions:
 
 ---
 
-## 11. Verification Checklist
+## 12. Verification Checklist
 
 Before Maintenance Context V1 is considered complete:
 
+### Core Infrastructure
 - [ ] Asset CRUD endpoints implemented
 - [ ] Asset list/detail pages functional
 - [ ] Service Visit form includes asset field
 - [ ] Visit list filters by maintenance context
 - [ ] Dashboard shows maintenance widgets
+
+### Proof Parity (NEW in v1.1)
+- [x] Visit checklist execution works end-to-end (manager config → technician completion) — DONE 2026-02-15
+- [ ] Evidence upload works (before/after photos) and appears in visit detail
+- [ ] Completion enforcement blocks invalid completion with correct error format
+- [ ] SLA evaluation works for maintenance visits (same helper as Cleaning)
+- [ ] Completed visits are immutable (read-only after completion)
+- [ ] Force-complete works for maintenance visits (in_progress → completed_unverified)
+
+### Reports & Export (NEW in v1.1)
+- [ ] Visit PDF report works (same report pipeline as Cleaning)
+- [x] Asset service history includes visit list — DONE 2026-02-15
+- [ ] Asset history supports PDF export
+
+### Regression Safety
 - [ ] No Platform Layer modifications
 - [ ] No new lifecycle states
 - [ ] No new roles
 - [ ] `verify_roles.sh` still passes
 - [ ] Existing Cleaning context unaffected
+- [ ] Context isolation verified (maintenance visits don't appear in cleaning views)
 
 ---
 
-## 12. Change Policy
+## 13. Change Policy
 
 Any modification to this scope document requires:
 
@@ -347,10 +399,15 @@ Any modification to this scope document requires:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.2 | 2026-02-15 | **P1 Checklist Parity implemented**: CreateVisit selector, VisitDetail display/toggle, API functions. Verification checklist updated. |
+| 1.1 | 2026-02-15 | **Proof parity requirements added** (Section 9): checklists, evidence, completion enforcement, SLA interpretation, immutability, PDF/reports. Verification checklist expanded. |
 | 1.0.2 | 2026-02-15 | Add Job.context field for explicit product separation (cleaning vs maintenance) |
 | 1.0.1 | 2026-02-14 | Add anti-ticketing guardrails (reactive dispatch, incident intake explicitly forbidden) |
-| 1.0 | 2026-02-14 | Initial V1 scope definition |
+| 1.0 | 2026-02-14 | Initial V1 scope defFuture evolution is described in MAINTENANCE_PRODUCT_ROADMAP.md. This document defines V1 only.inition |
 
+
+---
+Future evolution is described in MAINTENANCE_PRODUCT_ROADMAP.md. This document defines V1 only.
 ---
 
 **END OF DOCUMENT**

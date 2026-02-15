@@ -23,6 +23,7 @@ from apps.accounts.models import User
 from apps.maintenance.models import AssetType, Asset, MaintenanceCategory
 from apps.locations.models import Location
 from apps.jobs.models import Job
+from apps.api.views_reports import compute_sla_status_and_reasons_for_job
 
 
 # =============================================================================
@@ -797,12 +798,16 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
                     } if visit.asset.asset_type else None,
                 }
 
+            # Compute SLA status for this visit
+            sla_status, _ = compute_sla_status_and_reasons_for_job(visit)
+
             data.append({
                 "id": visit.id,
                 "scheduled_date": visit.scheduled_date.isoformat(),
                 "scheduled_start_time": visit.scheduled_start_time.isoformat() if visit.scheduled_start_time else None,
                 "scheduled_end_time": visit.scheduled_end_time.isoformat() if visit.scheduled_end_time else None,
                 "status": visit.status,
+                "sla_status": sla_status,
                 "location": {
                     "id": visit.location.id,
                     "name": visit.location.name,
@@ -898,3 +903,169 @@ class AssetServiceHistoryView(MaintenancePermissionMixin, APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+# =============================================================================
+# Service Visit PDF Report (P5)
+# =============================================================================
+
+class ServiceVisitReportView(MaintenancePermissionMixin, APIView):
+    """
+    Generate PDF report for a maintenance service visit.
+
+    GET /api/maintenance/visits/<id>/report/
+
+    Returns: application/pdf
+
+    Requirements:
+    - Visit must be maintenance context (Job.context == "maintenance")
+    - Visit must be completed (status == "completed")
+
+    Uses maintenance-specific PDF template with:
+    - Neutral gray color scheme
+    - "Technician" terminology (not "Cleaner")
+    - Asset information (name, type, serial)
+    - Maintenance category
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        from apps.api.pdf import generate_maintenance_visit_report_pdf
+
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        # Get the visit (job)
+        try:
+            visit = Job.objects.select_related(
+                "location",
+                "cleaner",
+                "asset",
+                "maintenance_category",
+            ).prefetch_related(
+                "photos__file",
+                "checklist_items",
+                "check_events",
+            ).get(pk=pk)
+        except Job.DoesNotExist:
+            return Response(
+                {"code": "NOT_FOUND", "message": "Service visit not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verify visit belongs to user's company
+        if visit.company_id != company.id:
+            return Response(
+                {"code": "NOT_FOUND", "message": "Service visit not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Verify visit is maintenance context
+        if visit.context != Job.CONTEXT_MAINTENANCE:
+            return Response(
+                {"code": "INVALID_CONTEXT", "message": "This endpoint is for maintenance visits only."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Verify visit is completed
+        if visit.status != Job.STATUS_COMPLETED:
+            return Response(
+                {"code": "INVALID_STATUS", "message": "PDF report can only be generated for completed visits."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Generate PDF using maintenance-specific function
+        pdf_bytes = generate_maintenance_visit_report_pdf(visit)
+
+        # Return PDF response
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="maintenance_visit_{visit.id}.pdf"'
+        return response
+
+
+# =============================================================================
+# Asset History PDF Report (P6)
+# =============================================================================
+
+class AssetHistoryReportView(MaintenancePermissionMixin, APIView):
+    """
+    Generate PDF report for asset service history.
+
+    GET /api/maintenance/assets/<id>/history/report/
+
+    Returns: application/pdf
+
+    Requirements:
+    - Asset must belong to user's company
+    - Asset is included regardless of is_active status
+
+    RBAC:
+    - owner/manager/staff: allowed
+    - cleaner: 403 FORBIDDEN (asset-level reports restricted to admins)
+
+    PDF Content:
+    - Header with company logo
+    - Asset info (name, type, serial, location, status)
+    - Summary stats (total visits, completed, last serviced)
+    - Service history table with SLA, checklist %, photos count
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        from apps.api.pdf import generate_asset_history_report_pdf
+
+        # Check permissions - must be owner/manager/staff (not cleaner)
+        user = request.user
+        role = getattr(user, "role", None)
+
+        # Cleaners cannot access asset-level reports
+        if role == "cleaner":
+            return Response(
+                {"code": "FORBIDDEN", "message": "Asset reports are restricted to administrators."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        # Get the asset (include inactive assets)
+        try:
+            asset = Asset.objects.select_related(
+                "asset_type",
+                "location",
+            ).get(pk=pk, company=company)
+        except Asset.DoesNotExist:
+            return Response(
+                {"code": "NOT_FOUND", "message": "Asset not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get all maintenance visits for this asset
+        visits = list(
+            Job.objects.filter(
+                asset=asset,
+                context=Job.CONTEXT_MAINTENANCE,
+            ).select_related(
+                "cleaner",
+                "maintenance_category",
+            ).prefetch_related(
+                "checklist_items",
+                "photos",
+            ).order_by("-scheduled_date", "-created_at")
+        )
+
+        # Generate PDF
+        pdf_bytes = generate_asset_history_report_pdf(asset, visits, company)
+
+        # Return PDF response
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="asset_{asset.id}_history.pdf"'
+        return response

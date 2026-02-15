@@ -5,24 +5,19 @@ import {
   LayoutDashboard,
   ClipboardList,
   Wrench,
-  Users,
-  Settings,
-  Building2,
+  Tag,
 } from "lucide-react";
 import type { ContextConfig, NavItem } from "./types";
 
 /**
  * Maintenance context navigation items.
- * All routes under /maintenance/* prefix.
+ * All routes MUST be under /maintenance/* prefix (no cross-context routing).
  */
 export const maintenanceNavItems: NavItem[] = [
   { name: "Dashboard", href: "/maintenance/dashboard", icon: LayoutDashboard },
   { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
   { name: "Assets", href: "/maintenance/assets", icon: Wrench },
-  { name: "Technicians", href: "/maintenance/technicians", icon: Users },
-  // Company is RBAC-gated (owner/manager only)
-  { name: "Company", href: "/company/profile", icon: Building2, roles: ["owner", "manager"] },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Asset Types", href: "/maintenance/asset-types", icon: Tag },
 ];
 
 /**

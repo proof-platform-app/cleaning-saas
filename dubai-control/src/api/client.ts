@@ -889,6 +889,30 @@ export async function downloadJobReportPdf(jobId: number): Promise<Blob> {
   return blob;
 }
 
+/**
+ * Download PDF report for a maintenance service visit.
+ * GET /api/maintenance/visits/{id}/report/
+ * Only available for completed visits (status === "completed").
+ */
+export async function downloadMaintenanceVisitReport(visitId: number): Promise<Blob> {
+  await loginManager();
+  return apiFetchBlob(`/api/maintenance/visits/${visitId}/report/`, {
+    method: "GET",
+  });
+}
+
+/**
+ * Download PDF report for asset service history.
+ * GET /api/maintenance/assets/{id}/history/report/
+ * Returns PDF with asset info and all service visits.
+ */
+export async function downloadAssetHistoryReport(assetId: number): Promise<Blob> {
+  await loginManager();
+  return apiFetchBlob(`/api/maintenance/assets/${assetId}/history/report/`, {
+    method: "GET",
+  });
+}
+
 // Email job PDF report to manager (optionally to custom email)
 export async function emailJobReportPdf(
   jobId: number,

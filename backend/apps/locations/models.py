@@ -41,6 +41,14 @@ class ChecklistTemplate(models.Model):
     Шаблон чек-листа для компании (например 'Daily Office Cleaning').
     """
 
+    # Context choices for product separation
+    CONTEXT_CLEANING = "cleaning"
+    CONTEXT_MAINTENANCE = "maintenance"
+    CONTEXT_CHOICES = [
+        (CONTEXT_CLEANING, "Cleaning"),
+        (CONTEXT_MAINTENANCE, "Maintenance"),
+    ]
+
     company = models.ForeignKey(
         Company,
         on_delete=models.CASCADE,
@@ -49,6 +57,14 @@ class ChecklistTemplate(models.Model):
 
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+
+    # Product context: cleaning or maintenance (default: cleaning for backwards compatibility)
+    context = models.CharField(
+        max_length=20,
+        choices=CONTEXT_CHOICES,
+        default=CONTEXT_CLEANING,
+        db_index=True,
+    )
 
     is_active = models.BooleanField(default=True)
 
@@ -59,7 +75,7 @@ class ChecklistTemplate(models.Model):
         db_table = "checklist_templates"
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.company.name})"
+        return f"{self.name} ({self.company.name}) [{self.context}]"
 
 
 class ChecklistTemplateItem(models.Model):

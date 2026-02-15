@@ -6,6 +6,7 @@
 // If backend unavailable, assets will show empty state.
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -20,7 +21,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Plus, Loader2, X, Wrench, ChevronRight, MapPin } from "lucide-react";
+import { Plus, Loader2, X, Wrench, ChevronRight, MapPin, Power, PowerOff, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import {
   listAssets,
@@ -28,7 +29,6 @@ import {
   listLocations,
   createNewAsset,
   updateExistingAsset,
-  removeAsset,
   createNewAssetType,
   maintenanceKeys,
   type Asset,
@@ -60,11 +60,14 @@ function canReadAssets(role: UserRole): boolean {
 export default function Assets() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const user = useUserRole();
 
   const [showModal, setShowModal] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [showTypeModal, setShowTypeModal] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const [deactivateConfirm, setDeactivateConfirm] = useState<Asset | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -84,10 +87,13 @@ export default function Assets() {
   const hasReadAccess = canReadAssets(user.role);
   const hasWriteAccess = canWriteAssets(user.role);
 
+  // Build filter for assets query
+  const assetFilters = showInactive ? undefined : { is_active: true };
+
   // Fetch assets
   const { data: assets = [], isLoading: assetsLoading, isError: assetsError, error: assetsErrorData, refetch: refetchAssets } = useQuery({
-    queryKey: maintenanceKeys.assets.list(),
-    queryFn: () => listAssets(),
+    queryKey: maintenanceKeys.assets.list(assetFilters),
+    queryFn: () => listAssets(assetFilters),
     enabled: hasReadAccess,
   });
 
@@ -152,26 +158,36 @@ export default function Assets() {
     },
   });
 
-  // Delete asset mutation
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => removeAsset(id),
-    onSuccess: () => {
+  // Deactivate/Activate asset mutation
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, is_active }: { id: number; is_active: boolean }) => {
+      console.log("[Assets] Calling updateExistingAsset:", { id, is_active });
+      const result = await updateExistingAsset(id, { is_active });
+      console.log("[Assets] Update result:", result);
+      return result;
+    },
+    onSuccess: (_, variables) => {
+      console.log("[Assets] Mutation success");
       queryClient.invalidateQueries({ queryKey: maintenanceKeys.assets.all });
       toast({
         title: "Success",
-        description: "Asset deleted successfully",
+        description: variables.is_active ? "Asset activated" : "Asset deactivated",
       });
+      // After deactivation, show inactive assets so user sees the result
+      if (!variables.is_active) {
+        setShowInactive(true);
+      }
+      setDeactivateConfirm(null);
     },
     onError: (error: any) => {
-      const code = error?.response?.data?.code;
-      const message = code === "CONFLICT"
-        ? "Cannot delete asset with linked jobs. Deactivate instead."
-        : error?.response?.data?.message || "Failed to delete asset";
+      console.error("[Assets] Mutation error:", error);
+      const message = error?.response?.data?.message || error?.message || "Failed to update asset";
       toast({
         variant: "destructive",
         title: "Error",
         description: message,
       });
+      setDeactivateConfirm(null);
     },
   });
 
@@ -200,12 +216,30 @@ export default function Assets() {
     },
   });
 
-  const handleToggleActive = (asset: Asset) => {
+  const handleDeactivateClick = (asset: Asset, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!hasWriteAccess) return;
-    updateMutation.mutate({
-      id: asset.id,
-      data: { is_active: !asset.is_active },
-    });
+    if (asset.is_active) {
+      // Show confirm dialog for deactivation
+      setDeactivateConfirm(asset);
+    } else {
+      // Activate immediately
+      toggleActiveMutation.mutate({ id: asset.id, is_active: true });
+    }
+  };
+
+  const confirmDeactivate = () => {
+    if (deactivateConfirm) {
+      console.log("[Assets] Deactivating asset:", deactivateConfirm.id);
+      toggleActiveMutation.mutate(
+        { id: deactivateConfirm.id, is_active: false },
+        {
+          onSettled: () => {
+            console.log("[Assets] Mutation settled");
+          },
+        }
+      );
+    }
   };
 
   const handleAddNew = () => {
@@ -298,13 +332,6 @@ export default function Assets() {
     }
   };
 
-  const handleDelete = (asset: Asset) => {
-    if (!hasWriteAccess) return;
-    if (confirm(`Are you sure you want to delete "${asset.name}"?`)) {
-      deleteMutation.mutate(asset.id);
-    }
-  };
-
   const handleCreateType = () => {
     if (!newTypeName.trim()) {
       toast({
@@ -387,14 +414,31 @@ export default function Assets() {
       <div className="space-y-4">
         {/* Header - Lovable style (clean, minimal) */}
         <div className="page-header">
-        <h1 className="page-title">Assets</h1>
-        {hasWriteAccess && (
-          <Button size="sm" className="h-8 px-3 text-xs font-medium" onClick={handleAddNew}>
-            <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add Asset
-          </Button>
-        )}
-      </div>
+          <h1 className="page-title">Assets</h1>
+          <div className="flex items-center gap-3">
+            {/* Show inactive filter chip */}
+            <button
+              type="button"
+              onClick={() => setShowInactive(!showInactive)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                showInactive
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted"
+              }`}
+            >
+              {showInactive && (
+                <span className="flex h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
+              Include inactive
+            </button>
+            {hasWriteAccess && (
+              <Button size="sm" className="h-8 px-3 text-xs font-medium" onClick={handleAddNew}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Add Asset
+              </Button>
+            )}
+          </div>
+        </div>
 
       {/* Assets Table - Lovable premium-card style */}
       <div className="premium-card overflow-hidden">
@@ -407,22 +451,29 @@ export default function Assets() {
             <thead>
               <tr>
                 <th>Asset Name</th>
-                <th>Address</th>
+                <th>Type</th>
                 <th>Serial Number</th>
-                <th className="w-[80px]">Location</th>
-                <th className="w-[100px]">Created</th>
-                <th className="w-[50px]"></th>
+                <th className="w-[100px]">Location</th>
+                <th className="w-[80px]">Status</th>
+                {hasWriteAccess && <th className="w-[140px]">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filteredAssets.map((asset) => (
                 <tr
                   key={asset.id}
-                  className="cursor-pointer group"
-                  onClick={() => hasWriteAccess ? handleEdit(asset) : undefined}
+                  className={`cursor-pointer group ${!asset.is_active ? "opacity-60" : ""}`}
+                  onClick={() => navigate(`/maintenance/assets/${asset.id}`)}
                 >
-                  <td className="font-medium text-foreground">{asset.name}</td>
-                  <td className="text-muted-foreground">{asset.location.name}</td>
+                  <td className={`font-medium ${asset.is_active ? "text-foreground" : "text-muted-foreground"}`}>
+                    <div className="flex items-center gap-2">
+                      {asset.name}
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </td>
+                  <td className="text-muted-foreground">
+                    {asset.asset_type?.name || "—"}
+                  </td>
                   <td className="text-muted-foreground font-mono text-xs">
                     {asset.serial_number || "—"}
                   </td>
@@ -430,18 +481,58 @@ export default function Assets() {
                     {asset.location ? (
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <MapPin className="w-3 h-3" strokeWidth={1.5} />
-                        <span className="text-xs">Set</span>
+                        <span className="text-xs truncate max-w-[80px]">{asset.location.name}</span>
                       </div>
                     ) : (
                       <span className="text-xs text-muted-foreground/50">—</span>
                     )}
                   </td>
-                  <td className="text-muted-foreground tabular-nums">
-                    {formatDate(asset.created_at)}
-                  </td>
                   <td>
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        asset.is_active
+                          ? "bg-green-500/10 text-green-600"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {asset.is_active ? "Active" : "Inactive"}
+                    </span>
                   </td>
+                  {hasWriteAccess && (
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(asset);
+                          }}
+                        >
+                          <Pencil className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-7 px-2 text-xs ${
+                            asset.is_active
+                              ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                              : "text-green-600 hover:text-green-700 hover:bg-green-50"
+                          }`}
+                          onClick={(e) => handleDeactivateClick(asset, e)}
+                          disabled={toggleActiveMutation.isPending}
+                        >
+                          {asset.is_active ? (
+                            <PowerOff className="w-3 h-3" />
+                          ) : (
+                            <Power className="w-3 h-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -576,6 +667,58 @@ export default function Assets() {
                 )}
                 {editingAsset ? "Save Changes" : "Create Asset"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deactivate Confirmation Modal */}
+      {deactivateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card shadow-xl">
+            <div className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10">
+                  <PowerOff className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Deactivate Asset
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    This action can be reversed
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-4 text-sm text-muted-foreground">
+                Deactivate{" "}
+                <span className="font-medium text-foreground">
+                  "{deactivateConfirm.name}"
+                </span>
+                ? It will no longer appear in active lists.
+              </p>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeactivateConfirm(null)}
+                  disabled={toggleActiveMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="default"
+                  className="bg-amber-600 hover:bg-amber-700"
+                  onClick={confirmDeactivate}
+                  disabled={toggleActiveMutation.isPending}
+                >
+                  {toggleActiveMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Deactivate
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 // dubai-control/src/pages/maintenance/CreateVisit.tsx
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,14 @@ import {
   listTechnicians,
   listAssets,
   listCategories,
+  listChecklistTemplates,
   createVisit,
   maintenanceKeys,
   type Location,
   type Cleaner,
   type Asset,
   type MaintenanceCategory,
+  type ChecklistTemplate,
 } from "@/api/maintenance";
 import { useUserRole, type UserRole } from "@/hooks/useUserRole";
 
@@ -38,25 +40,37 @@ function canCreateVisits(role: UserRole): boolean {
 
 export default function CreateVisit() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const user = useUserRole();
 
   const canCreate = canCreateVisits(user.role);
 
+  // Read prefill values from URL query params
+  const prefillAssetId = searchParams.get("asset_id") || "";
+  const prefillLocationId = searchParams.get("location_id") || "";
+
   // Form state
   const [formData, setFormData] = useState({
     scheduled_date: format(new Date(), "yyyy-MM-dd"),
     scheduled_start_time: "",
     scheduled_end_time: "",
-    location_id: "",
+    location_id: prefillLocationId,
     cleaner_id: "",
-    asset_id: "",
+    asset_id: prefillAssetId,
     category_id: "",
+    checklist_template_id: "",
     manager_notes: "",
   });
 
+  // Track if we've applied URL prefill (to avoid re-applying on every render)
+  const [prefillApplied, setPrefillApplied] = useState(false);
+
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Checklist expand state
+  const [checklistExpanded, setChecklistExpanded] = useState(false);
 
   // Filter assets by selected location
   const [filteredAssets, setFilteredAssets] = useState<Asset[]>([]);
@@ -89,14 +103,40 @@ export default function CreateVisit() {
     enabled: canCreate,
   });
 
+  // Fetch checklist templates
+  const { data: checklistTemplates = [] } = useQuery({
+    queryKey: maintenanceKeys.checklistTemplates,
+    queryFn: listChecklistTemplates,
+    enabled: canCreate,
+  });
+
+  // Apply URL prefill once assets are loaded
+  useEffect(() => {
+    if (!prefillApplied && assets.length > 0 && prefillAssetId) {
+      const asset = assets.find((a) => a.id === Number(prefillAssetId));
+      if (asset) {
+        // Set location from asset if not already set, then set asset
+        setFormData((prev) => ({
+          ...prev,
+          location_id: String(asset.location.id),
+          asset_id: prefillAssetId,
+        }));
+        setPrefillApplied(true);
+      }
+    } else if (!prefillApplied && prefillLocationId && !prefillAssetId) {
+      // Only location prefilled, no asset
+      setPrefillApplied(true);
+    }
+  }, [assets, prefillAssetId, prefillLocationId, prefillApplied]);
+
   // Filter assets when location changes
   useEffect(() => {
     if (formData.location_id) {
       const locationId = Number(formData.location_id);
       const filtered = assets.filter((a) => a.location.id === locationId);
       setFilteredAssets(filtered);
-      // Clear asset selection if it's not in the new location
-      if (formData.asset_id) {
+      // Clear asset selection if it's not in the new location (but not during prefill)
+      if (formData.asset_id && prefillApplied) {
         const currentAsset = assets.find((a) => a.id === Number(formData.asset_id));
         if (currentAsset && currentAsset.location.id !== locationId) {
           setFormData((prev) => ({ ...prev, asset_id: "" }));
@@ -104,9 +144,16 @@ export default function CreateVisit() {
       }
     } else {
       setFilteredAssets([]);
-      setFormData((prev) => ({ ...prev, asset_id: "" }));
+      if (prefillApplied) {
+        setFormData((prev) => ({ ...prev, asset_id: "" }));
+      }
     }
-  }, [formData.location_id, assets, formData.asset_id]);
+  }, [formData.location_id, assets, formData.asset_id, prefillApplied]);
+
+  // Reset checklist expanded state when template changes
+  useEffect(() => {
+    setChecklistExpanded(false);
+  }, [formData.checklist_template_id]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -168,6 +215,9 @@ export default function CreateVisit() {
     const categoryId = formData.category_id && formData.category_id !== "__none__"
       ? Number(formData.category_id)
       : null;
+    const checklistTemplateId = formData.checklist_template_id && formData.checklist_template_id !== "__none__"
+      ? Number(formData.checklist_template_id)
+      : null;
 
     createMutation.mutate({
       scheduled_date: formData.scheduled_date,
@@ -177,6 +227,7 @@ export default function CreateVisit() {
       cleaner_id: Number(formData.cleaner_id),
       asset_id: assetId,
       maintenance_category_id: categoryId,
+      checklist_template_id: checklistTemplateId,
       manager_notes: formData.manager_notes || undefined,
     });
   };
@@ -388,6 +439,68 @@ export default function CreateVisit() {
               </p>
             </div>
 
+            {/* Checklist Template (optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="checklist_template_id">Checklist Template (optional)</Label>
+              <Select
+                value={formData.checklist_template_id}
+                onValueChange={(v) => setFormData({ ...formData, checklist_template_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select checklist template" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No checklist</SelectItem>
+                  {checklistTemplates.map((tpl) => (
+                    <SelectItem key={tpl.id} value={String(tpl.id)}>
+                      {tpl.name}
+                      {tpl.items_count ? ` (${tpl.items_count} items)` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Assign a checklist for the technician to complete during the visit
+              </p>
+              {/* Show preview of selected template */}
+              {formData.checklist_template_id && formData.checklist_template_id !== "__none__" && (() => {
+                const template = checklistTemplates.find(
+                  (t) => t.id === Number(formData.checklist_template_id)
+                );
+                if (!template?.items_preview?.length) return null;
+
+                const allItems = template.items || template.items_preview || [];
+                const previewItems = template.items_preview || [];
+                const itemsToShow = checklistExpanded ? allItems : previewItems.slice(0, 3);
+                const remainingCount = (template.items_count || allItems.length) - 3;
+                const hasMore = remainingCount > 0;
+
+                return (
+                  <div className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                    <div className="text-xs font-semibold text-muted-foreground mb-1">
+                      {checklistExpanded ? "CHECKLIST DETAILS" : "CHECKLIST PREVIEW"}
+                    </div>
+                    <ul className="list-disc list-inside text-xs text-muted-foreground space-y-0.5">
+                      {itemsToShow.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                    {hasMore && (
+                      <button
+                        type="button"
+                        onClick={() => setChecklistExpanded(!checklistExpanded)}
+                        className="mt-2 text-xs font-medium text-primary hover:text-primary/80 hover:underline cursor-pointer"
+                      >
+                        {checklistExpanded
+                          ? "Show less"
+                          : `+${remainingCount} more items...`}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Notes */}
             <div className="space-y-2">
               <Label htmlFor="manager_notes">Notes (optional)</Label>
@@ -400,15 +513,6 @@ export default function CreateVisit() {
                 placeholder="Instructions or notes for the technician..."
                 rows={3}
               />
-            </div>
-
-            {/* Info Banner */}
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              <p className="font-medium">About Checklist Templates</p>
-              <p className="mt-1 text-xs">
-                Checklist templates are coming soon. For now, technicians can complete
-                tasks manually during the service visit.
-              </p>
             </div>
           </div>
 

@@ -178,25 +178,26 @@ export function CreateJobDrawer({
     [meta, checklistTemplateId],
   );
 
+  // Preview = first 4 items, Full = all items from backend
   const checklistPreviewItems =
     selectedChecklistTemplate?.items_preview ?? [];
-
-  // Пока бэкенд не отдаёт полный список, используем превью
   const checklistFullItems =
-    showAllChecklistItems ? checklistPreviewItems : checklistPreviewItems;
+    selectedChecklistTemplate?.items ?? checklistPreviewItems;
 
+  // Show preview or full list based on toggle state
   const checklistItemsToShow = showAllChecklistItems
     ? checklistFullItems
     : checklistPreviewItems;
 
-  const previewLength = checklistPreviewItems.length;
   const totalItemsCount =
     typeof selectedChecklistTemplate?.items_count === "number"
       ? selectedChecklistTemplate.items_count
       : checklistFullItems.length;
 
   const checklistRestCount =
-    totalItemsCount > previewLength ? totalItemsCount - previewLength : 0;
+    totalItemsCount > checklistPreviewItems.length
+      ? totalItemsCount - checklistPreviewItems.length
+      : 0;
 
   // ===== date helpers (hook должен быть до любых return) =====
   const selectedDate = useMemo(() => {
@@ -508,31 +509,29 @@ export function CreateJobDrawer({
                     }}
                     disabled={!canInteract}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="No checklist" />
+                    <SelectTrigger className="text-left h-auto min-h-9">
+                      <SelectValue placeholder="No checklist" className="truncate" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No checklist</SelectItem>
 
                       {meta.checklist_templates?.map((tpl) => (
                         <SelectItem key={tpl.id} value={String(tpl.id)}>
-                          <div className="flex flex-col gap-0.5">
-                            <div className="text-sm font-medium">
+                          <div className="flex flex-col items-start gap-0.5 text-left min-w-0 w-full">
+                            <span className="text-sm font-medium">
                               {tpl.name}
-                            </div>
+                              {typeof tpl.items_count === "number" && ` (${tpl.items_count} items)`}
+                            </span>
 
                             {tpl.items_preview &&
                               tpl.items_preview.length > 0 && (
-                                <div
-                                  className="text-xs text-muted-foreground truncate"
+                                <span
+                                  className="text-xs text-muted-foreground truncate max-w-full block"
                                   title={tpl.items_preview.join(" · ")}
                                 >
                                   {tpl.items_preview.slice(0, 2).join(" · ")}
-                                  {typeof tpl.items_count === "number" &&
-                                    tpl.items_count >
-                                      tpl.items_preview.length &&
-                                    "…"}
-                                </div>
+                                  {tpl.items_preview.length > 2 && "…"}
+                                </span>
                               )}
                           </div>
                         </SelectItem>

@@ -34,6 +34,8 @@ import Analytics from "./pages/Analytics";
 /* Maintenance Context Pages */
 import MaintenanceDashboard from "./pages/maintenance/Dashboard";
 import Assets from "./pages/maintenance/Assets";
+import AssetDetail from "./pages/maintenance/AssetDetail";
+import AssetTypes from "./pages/maintenance/AssetTypes";
 import VisitList from "./pages/maintenance/VisitList";
 import CreateVisit from "./pages/maintenance/CreateVisit";
 import VisitDetail from "./pages/maintenance/VisitDetail";
@@ -131,7 +133,8 @@ const App = () => (
               <Route path="/maintenance/visits/:id" element={<VisitDetail />} />
               <Route path="/maintenance/assets" element={<Assets />} />
               <Route path="/maintenance/assets/new" element={<Assets />} />
-              <Route path="/maintenance/assets/:id" element={<Assets />} />
+              <Route path="/maintenance/assets/:id" element={<AssetDetail />} />
+              <Route path="/maintenance/asset-types" element={<AssetTypes />} />
               {/* Technicians placeholder - reuses cleaners for now */}
               <Route path="/maintenance/technicians" element={<CompanyTeam />} />
 

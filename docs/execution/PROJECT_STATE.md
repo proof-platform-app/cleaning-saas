@@ -1,8 +1,49 @@
-# Cleaning SaaS — FACTUAL PROJECT STATE (v7.11)
+# Cleaning SaaS — FACTUAL PROJECT STATE (v7.13)
 
-Обновлено: 2026-02-14
+Обновлено: 2026-02-15
 
 ## Changelog
+
+### v7.13 — 2026-02-15
+
+**Maintenance Context V1 — PROOF PARITY COMPLETE 🔒**
+
+**Status: LOCKED** (see `MAINTENANCE_V1_RELEASE_LOCK.md`)
+
+All 6 Proof Parity features implemented and verified:
+- P1: Checklist Parity ✅ (CreateVisit selector, VisitDetail display/toggle)
+- P2: Evidence/Photos Parity ✅ (before/after grid in VisitDetail)
+- P3: Completion Enforcement ✅ (standardized errors, CompletionBlockersPanel)
+- P4: SLA UI Parity ✅ (Visit List column, VisitDetail badges)
+- P5: Visit PDF Report ✅ (neutral colors, maintenance-specific)
+- P6: Asset History PDF ✅ (AssetHistoryReportView, RBAC enforced)
+
+Regression Safety Verified:
+- `verify_roles.sh` — 18/18 PASS
+- Cleaning context — Jobs/History/Planning work
+- Context isolation — maintenance ≠ cleaning views
+- RBAC — Asset History PDF blocked for cleaners (403)
+
+Documentation:
+- MAINTENANCE_PROOF_PARITY_PLAN.md v1.6 — Status: COMPLETE
+- MAINTENANCE_V1_RELEASE_LOCK.md — Created (baseline lock)
+
+### v7.12 — 2026-02-15
+
+**Maintenance Context V1 — Frontend UI + Proof Parity Assessment**
+
+Frontend Pages Implemented:
+- Dashboard (`/maintenance/dashboard`) with 4 KPI widgets ✅
+- Visit List (`/maintenance/visits`) with filters + deep links ✅
+- Create Visit (`/maintenance/visits/new`) with asset prefill ✅
+- Visit Detail (`/maintenance/visits/:id`) basic info ✅
+- Assets List (`/maintenance/assets`) with CRUD ✅
+- Asset Detail (`/maintenance/assets/:id`) with service history ✅
+- Asset Types (`/maintenance/asset-types`) CRUD ✅
+
+Documentation:
+- MAINTENANCE_CONTEXT_V1_SCOPE.md updated to v1.1 (Proof Parity Requirements)
+- MAINTENANCE_PROOF_PARITY_PLAN.md created
 
 ### v7.11 — 2026-02-14
 
@@ -555,25 +596,63 @@ Status: ✅ enforced
 
 ---
 
-## 🔧 Maintenance Context V1 — Asset Layer
+## 🔧 Maintenance Context V1 — COMPLETE 🔒
 
-**Статус:** ✅ Backend DONE
+**Status:** ✅ Backend COMPLETE | ✅ Frontend COMPLETE | ✅ Proof Parity COMPLETE
 
+**LOCKED** — See `MAINTENANCE_V1_RELEASE_LOCK.md` for baseline definition.
+
+### Backend
 * AssetType model (company-scoped) ✅
 * Asset model (company-scoped, location FK, asset_type FK) ✅
 * Job.asset nullable FK ✅
+* Job.context field (explicit cleaning/maintenance separation) ✅
+* MaintenanceCategory model ✅
 * CRUD API endpoints ✅
+* Service Visits API (`/api/manager/service-visits/`) with `sla_status` ✅
+* Asset Service History API (`/api/manager/assets/:id/visits/`) ✅
+* Visit PDF Report (`/api/maintenance/visits/:id/report/`) ✅
+* Asset History PDF (`/api/maintenance/assets/:id/history/report/`) ✅
 * RBAC enforcement (owner/manager write, staff read, cleaner blocked) ✅
 
-**Scope Boundaries:**
+### Frontend
+* Dashboard with 4 KPI widgets ✅
+* Visit List with filters + SLA column ✅
+* Create Visit with checklist template selector ✅
+* Visit Detail with checklist, photos, SLA, PDF download ✅
+* Assets list with CRUD ✅
+* Asset Detail with service history + PDF export ✅
+* Asset Types CRUD ✅
+
+### Proof Parity (6/6 COMPLETE)
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| P1: Checklist execution | ✅ | CreateVisit selector, VisitDetail toggle |
+| P2: Evidence/photos | ✅ | Before/after grid in VisitDetail |
+| P3: Completion enforcement | ✅ | CompletionBlockersPanel, standardized errors |
+| P4: SLA UI | ✅ | Visit List column, VisitDetail badges |
+| P5: Visit PDF report | ✅ | Neutral colors, maintenance-specific |
+| P6: Asset history PDF | ✅ | RBAC: cleaners get 403 |
+
+### Context Isolation
+| Check | Status |
+|-------|--------|
+| Maintenance visits filtered by context | ✅ |
+| Cleaning views exclude maintenance | ✅ |
+| Cross-context isolation tests | ✅ |
+| Cleaning UI unaffected | ✅ |
+| `verify_roles.sh` passes | ✅ (18/18) |
+
+### Scope Boundaries (LOCKED)
 * No new lifecycle states (Platform Layer locked)
 * No new roles (RBAC matrix locked)
 * No separate maintenance engine
 * Vocabulary layer only (Service Visit = Job, Technician = Cleaner)
 
-**Reference:** docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md
-
-**Frontend:** ⛔ pending (TASK 2)
+**Reference:**
+* `docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md`
+* `docs/execution/MAINTENANCE_PROOF_PARITY_PLAN.md` (v1.6 — COMPLETE)
+* `docs/execution/MAINTENANCE_V1_RELEASE_LOCK.md` (baseline lock)
 
 ---
 

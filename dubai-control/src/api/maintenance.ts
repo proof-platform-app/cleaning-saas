@@ -49,7 +49,33 @@ import {
   // Job detail (for Visit detail)
   fetchManagerJobDetail,
   type ManagerJobDetail,
+  // Checklist operations (reused from Cleaning)
+  apiClient,
+  // PDF Reports (P5, P6 Proof Parity)
+  downloadMaintenanceVisitReport,
+  downloadAssetHistoryReport as downloadAssetHistoryReportClient,
 } from "./client";
+
+// =============================================================================
+// Checklist Types (Proof Parity with Cleaning)
+// =============================================================================
+
+export type ChecklistTemplate = {
+  id: number;
+  name: string;
+  description?: string | null;
+  items?: string[] | null;         // Full list of items
+  items_preview?: string[] | null; // First 4 items for preview
+  items_count?: number | null;
+};
+
+export type ChecklistItem = {
+  id: number;
+  text: string;
+  is_required: boolean;
+  is_completed: boolean;
+  order: number;
+};
 
 // =============================================================================
 // Type Re-exports
@@ -233,6 +259,90 @@ export async function listTechnicians(): Promise<Cleaner[]> {
 }
 
 // =============================================================================
+// Checklist API (Proof Parity with Cleaning)
+// =============================================================================
+
+type PlanningMeta = {
+  cleaners: { id: number; full_name: string; phone: string | null }[];
+  locations: { id: number; name: string; address: string | null }[];
+  checklist_templates: ChecklistTemplate[];
+};
+
+/**
+ * Get checklist templates available for maintenance context.
+ * Requests only maintenance templates (context=maintenance).
+ */
+export async function listChecklistTemplates(): Promise<ChecklistTemplate[]> {
+  const res = await apiClient.get<PlanningMeta>("/api/manager/meta/?context=maintenance");
+  return res.data.checklist_templates || [];
+}
+
+/**
+ * Toggle a checklist item's completion status.
+ * Used by technicians to mark items as complete/incomplete.
+ *
+ * IMPORTANT: This reuses the existing cleaner endpoint that works for any Job.
+ */
+export async function toggleChecklistItem(
+  jobId: number,
+  itemId: number,
+  isCompleted: boolean
+): Promise<{ id: number; job_id: number; is_completed: boolean }> {
+  const res = await apiClient.post<{ id: number; job_id: number; is_completed: boolean }>(
+    `/api/jobs/${jobId}/checklist/${itemId}/toggle/`,
+    { is_completed: isCompleted }
+  );
+  return res.data;
+}
+
+/**
+ * Bulk update checklist items.
+ * Used by technicians to mark multiple items at once.
+ */
+export async function bulkUpdateChecklist(
+  jobId: number,
+  items: Array<{ id: number; is_completed: boolean }>
+): Promise<{ updated_count: number }> {
+  const res = await apiClient.post<{ updated_count: number }>(
+    `/api/jobs/${jobId}/checklist/bulk/`,
+    { items }
+  );
+  return res.data;
+}
+
+// =============================================================================
+// Visit PDF Report API (P5 Proof Parity)
+// =============================================================================
+
+/**
+ * Download PDF report for a completed maintenance visit.
+ * Only available for visits with status === "completed".
+ *
+ * GET /api/maintenance/visits/{id}/report/
+ * Returns: PDF blob
+ */
+export async function downloadVisitReport(visitId: number): Promise<Blob> {
+  return downloadMaintenanceVisitReport(visitId);
+}
+
+// =============================================================================
+// Asset History PDF Report API (P6 Proof Parity)
+// =============================================================================
+
+/**
+ * Download PDF report for asset service history.
+ * Includes asset info and all service visits.
+ *
+ * GET /api/maintenance/assets/{id}/history/report/
+ * Returns: PDF blob
+ *
+ * RBAC: owner/manager/staff only (cleaners get 403)
+ */
+export async function downloadAssetHistoryReport(assetId: number): Promise<Blob> {
+  return downloadAssetHistoryReportClient(assetId);
+}
+
+// =============================================================================
 // Query Keys for React Query
 // =============================================================================
 
@@ -262,6 +372,8 @@ export const maintenanceKeys = {
     list: (filters?: VisitFilters) => [...maintenanceKeys.visits.all, "list", filters] as const,
     detail: (id: number) => [...maintenanceKeys.visits.all, "detail", id] as const,
   },
+  // Checklists
+  checklistTemplates: ["maintenance", "checklistTemplates"] as const,
   // Shared
   locations: ["maintenance", "locations"] as const,
   technicians: ["maintenance", "technicians"] as const,

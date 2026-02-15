@@ -218,8 +218,14 @@ class ManagerMetaView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 1) гарантируем, что у компании есть дефолтные шаблоны
-        create_default_checklist_templates_for_company(company)
+        # Get context filter from query params (default: cleaning)
+        context_filter = request.query_params.get("context", "cleaning")
+        if context_filter not in ("cleaning", "maintenance"):
+            context_filter = "cleaning"
+
+        # 1) гарантируем, что у компании есть дефолтные шаблоны (only for cleaning)
+        if context_filter == "cleaning":
+            create_default_checklist_templates_for_company(company)
 
         # 2) клинеры
         cleaners_qs = (
@@ -236,10 +242,11 @@ class ManagerMetaView(APIView):
             .order_by("name", "id")
         )
 
-        # 4) шаблоны с пунктами
+        # 4) шаблоны с пунктами (filtered by context)
         templates_qs = (
             ChecklistTemplate.objects.filter(
                 company=company,
+                context=context_filter,
                 items__isnull=False,
             )
             .distinct()

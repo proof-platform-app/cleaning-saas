@@ -471,4 +471,16 @@ urlpatterns = [
         api_views.ServiceVisitsListView.as_view(),
         name="manager-service-visits",
     ),
+    # Maintenance Visit PDF Report (P5)
+    path(
+        "maintenance/visits/<int:pk>/report/",
+        api_views.ServiceVisitReportView.as_view(),
+        name="maintenance-visit-report",
+    ),
+    # Asset History PDF Report (P6)
+    path(
+        "maintenance/assets/<int:pk>/history/report/",
+        api_views.AssetHistoryReportView.as_view(),
+        name="maintenance-asset-history-report",
+    ),
 ]
