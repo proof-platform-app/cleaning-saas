@@ -24,6 +24,8 @@ import {
   Power,
   PowerOff,
   Download,
+  ShieldCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -295,6 +297,71 @@ export default function AssetDetail() {
           </div>
         </div>
       </div>
+
+      {/* Warranty Info (Stage 5 Lite) */}
+      {(asset.warranty_end_date || asset.warranty_provider) && (
+        <div className="detail-card mt-4">
+          <h2 className="detail-card-title">
+            <ShieldCheck />
+            Warranty
+          </h2>
+          <div className="detail-section">
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Warranty Status */}
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Status</div>
+                {asset.warranty_status === "active" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                    <ShieldCheck className="h-3 w-3" />
+                    Active
+                  </span>
+                )}
+                {asset.warranty_status === "expiring_soon" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    <AlertTriangle className="h-3 w-3" />
+                    Expiring Soon
+                  </span>
+                )}
+                {asset.warranty_status === "expired" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                    <AlertTriangle className="h-3 w-3" />
+                    Expired
+                  </span>
+                )}
+                {asset.warranty_status === "no_warranty" && (
+                  <span className="text-xs text-muted-foreground">No warranty</span>
+                )}
+              </div>
+
+              {/* Warranty Period */}
+              {asset.warranty_end_date && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Period</div>
+                  <div className="text-sm text-foreground">
+                    {asset.warranty_start_date && formatDate(asset.warranty_start_date)} — {formatDate(asset.warranty_end_date)}
+                  </div>
+                </div>
+              )}
+
+              {/* Provider */}
+              {asset.warranty_provider && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Provider</div>
+                  <div className="text-sm text-foreground">{asset.warranty_provider}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Warranty Notes */}
+            {asset.warranty_notes && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="text-xs text-muted-foreground mb-1">Notes</div>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{asset.warranty_notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Service History */}
       <div className="detail-card mt-4">

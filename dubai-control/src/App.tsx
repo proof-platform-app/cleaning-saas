@@ -43,6 +43,7 @@ import { TechniciansPage } from "./contexts/maintenance/ui/TechniciansPage";
 import MaintenanceAnalytics from "./pages/maintenance/Analytics";
 import MaintenanceReports from "./pages/maintenance/Reports";
 import RecurringTemplates from "./pages/maintenance/RecurringTemplates";
+import Contracts from "./pages/maintenance/Contracts";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -147,6 +148,8 @@ const App = () => (
               <Route path="/maintenance/reports" element={<MaintenanceReports />} />
               {/* Recurring Schedules (Stage 3) */}
               <Route path="/maintenance/schedules" element={<RecurringTemplates />} />
+              {/* Service Contracts (Stage 5 Lite) */}
+              <Route path="/maintenance/contracts" element={<Contracts />} />
 
               {/* Legacy /assets redirect to maintenance context */}
               <Route

@@ -10,6 +10,7 @@ import {
   BarChart3,
   FileText,
   CalendarRange,
+  ScrollText,
 } from "lucide-react";
 import type { ContextConfig, NavItem } from "./types";
 
@@ -21,6 +22,7 @@ export const maintenanceNavItems: NavItem[] = [
   { name: "Dashboard", href: "/maintenance/dashboard", icon: LayoutDashboard },
   { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
   { name: "Schedules", href: "/maintenance/schedules", icon: CalendarRange },
+  { name: "Contracts", href: "/maintenance/contracts", icon: ScrollText },
   { name: "Assets", href: "/maintenance/assets", icon: Wrench },
   { name: "Asset Types", href: "/maintenance/asset-types", icon: Tag },
   { name: "Technicians", href: "/maintenance/technicians", icon: Users },

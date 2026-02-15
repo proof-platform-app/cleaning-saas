@@ -77,6 +77,8 @@ class Asset(models.Model):
 
     Company-scoped with required location and asset type.
     Jobs can optionally link to an asset for service visit tracking.
+
+    Stage 5 Lite: Added warranty tracking fields.
     """
     company = models.ForeignKey(
         Company,
@@ -97,6 +99,28 @@ class Asset(models.Model):
     serial_number = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+
+    # Stage 5 Lite: Warranty tracking
+    warranty_start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Start date of manufacturer warranty"
+    )
+    warranty_end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="End date of manufacturer warranty"
+    )
+    warranty_provider = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Warranty provider or manufacturer name"
+    )
+    warranty_notes = models.TextField(
+        blank=True,
+        help_text="Additional warranty terms or notes"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -105,6 +129,180 @@ class Asset(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.asset_type.name})"
+
+    @property
+    def warranty_status(self) -> str:
+        """
+        Returns warranty status: 'active', 'expired', 'expiring_soon', or 'no_warranty'.
+        'expiring_soon' means within 30 days.
+        """
+        if not self.warranty_end_date:
+            return "no_warranty"
+
+        from django.utils import timezone
+        from datetime import timedelta
+
+        today = timezone.now().date()
+
+        if self.warranty_end_date < today:
+            return "expired"
+        elif self.warranty_end_date <= today + timedelta(days=30):
+            return "expiring_soon"
+        else:
+            return "active"
+
+
+# =============================================================================
+# Stage 5 Lite: Service Contracts
+# =============================================================================
+
+class ServiceContract(models.Model):
+    """
+    Service contract for maintenance services.
+
+    Represents an agreement to provide maintenance services.
+    Can be linked to recurring visit templates to track contract-based visits.
+
+    Types:
+    - SERVICE: General service agreement
+    - WARRANTY: Extended warranty service
+    - PREVENTIVE: Preventive maintenance agreement
+
+    No billing integration in Stage 5 Lite.
+    See: docs/product/MAINTENANCE_V2_STRATEGY.md (Stage 5)
+    """
+
+    CONTRACT_TYPE_SERVICE = "service"
+    CONTRACT_TYPE_WARRANTY = "warranty"
+    CONTRACT_TYPE_PREVENTIVE = "preventive"
+
+    CONTRACT_TYPE_CHOICES = [
+        (CONTRACT_TYPE_SERVICE, "Service Agreement"),
+        (CONTRACT_TYPE_WARRANTY, "Warranty Service"),
+        (CONTRACT_TYPE_PREVENTIVE, "Preventive Maintenance"),
+    ]
+
+    STATUS_ACTIVE = "active"
+    STATUS_EXPIRED = "expired"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_DRAFT = "draft"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    # Company scope
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="service_contracts"
+    )
+
+    # Contract identity
+    name = models.CharField(
+        max_length=200,
+        help_text="Contract name or title"
+    )
+    contract_number = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="External contract reference number"
+    )
+    description = models.TextField(blank=True)
+
+    # Customer (simple text field - no Customer model in V1)
+    customer_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Customer or client name"
+    )
+    customer_contact = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Customer contact (phone/email)"
+    )
+
+    # Scope: Location(s) covered by contract
+    # If null, contract is company-wide
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="service_contracts",
+        help_text="Specific location covered by this contract (optional)"
+    )
+
+    # Contract type and status
+    contract_type = models.CharField(
+        max_length=20,
+        choices=CONTRACT_TYPE_CHOICES,
+        default=CONTRACT_TYPE_SERVICE
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT
+    )
+
+    # Contract period
+    start_date = models.DateField(
+        help_text="Contract start date"
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Contract end date (null = open-ended)"
+    )
+
+    # Service terms (informational, no billing logic)
+    service_terms = models.TextField(
+        blank=True,
+        help_text="Service terms, SLA commitments, scope of work"
+    )
+    visits_included = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Number of visits included in contract (informational)"
+    )
+
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_contracts"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Service Contract"
+        verbose_name_plural = "Service Contracts"
+
+    def __str__(self):
+        return f"{self.name} ({self.get_contract_type_display()})"
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if contract has expired based on end_date."""
+        if not self.end_date:
+            return False
+        from django.utils import timezone
+        return self.end_date < timezone.now().date()
+
+    @property
+    def days_remaining(self) -> int | None:
+        """Days until contract expires. None if no end_date."""
+        if not self.end_date:
+            return None
+        from django.utils import timezone
+        delta = self.end_date - timezone.now().date()
+        return delta.days
 
 
 # =============================================================================
@@ -212,6 +410,16 @@ class RecurringVisitTemplate(models.Model):
 
     # Status
     is_active = models.BooleanField(default=True)
+
+    # Stage 5 Lite: Link to service contract
+    service_contract = models.ForeignKey(
+        ServiceContract,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_templates",
+        help_text="Optional: Link recurring visits to a service contract"
+    )
 
     # Audit
     created_at = models.DateTimeField(auto_now_add=True)

@@ -54,6 +54,16 @@ import {
   // PDF Reports (P5, P6 Proof Parity)
   downloadMaintenanceVisitReport,
   downloadAssetHistoryReport as downloadAssetHistoryReportClient,
+  // Stage 5 Lite: Service Contracts
+  getServiceContracts,
+  getServiceContract,
+  createServiceContract,
+  updateServiceContract,
+  deleteServiceContract,
+  type ServiceContract,
+  type ServiceContractType,
+  type ServiceContractStatus,
+  type CreateServiceContractInput,
 } from "./client";
 
 // =============================================================================
@@ -91,6 +101,11 @@ export type {
   Location,
   Cleaner,
   ManagerJobDetail as VisitDetail,
+  // Stage 5 Lite: Service Contracts
+  ServiceContract,
+  ServiceContractType,
+  ServiceContractStatus,
+  CreateServiceContractInput,
 };
 
 // =============================================================================
@@ -771,6 +786,62 @@ export async function generateVisitsFromTemplate(
 }
 
 // =============================================================================
+// Stage 5 Lite: Service Contracts API
+// =============================================================================
+
+/**
+ * Filter options for contracts.
+ */
+export interface ContractFilters {
+  status?: ServiceContractStatus;
+  contract_type?: ServiceContractType;
+  location_id?: number;
+}
+
+/**
+ * List service contracts.
+ * GET /api/maintenance/contracts/
+ */
+export async function listContracts(filters?: ContractFilters): Promise<ServiceContract[]> {
+  return getServiceContracts(filters);
+}
+
+/**
+ * Get single contract.
+ * GET /api/maintenance/contracts/{id}/
+ */
+export async function getContract(id: number): Promise<ServiceContract> {
+  return getServiceContract(id);
+}
+
+/**
+ * Create contract.
+ * POST /api/maintenance/contracts/
+ */
+export async function createContract(input: CreateServiceContractInput): Promise<ServiceContract> {
+  return createServiceContract(input);
+}
+
+/**
+ * Update contract.
+ * PATCH /api/maintenance/contracts/{id}/
+ */
+export async function updateContract(
+  id: number,
+  input: Partial<CreateServiceContractInput>
+): Promise<ServiceContract> {
+  return updateServiceContract(id, input);
+}
+
+/**
+ * Delete contract.
+ * DELETE /api/maintenance/contracts/{id}/
+ */
+export async function deleteContract(id: number): Promise<void> {
+  return deleteServiceContract(id);
+}
+
+// =============================================================================
 // Query Keys for React Query
 // =============================================================================
 
@@ -825,5 +896,11 @@ export const maintenanceKeys = {
     all: ["maintenance", "recurringTemplates"] as const,
     list: (filters?: RecurringTemplateFilters) => [...maintenanceKeys.recurringTemplates.all, "list", filters] as const,
     detail: (id: number) => [...maintenanceKeys.recurringTemplates.all, "detail", id] as const,
+  },
+  // Service Contracts (Stage 5 Lite)
+  contracts: {
+    all: ["maintenance", "contracts"] as const,
+    list: (filters?: ContractFilters) => [...maintenanceKeys.contracts.all, "list", filters] as const,
+    detail: (id: number) => [...maintenanceKeys.contracts.all, "detail", id] as const,
   },
 } as const;

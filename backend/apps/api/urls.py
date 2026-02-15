@@ -571,4 +571,15 @@ urlpatterns = [
         api_views.RecurringTemplateGenerateView.as_view(),
         name="maintenance-recurring-template-generate",
     ),
+    # Stage 5 Lite: Service Contracts
+    path(
+        "maintenance/contracts/",
+        api_views.ServiceContractListCreateView.as_view(),
+        name="maintenance-contracts",
+    ),
+    path(
+        "maintenance/contracts/<int:pk>/",
+        api_views.ServiceContractDetailView.as_view(),
+        name="maintenance-contract-detail",
+    ),
 ]

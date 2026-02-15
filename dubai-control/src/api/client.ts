@@ -1336,6 +1336,12 @@ export interface AssetServiceHistory {
       id: number;
       name: string;
     };
+    // Stage 5 Lite: Warranty fields
+    warranty_start_date: string | null;
+    warranty_end_date: string | null;
+    warranty_provider: string;
+    warranty_notes: string;
+    warranty_status: "active" | "expiring_soon" | "expired" | "no_warranty";
   };
   visits: Array<{
     id: number;
@@ -1945,5 +1951,107 @@ export async function createServiceVisit(
       ...input,
       context: "maintenance",
     }),
+  });
+}
+
+// ---------- Stage 5 Lite: Service Contracts API ----------
+
+export type ServiceContractType = "service" | "warranty" | "preventive";
+export type ServiceContractStatus = "draft" | "active" | "expired" | "cancelled";
+
+export type ServiceContract = {
+  id: number;
+  name: string;
+  contract_number: string;
+  description: string;
+  customer_name: string;
+  customer_contact: string;
+  location: { id: number; name: string } | null;
+  contract_type: ServiceContractType;
+  contract_type_display: string;
+  status: ServiceContractStatus;
+  status_display: string;
+  start_date: string; // "YYYY-MM-DD"
+  end_date: string | null;
+  service_terms: string;
+  visits_included: number | null;
+  is_expired: boolean;
+  days_remaining: number | null;
+  recurring_templates_count?: number;
+  recurring_templates?: Array<{
+    id: number;
+    name: string;
+    frequency: string;
+    frequency_display: string;
+  }>;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type CreateServiceContractInput = {
+  name: string;
+  contract_number?: string;
+  description?: string;
+  customer_name?: string;
+  customer_contact?: string;
+  location_id?: number | null;
+  contract_type?: ServiceContractType;
+  status?: ServiceContractStatus;
+  start_date: string;
+  end_date?: string | null;
+  service_terms?: string;
+  visits_included?: number | null;
+};
+
+export async function getServiceContracts(filters?: {
+  status?: ServiceContractStatus;
+  contract_type?: ServiceContractType;
+  location_id?: number;
+}): Promise<ServiceContract[]> {
+  await loginManager();
+
+  const params = new URLSearchParams();
+  if (filters?.status) params.append("status", filters.status);
+  if (filters?.contract_type) params.append("contract_type", filters.contract_type);
+  if (filters?.location_id) params.append("location_id", String(filters.location_id));
+
+  const query = params.toString();
+  const url = query
+    ? `/api/maintenance/contracts/?${query}`
+    : "/api/maintenance/contracts/";
+
+  return apiFetch<ServiceContract[]>(url);
+}
+
+export async function getServiceContract(id: number): Promise<ServiceContract> {
+  await loginManager();
+  return apiFetch<ServiceContract>(`/api/maintenance/contracts/${id}/`);
+}
+
+export async function createServiceContract(
+  input: CreateServiceContractInput
+): Promise<ServiceContract> {
+  await loginManager();
+  return apiFetch<ServiceContract>("/api/maintenance/contracts/", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateServiceContract(
+  id: number,
+  input: Partial<CreateServiceContractInput>
+): Promise<ServiceContract> {
+  await loginManager();
+  return apiFetch<ServiceContract>(`/api/maintenance/contracts/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteServiceContract(id: number): Promise<void> {
+  await loginManager();
+  await apiFetch(`/api/maintenance/contracts/${id}/`, {
+    method: "DELETE",
   });
 }

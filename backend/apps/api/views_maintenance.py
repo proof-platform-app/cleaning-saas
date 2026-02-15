@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.maintenance.models import AssetType, Asset, MaintenanceCategory
+from apps.maintenance.models import AssetType, Asset, MaintenanceCategory, ServiceContract
 from apps.locations.models import Location
 from apps.jobs.models import Job
 from apps.api.views_reports import compute_sla_status_and_reasons_for_job
@@ -313,6 +313,9 @@ class AssetListCreateView(MaintenancePermissionMixin, APIView):
                     "id": asset.asset_type.id,
                     "name": asset.asset_type.name,
                 },
+                # Stage 5 Lite: Warranty
+                "warranty_status": asset.warranty_status,
+                "warranty_end_date": asset.warranty_end_date.isoformat() if asset.warranty_end_date else None,
                 "created_at": asset.created_at.isoformat(),
                 "updated_at": asset.updated_at.isoformat(),
             }
@@ -440,6 +443,12 @@ class AssetDetailView(MaintenancePermissionMixin, APIView):
                 "id": asset.asset_type.id,
                 "name": asset.asset_type.name,
             },
+            # Stage 5 Lite: Warranty
+            "warranty_start_date": asset.warranty_start_date.isoformat() if asset.warranty_start_date else None,
+            "warranty_end_date": asset.warranty_end_date.isoformat() if asset.warranty_end_date else None,
+            "warranty_provider": asset.warranty_provider,
+            "warranty_notes": asset.warranty_notes,
+            "warranty_status": asset.warranty_status,
             "created_at": asset.created_at.isoformat(),
             "updated_at": asset.updated_at.isoformat(),
         }
@@ -510,6 +519,27 @@ class AssetDetailView(MaintenancePermissionMixin, APIView):
                     {"code": "VALIDATION_ERROR", "message": "Asset type not found.", "fields": {"asset_type_id": ["Invalid asset type."]}},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+        # Stage 5 Lite: Warranty fields
+        warranty_start_date = request.data.get("warranty_start_date")
+        if warranty_start_date is not None:
+            asset.warranty_start_date = warranty_start_date or None
+            update_fields.append("warranty_start_date")
+
+        warranty_end_date = request.data.get("warranty_end_date")
+        if warranty_end_date is not None:
+            asset.warranty_end_date = warranty_end_date or None
+            update_fields.append("warranty_end_date")
+
+        warranty_provider = request.data.get("warranty_provider")
+        if warranty_provider is not None:
+            asset.warranty_provider = warranty_provider
+            update_fields.append("warranty_provider")
+
+        warranty_notes = request.data.get("warranty_notes")
+        if warranty_notes is not None:
+            asset.warranty_notes = warranty_notes
+            update_fields.append("warranty_notes")
 
         if update_fields:
             asset.save(update_fields=update_fields)
@@ -899,6 +929,12 @@ class AssetServiceHistoryView(MaintenancePermissionMixin, APIView):
                         "id": asset.location.id,
                         "name": asset.location.name,
                     },
+                    # Stage 5 Lite: Warranty fields
+                    "warranty_start_date": asset.warranty_start_date.isoformat() if asset.warranty_start_date else None,
+                    "warranty_end_date": asset.warranty_end_date.isoformat() if asset.warranty_end_date else None,
+                    "warranty_provider": asset.warranty_provider,
+                    "warranty_notes": asset.warranty_notes,
+                    "warranty_status": asset.warranty_status,
                 },
                 "visits": visits_data,
                 "total_visits": len(visits_data),
@@ -2682,3 +2718,279 @@ class RecurringTemplateGenerateView(MaintenancePermissionMixin, APIView):
             "generated_count": len(created_visits),
             "visits": created_visits,
         }, status=status.HTTP_201_CREATED)
+
+
+# =============================================================================
+# Stage 5 Lite: Service Contracts
+# =============================================================================
+
+class ServiceContractListCreateView(MaintenancePermissionMixin, APIView):
+    """
+    List and create service contracts.
+
+    GET /api/maintenance/contracts/
+        Query params:
+        - status: draft, active, expired, cancelled
+        - contract_type: service, warranty, preventive
+        - location_id: filter by location
+
+    POST /api/maintenance/contracts/
+        Create new service contract
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        contracts = ServiceContract.objects.filter(
+            company=company
+        ).select_related("location", "created_by").order_by("-created_at")
+
+        # Filtering
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            contracts = contracts.filter(status=status_filter)
+
+        contract_type = request.query_params.get("contract_type")
+        if contract_type:
+            contracts = contracts.filter(contract_type=contract_type)
+
+        location_id = request.query_params.get("location_id")
+        if location_id:
+            contracts = contracts.filter(location_id=location_id)
+
+        data = []
+        for contract in contracts:
+            data.append({
+                "id": contract.id,
+                "name": contract.name,
+                "contract_number": contract.contract_number,
+                "description": contract.description,
+                "customer_name": contract.customer_name,
+                "customer_contact": contract.customer_contact,
+                "location": {
+                    "id": contract.location.id,
+                    "name": contract.location.name,
+                } if contract.location else None,
+                "contract_type": contract.contract_type,
+                "contract_type_display": contract.get_contract_type_display(),
+                "status": contract.status,
+                "status_display": contract.get_status_display(),
+                "start_date": contract.start_date.isoformat(),
+                "end_date": contract.end_date.isoformat() if contract.end_date else None,
+                "service_terms": contract.service_terms,
+                "visits_included": contract.visits_included,
+                "is_expired": contract.is_expired,
+                "days_remaining": contract.days_remaining,
+                "recurring_templates_count": contract.recurring_templates.count(),
+                "created_at": contract.created_at.isoformat(),
+            })
+
+        return Response(data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        user = request.user
+        data = request.data
+
+        # Validate required fields
+        name = data.get("name", "").strip()
+        if not name:
+            return Response(
+                {"code": "VALIDATION_ERROR", "message": "Contract name is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        start_date = data.get("start_date")
+        if not start_date:
+            return Response(
+                {"code": "VALIDATION_ERROR", "message": "Start date is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate location if provided
+        location = None
+        location_id = data.get("location_id")
+        if location_id:
+            try:
+                location = Location.objects.get(id=location_id, company=company)
+            except Location.DoesNotExist:
+                return Response(
+                    {"code": "INVALID_LOCATION", "message": "Location not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Create contract
+        contract = ServiceContract.objects.create(
+            company=company,
+            name=name,
+            contract_number=data.get("contract_number", ""),
+            description=data.get("description", ""),
+            customer_name=data.get("customer_name", ""),
+            customer_contact=data.get("customer_contact", ""),
+            location=location,
+            contract_type=data.get("contract_type", ServiceContract.CONTRACT_TYPE_SERVICE),
+            status=data.get("status", ServiceContract.STATUS_DRAFT),
+            start_date=start_date,
+            end_date=data.get("end_date"),
+            service_terms=data.get("service_terms", ""),
+            visits_included=data.get("visits_included"),
+            created_by=user,
+        )
+
+        return Response({
+            "id": contract.id,
+            "name": contract.name,
+            "contract_number": contract.contract_number,
+            "contract_type": contract.contract_type,
+            "status": contract.status,
+            "start_date": contract.start_date.isoformat(),
+            "end_date": contract.end_date.isoformat() if contract.end_date else None,
+            "created_at": contract.created_at.isoformat(),
+        }, status=status.HTTP_201_CREATED)
+
+
+class ServiceContractDetailView(MaintenancePermissionMixin, APIView):
+    """
+    Get, update, or delete a service contract.
+
+    GET /api/maintenance/contracts/<id>/
+    PATCH /api/maintenance/contracts/<id>/
+    DELETE /api/maintenance/contracts/<id>/
+    """
+
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        company, error = self._check_read_access(request)
+        if error:
+            return error
+
+        contract = get_object_or_404(
+            ServiceContract.objects.select_related("location", "created_by"),
+            pk=pk,
+            company=company,
+        )
+
+        # Get linked recurring templates
+        recurring_templates = []
+        for template in contract.recurring_templates.filter(is_active=True):
+            recurring_templates.append({
+                "id": template.id,
+                "name": template.name,
+                "frequency": template.frequency,
+                "frequency_display": template.get_frequency_display(),
+            })
+
+        return Response({
+            "id": contract.id,
+            "name": contract.name,
+            "contract_number": contract.contract_number,
+            "description": contract.description,
+            "customer_name": contract.customer_name,
+            "customer_contact": contract.customer_contact,
+            "location": {
+                "id": contract.location.id,
+                "name": contract.location.name,
+            } if contract.location else None,
+            "contract_type": contract.contract_type,
+            "contract_type_display": contract.get_contract_type_display(),
+            "status": contract.status,
+            "status_display": contract.get_status_display(),
+            "start_date": contract.start_date.isoformat(),
+            "end_date": contract.end_date.isoformat() if contract.end_date else None,
+            "service_terms": contract.service_terms,
+            "visits_included": contract.visits_included,
+            "is_expired": contract.is_expired,
+            "days_remaining": contract.days_remaining,
+            "recurring_templates": recurring_templates,
+            "created_at": contract.created_at.isoformat(),
+            "updated_at": contract.updated_at.isoformat(),
+        }, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        contract = get_object_or_404(
+            ServiceContract,
+            pk=pk,
+            company=company,
+        )
+
+        data = request.data
+
+        # Update fields
+        if "name" in data:
+            contract.name = data["name"].strip()
+        if "contract_number" in data:
+            contract.contract_number = data["contract_number"]
+        if "description" in data:
+            contract.description = data["description"]
+        if "customer_name" in data:
+            contract.customer_name = data["customer_name"]
+        if "customer_contact" in data:
+            contract.customer_contact = data["customer_contact"]
+        if "contract_type" in data:
+            contract.contract_type = data["contract_type"]
+        if "status" in data:
+            contract.status = data["status"]
+        if "start_date" in data:
+            contract.start_date = data["start_date"]
+        if "end_date" in data:
+            contract.end_date = data["end_date"] or None
+        if "service_terms" in data:
+            contract.service_terms = data["service_terms"]
+        if "visits_included" in data:
+            contract.visits_included = data["visits_included"]
+
+        # Update location
+        if "location_id" in data:
+            location_id = data["location_id"]
+            if location_id:
+                try:
+                    contract.location = Location.objects.get(id=location_id, company=company)
+                except Location.DoesNotExist:
+                    return Response(
+                        {"code": "INVALID_LOCATION", "message": "Location not found."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                contract.location = None
+
+        contract.save()
+
+        return Response({
+            "id": contract.id,
+            "name": contract.name,
+            "status": contract.status,
+            "updated_at": contract.updated_at.isoformat(),
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        company, error = self._check_write_access(request)
+        if error:
+            return error
+
+        contract = get_object_or_404(
+            ServiceContract,
+            pk=pk,
+            company=company,
+        )
+
+        contract_id = contract.id
+        contract.delete()
+
+        return Response({
+            "deleted": True,
+            "id": contract_id,
+        }, status=status.HTTP_200_OK)
