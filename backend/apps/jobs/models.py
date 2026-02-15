@@ -282,19 +282,45 @@ class Job(models.Model):
         self.save(update_fields=["status", "actual_start_time"])
 
     def check_out(self):
+        """
+        Complete the job (check-out).
+
+        Raises ValidationError with structured format:
+        {
+            "code": "JOB_COMPLETION_BLOCKED",
+            "message": "Cannot check out: missing required items",
+            "fields": {"photos.before": "required", ...}
+        }
+        """
         if self.status != self.STATUS_IN_PROGRESS:
-            raise ValidationError("Job is not in progress")
+            raise ValidationError({
+                "code": "JOB_COMPLETION_BLOCKED",
+                "message": "Cannot complete job",
+                "fields": {"status": "must_be_in_progress"}
+            })
+
+        # Collect all blockers
+        blockers = {}
 
         # 1) Фото до/после обязательны
         has_before = self.photos.filter(photo_type=JobPhoto.TYPE_BEFORE).exists()
         has_after = self.photos.filter(photo_type=JobPhoto.TYPE_AFTER).exists()
-        if not has_before or not has_after:
-            raise ValidationError("Cannot check out: before and after photos are required")
+        if not has_before:
+            blockers["photos.before"] = "required"
+        if not has_after:
+            blockers["photos.after"] = "required"
 
         # 2) Обязательные пункты чек-листа должны быть выполнены
-        required_qs = self.checklist_items.filter(is_required=True)
-        if required_qs.exists() and required_qs.filter(is_completed=False).exists():
-            raise ValidationError("Cannot check out: required checklist items are not completed")
+        required_incomplete = self.checklist_items.filter(is_required=True, is_completed=False)
+        if required_incomplete.exists():
+            blockers["checklist.required"] = list(required_incomplete.values_list("id", flat=True))
+
+        if blockers:
+            raise ValidationError({
+                "code": "JOB_COMPLETION_BLOCKED",
+                "message": "Cannot complete job",
+                "fields": blockers
+            })
 
         self.status = self.STATUS_COMPLETED
         self.actual_end_time = timezone.now()

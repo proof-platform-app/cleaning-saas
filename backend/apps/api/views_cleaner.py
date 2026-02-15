@@ -259,7 +259,14 @@ class JobCheckOutView(APIView):
             try:
                 job.check_out()
             except DjangoValidationError as e:
-                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                # Support structured error format {code, message, fields}
+                if hasattr(e, 'message') and isinstance(e.message, dict):
+                    return Response(e.message, status=status.HTTP_400_BAD_REQUEST)
+                # Fallback to standardized format (no {detail} allowed)
+                return Response({
+                    "code": "VALIDATION_ERROR",
+                    "message": str(e)
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             JobCheckEvent.objects.create(
                 job=job,

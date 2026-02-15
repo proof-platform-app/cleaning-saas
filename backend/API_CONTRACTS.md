@@ -12,6 +12,40 @@ This document tracks API contract changes for the CleanProof/MaintainProof backe
 
 ## Changelog
 
+### 1.2.0 - 2026-02-15
+
+**Standardized Job Completion Error Format (Platform Invariant)**
+
+NEW: `JOB_COMPLETION_BLOCKED` error code for job check-out failures.
+- Endpoint: `POST /api/jobs/<id>/check-out/`
+- HTTP Status: 400
+
+**Error payload structure:**
+```json
+{
+  "code": "JOB_COMPLETION_BLOCKED",
+  "message": "Cannot complete job",
+  "fields": {
+    "status": "must_be_in_progress",
+    "photos.before": "required",
+    "photos.after": "required",
+    "checklist.required": [1, 2, 3]
+  }
+}
+```
+
+**Field conditions:**
+- `status` - included when job status is not `in_progress`
+- `photos.before` - included when before photo is missing
+- `photos.after` - included when after photo is missing
+- `checklist.required` - included when required checklist items are incomplete (contains list of item IDs)
+
+**Platform invariant:** All validation errors on this endpoint use `{code, message, fields?}` format.
+- No `{detail: ...}` responses allowed
+- Fallback errors use `code: "VALIDATION_ERROR"`
+
+---
+
 ### 1.1.0 - 2026-02-15
 
 **Context Separation Implementation (Cross-Context Guardrails v1)**
