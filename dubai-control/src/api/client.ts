@@ -1461,6 +1461,9 @@ export type ManagerPlanningJob = {
   manager_notes?: string;
   sla_status?: string;
   sla_reasons?: string[];
+  // Stage 4: Priority & SLA
+  priority?: "low" | "medium" | "high";
+  sla_deadline?: string | null; // ISO datetime
 };
 
 // ---------- Service Visits (Maintenance Context V1) ----------
@@ -1870,6 +1873,9 @@ export type CreateServiceVisitInput = {
   maintenance_category_id?: number | null;
   checklist_template_id?: number | null;
   manager_notes?: string;
+  // Stage 4: Priority & SLA
+  priority?: "low" | "medium" | "high";
+  sla_deadline?: string | null; // ISO datetime
 };
 
 export async function getServiceVisits(filters?: {

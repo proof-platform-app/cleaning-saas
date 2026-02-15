@@ -808,6 +808,8 @@ class ServiceVisitsListView(MaintenancePermissionMixin, APIView):
                 "scheduled_end_time": visit.scheduled_end_time.isoformat() if visit.scheduled_end_time else None,
                 "status": visit.status,
                 "sla_status": sla_status,
+                "priority": visit.priority,
+                "sla_deadline": visit.sla_deadline.isoformat() if visit.sla_deadline else None,
                 "location": {
                     "id": visit.location.id,
                     "name": visit.location.name,

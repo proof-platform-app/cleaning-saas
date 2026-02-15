@@ -62,6 +62,9 @@ export default function CreateVisit() {
     category_id: "",
     checklist_template_id: "",
     manager_notes: "",
+    // Stage 4: Priority & SLA
+    priority: "low" as "low" | "medium" | "high",
+    sla_deadline: "",
   });
 
   // Track if we've applied URL prefill (to avoid re-applying on every render)
@@ -229,6 +232,9 @@ export default function CreateVisit() {
       maintenance_category_id: categoryId,
       checklist_template_id: checklistTemplateId,
       manager_notes: formData.manager_notes || undefined,
+      // Stage 4: Priority & SLA
+      priority: formData.priority,
+      sla_deadline: formData.sla_deadline || null,
     });
   };
 
@@ -499,6 +505,43 @@ export default function CreateVisit() {
                   </div>
                 );
               })()}
+            </div>
+
+            {/* Stage 4: Priority & SLA */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(v) => setFormData({ ...formData, priority: v as "low" | "medium" | "high" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  High priority visits are flagged in the list
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sla_deadline">SLA Deadline (optional)</Label>
+                <Input
+                  id="sla_deadline"
+                  type="datetime-local"
+                  value={formData.sla_deadline}
+                  onChange={(e) =>
+                    setFormData({ ...formData, sla_deadline: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Visual countdown timer shows time remaining
+                </p>
+              </div>
             </div>
 
             {/* Notes */}

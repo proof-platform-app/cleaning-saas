@@ -1,6 +1,6 @@
 // dubai-control/src/pages/maintenance/VisitDetail.tsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
   CheckCircle2,
   Circle,
   Download,
+  AlertTriangle,
+  Timer,
 } from "lucide-react";
 import { getServiceVisit } from "@/api/client";
 import { toggleChecklistItem, downloadVisitReport } from "@/api/maintenance";
@@ -86,6 +88,92 @@ function SLABadge({ status }: { status?: string }) {
     >
       {isOk ? "SLA OK" : "SLA Violated"}
     </span>
+  );
+}
+
+// Priority badge component (Stage 4)
+function PriorityBadge({ priority }: { priority?: string }) {
+  if (!priority || priority === "low") return null;
+
+  const styles: Record<string, string> = {
+    medium: "bg-amber-100 text-amber-800",
+    high: "bg-red-100 text-red-800",
+  };
+
+  const labels: Record<string, string> = {
+    medium: "Medium Priority",
+    high: "High Priority",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
+        styles[priority] || "bg-gray-100 text-gray-800"
+      }`}
+    >
+      {priority === "high" && <AlertTriangle className="h-3.5 w-3.5" />}
+      {labels[priority] || priority}
+    </span>
+  );
+}
+
+// SLA Deadline Timer component (Stage 4)
+function SLADeadlineTimer({ deadline, status }: { deadline?: string | null; status?: string }) {
+  const [timeLeft, setTimeLeft] = useState<string>("");
+  const [isOverdue, setIsOverdue] = useState(false);
+
+  useEffect(() => {
+    if (!deadline || status === "completed" || status === "cancelled") {
+      setTimeLeft("");
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const deadlineDate = new Date(deadline);
+      const diff = deadlineDate.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setIsOverdue(true);
+        const overdueDiff = Math.abs(diff);
+        const hours = Math.floor(overdueDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((overdueDiff % (1000 * 60 * 60)) / (1000 * 60));
+        setTimeLeft(`${hours}h ${minutes}m overdue`);
+      } else {
+        setIsOverdue(false);
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hours}h`);
+        } else if (hours > 0) {
+          setTimeLeft(`${hours}h ${minutes}m`);
+        } else {
+          setTimeLeft(`${minutes}m`);
+        }
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [deadline, status]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${
+        isOverdue
+          ? "bg-red-100 text-red-800 animate-pulse"
+          : "bg-blue-100 text-blue-800"
+      }`}
+    >
+      <Timer className="h-3.5 w-3.5" />
+      <span>{timeLeft}</span>
+    </div>
   );
 }
 
@@ -256,7 +344,9 @@ export default function VisitDetail() {
             <h1>Service Visit #{visit.id}</h1>
             <div className="detail-badges">
               <StatusBadge status={visit.status} />
+              <PriorityBadge priority={visit.priority} />
               <SLABadge status={visit.sla_status} />
+              <SLADeadlineTimer deadline={visit.sla_deadline} status={visit.status} />
             </div>
           </div>
           <div className="flex gap-2">

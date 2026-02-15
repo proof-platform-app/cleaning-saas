@@ -62,6 +62,9 @@ function mapVisitToLayout(visit: ServiceVisit): VisitLayoutItem {
     checklistTotal: 0,
     // SLA status from API
     slaStatus: visit.sla_status,
+    // Stage 4: Priority & SLA deadline
+    priority: visit.priority,
+    slaDeadline: visit.sla_deadline,
   };
 }
 

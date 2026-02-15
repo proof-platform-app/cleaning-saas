@@ -252,6 +252,14 @@ class ManagerJobCreateSerializer(serializers.Serializer):
         required=False,
     )
 
+    # Stage 4: Priority & SLA
+    priority = serializers.ChoiceField(
+        choices=[Job.PRIORITY_LOW, Job.PRIORITY_MEDIUM, Job.PRIORITY_HIGH],
+        default=Job.PRIORITY_LOW,
+        required=False,
+    )
+    sla_deadline = serializers.DateTimeField(required=False, allow_null=True)
+
     def validate(self, attrs):
         request = self.context["request"]
         user = request.user
@@ -356,6 +364,9 @@ class ManagerJobCreateSerializer(serializers.Serializer):
             maintenance_category=maintenance_category,
             context=context,
             manager_notes=validated_data.get("manager_notes") or "",
+            # Stage 4: Priority & SLA
+            priority=validated_data.get("priority", Job.PRIORITY_LOW),
+            sla_deadline=validated_data.get("sla_deadline"),
         )
 
         if template:

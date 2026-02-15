@@ -40,6 +40,17 @@ class Job(models.Model):
         (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    # Priority choices (Stage 4: SLA & Priority Layer)
+    PRIORITY_LOW = "low"
+    PRIORITY_MEDIUM = "medium"
+    PRIORITY_HIGH = "high"
+
+    PRIORITY_CHOICES = [
+        (PRIORITY_LOW, "Low"),
+        (PRIORITY_MEDIUM, "Medium"),
+        (PRIORITY_HIGH, "High"),
+    ]
+
     company = models.ForeignKey(
         Company,
         on_delete=models.CASCADE,
@@ -95,6 +106,21 @@ class Job(models.Model):
         blank=True,
         related_name="jobs",
         help_text="Optional category for maintenance service visits (e.g., Preventive, Corrective)",
+    )
+
+    # Stage 4: Priority & SLA Layer
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default=PRIORITY_LOW,
+        db_index=True,
+        help_text="Priority level: low, medium, high",
+    )
+    sla_deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Deadline for SLA compliance. Visual timer shows time remaining.",
     )
 
     scheduled_date = models.DateField()

@@ -3,7 +3,7 @@
 // Imported from control-hub/src/pages/WorkOrdersPage.tsx design
 // See docs/execution/LOVABLE_UI_IMPORT_PROTOCOL.md
 
-import { Plus, ChevronRight, Camera, CheckSquare } from "lucide-react";
+import { Plus, ChevronRight, Camera, CheckSquare, AlertTriangle, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -43,6 +43,9 @@ export interface VisitLayoutItem {
   checklistTotal?: number;
   // SLA status
   slaStatus?: "ok" | "violated" | string;
+  // Stage 4: Priority & SLA deadline
+  priority?: "low" | "medium" | "high";
+  slaDeadline?: string | null; // ISO datetime
 }
 
 export interface FilterOption {
@@ -114,6 +117,82 @@ function SLAIndicator({ slaStatus }: { slaStatus?: string }) {
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {isViolated ? "SLA violated" : "SLA OK"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+/**
+ * Priority indicator - shows colored badge for medium/high priority
+ * Stage 4: SLA & Priority Layer
+ */
+function PriorityIndicator({ priority, slaDeadline, status }: { priority?: string; slaDeadline?: string | null; status?: VisitStatus }) {
+  // Calculate time remaining for SLA deadline
+  const getTimeRemaining = () => {
+    if (!slaDeadline || status === "completed") return null;
+    const now = new Date();
+    const deadline = new Date(slaDeadline);
+    const diff = deadline.getTime() - now.getTime();
+
+    if (diff <= 0) {
+      const overdueDiff = Math.abs(diff);
+      const hours = Math.floor(overdueDiff / (1000 * 60 * 60));
+      return { text: `${hours}h over`, isOverdue: true };
+    }
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    if (days > 0) return { text: `${days}d`, isOverdue: false };
+    return { text: `${hours}h`, isOverdue: false };
+  };
+
+  const timeRemaining = getTimeRemaining();
+
+  // If no priority or low priority with no deadline, show nothing
+  if ((!priority || priority === "low") && !slaDeadline) {
+    return <span className="text-muted-foreground/50">—</span>;
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1">
+            {/* Priority badge */}
+            {priority && priority !== "low" && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                priority === "high" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+              )}>
+                {priority === "high" && <AlertTriangle className="w-2.5 h-2.5" />}
+                {priority === "high" ? "High" : "Med"}
+              </span>
+            )}
+            {/* SLA deadline timer */}
+            {timeRemaining && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium",
+                timeRemaining.isOverdue ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+              )}>
+                <Timer className="w-2.5 h-2.5" />
+                {timeRemaining.text}
+              </span>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          <div className="space-y-1">
+            {priority && priority !== "low" && (
+              <div>Priority: {priority === "high" ? "High" : "Medium"}</div>
+            )}
+            {slaDeadline && (
+              <div>
+                Deadline: {format(new Date(slaDeadline), "MMM d, h:mm a")}
+                {timeRemaining?.isOverdue && " (Overdue)"}
+              </div>
+            )}
+          </div>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -318,6 +397,7 @@ export function VisitsLovableLayout({
                 <th className="w-[110px]">Scheduled</th>
                 <th className="w-[100px]">Proof</th>
                 <th className="w-[50px]">SLA</th>
+                <th className="w-[90px]">Priority</th>
                 <th className="w-[50px]"></th>
               </tr>
             </thead>
@@ -358,6 +438,9 @@ export function VisitsLovableLayout({
                   </td>
                   <td>
                     <SLAIndicator slaStatus={visit.slaStatus} />
+                  </td>
+                  <td>
+                    <PriorityIndicator priority={visit.priority} slaDeadline={visit.slaDeadline} status={visit.status} />
                   </td>
                   <td>
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-muted-foreground" />
