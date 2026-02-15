@@ -39,6 +39,10 @@ import AssetTypes from "./pages/maintenance/AssetTypes";
 import VisitList from "./pages/maintenance/VisitList";
 import CreateVisit from "./pages/maintenance/CreateVisit";
 import VisitDetail from "./pages/maintenance/VisitDetail";
+import { TechniciansPage } from "./contexts/maintenance/ui/TechniciansPage";
+import MaintenanceAnalytics from "./pages/maintenance/Analytics";
+import MaintenanceReports from "./pages/maintenance/Reports";
+import RecurringTemplates from "./pages/maintenance/RecurringTemplates";
 
 /* Contexts */
 import { LocationsProvider } from "@/contexts/LocationsContext";
@@ -135,8 +139,14 @@ const App = () => (
               <Route path="/maintenance/assets/new" element={<Assets />} />
               <Route path="/maintenance/assets/:id" element={<AssetDetail />} />
               <Route path="/maintenance/asset-types" element={<AssetTypes />} />
-              {/* Technicians placeholder - reuses cleaners for now */}
-              <Route path="/maintenance/technicians" element={<CompanyTeam />} />
+              {/* Maintenance Technicians (S2-P1) */}
+              <Route path="/maintenance/technicians" element={<TechniciansPage />} />
+              {/* Maintenance Analytics (S2-P2) */}
+              <Route path="/maintenance/analytics" element={<MaintenanceAnalytics />} />
+              {/* Maintenance Reports (S2-P3) */}
+              <Route path="/maintenance/reports" element={<MaintenanceReports />} />
+              {/* Recurring Schedules (Stage 3) */}
+              <Route path="/maintenance/schedules" element={<RecurringTemplates />} />
 
               {/* Legacy /assets redirect to maintenance context */}
               <Route

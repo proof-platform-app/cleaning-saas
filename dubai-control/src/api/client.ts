@@ -1880,6 +1880,7 @@ export async function getServiceVisits(filters?: {
   location_id?: number;
   asset_id?: number;
   category_id?: number;
+  sla_reason?: string;  // Filter by SLA violation reason code
 }): Promise<ServiceVisit[]> {
   await loginManager();
 
@@ -1907,6 +1908,9 @@ export async function getServiceVisits(filters?: {
   }
   if (filters?.category_id) {
     params.append("category_id", String(filters.category_id));
+  }
+  if (filters?.sla_reason) {
+    params.append("sla_reason", filters.sla_reason);
   }
 
   const query = params.toString();

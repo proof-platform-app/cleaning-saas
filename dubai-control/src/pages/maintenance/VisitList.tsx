@@ -84,6 +84,8 @@ export default function VisitList() {
     asset: searchParams.get("asset_id") || "all",
     technician: searchParams.get("technician_id") || "all",
     category: searchParams.get("category_id") || "all",
+    location: searchParams.get("location_id") || "all",
+    slaReason: searchParams.get("sla_reason") || "",
     dateFrom: searchParams.get("date_from") || thirtyDaysAgo,
     dateTo: searchParams.get("date_to") || today,
   }), [searchParams, thirtyDaysAgo, today]);
@@ -93,6 +95,8 @@ export default function VisitList() {
   const [assetFilter, setAssetFilter] = useState(() => getInitialFilters().asset);
   const [technicianFilter, setTechnicianFilter] = useState(() => getInitialFilters().technician);
   const [categoryFilter, setCategoryFilter] = useState(() => getInitialFilters().category);
+  const [locationFilter, setLocationFilter] = useState(() => getInitialFilters().location);
+  const [slaReasonFilter, setSlaReasonFilter] = useState(() => getInitialFilters().slaReason);
   const [dateFrom, setDateFrom] = useState(() => getInitialFilters().dateFrom);
   const [dateTo, setDateTo] = useState(() => getInitialFilters().dateTo);
 
@@ -103,6 +107,8 @@ export default function VisitList() {
     setAssetFilter(params.asset);
     setTechnicianFilter(params.technician);
     setCategoryFilter(params.category);
+    setLocationFilter(params.location);
+    setSlaReasonFilter(params.slaReason);
     setDateFrom(params.dateFrom);
     setDateTo(params.dateTo);
   }, [searchParams, getInitialFilters]);
@@ -157,7 +163,9 @@ export default function VisitList() {
     asset_id: assetFilter !== "all" ? Number(assetFilter) : undefined,
     technician_id: technicianFilter !== "all" ? Number(technicianFilter) : undefined,
     category_id: categoryFilter !== "all" ? Number(categoryFilter) : undefined,
-  }), [dateFrom, dateTo, statusFilter, assetFilter, technicianFilter, categoryFilter]);
+    location_id: locationFilter !== "all" ? Number(locationFilter) : undefined,
+    sla_reason: slaReasonFilter || undefined,
+  }), [dateFrom, dateTo, statusFilter, assetFilter, technicianFilter, categoryFilter, locationFilter, slaReasonFilter]);
 
   // Fetch visits using maintenance API layer
   const {
@@ -295,7 +303,7 @@ export default function VisitList() {
         canWrite={canCreate}
         loading={false}
         emptyState={
-          statusFilter !== "all" || assetFilter !== "all" || technicianFilter !== "all" || categoryFilter !== "all"
+          statusFilter !== "all" || assetFilter !== "all" || technicianFilter !== "all" || categoryFilter !== "all" || locationFilter !== "all" || slaReasonFilter
             ? {
                 title: "No visits found",
                 description: "Try adjusting your filters",

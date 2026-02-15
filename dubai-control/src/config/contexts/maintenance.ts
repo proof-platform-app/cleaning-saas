@@ -6,6 +6,10 @@ import {
   ClipboardList,
   Wrench,
   Tag,
+  Users,
+  BarChart3,
+  FileText,
+  CalendarRange,
 } from "lucide-react";
 import type { ContextConfig, NavItem } from "./types";
 
@@ -16,8 +20,12 @@ import type { ContextConfig, NavItem } from "./types";
 export const maintenanceNavItems: NavItem[] = [
   { name: "Dashboard", href: "/maintenance/dashboard", icon: LayoutDashboard },
   { name: "Service Visits", href: "/maintenance/visits", icon: ClipboardList },
+  { name: "Schedules", href: "/maintenance/schedules", icon: CalendarRange },
   { name: "Assets", href: "/maintenance/assets", icon: Wrench },
   { name: "Asset Types", href: "/maintenance/asset-types", icon: Tag },
+  { name: "Technicians", href: "/maintenance/technicians", icon: Users },
+  { name: "Analytics", href: "/maintenance/analytics", icon: BarChart3 },
+  { name: "Reports", href: "/maintenance/reports", icon: FileText },
 ];
 
 /**

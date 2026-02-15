@@ -105,3 +105,179 @@ class Asset(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.asset_type.name})"
+
+
+# =============================================================================
+# Stage 3: Recurring Execution
+# =============================================================================
+
+class RecurringVisitTemplate(models.Model):
+    """
+    Template for recurring maintenance visits.
+
+    Managers define schedule patterns (monthly, quarterly, yearly, custom interval).
+    Visits are generated on demand via "Generate Visits" button (batch generation).
+
+    Each generated Job is a normal Job with context=CONTEXT_MAINTENANCE.
+    GeneratedVisitLog tracks which visits were created from which template.
+
+    See: docs/product/MAINTENANCE_V2_STRATEGY.md (Stage 3)
+    """
+
+    # Frequency choices
+    FREQUENCY_MONTHLY = "monthly"
+    FREQUENCY_QUARTERLY = "quarterly"
+    FREQUENCY_YEARLY = "yearly"
+    FREQUENCY_CUSTOM = "custom"
+
+    FREQUENCY_CHOICES = [
+        (FREQUENCY_MONTHLY, "Monthly"),
+        (FREQUENCY_QUARTERLY, "Quarterly"),
+        (FREQUENCY_YEARLY, "Yearly"),
+        (FREQUENCY_CUSTOM, "Custom Interval"),
+    ]
+
+    # Company scope
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="recurring_visit_templates"
+    )
+
+    # Template identity
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    # Binding: Asset (optional) or Location (required)
+    asset = models.ForeignKey(
+        Asset,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="recurring_templates",
+        help_text="Optional: Link recurring visits to specific asset"
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.CASCADE,
+        related_name="recurring_maintenance_templates",
+        help_text="Required: Location for all generated visits"
+    )
+
+    # Schedule
+    frequency = models.CharField(
+        max_length=20,
+        choices=FREQUENCY_CHOICES,
+        default=FREQUENCY_MONTHLY
+    )
+    interval_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Used when frequency='custom'. Interval in days between visits."
+    )
+    start_date = models.DateField(
+        help_text="First possible visit date"
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Optional: Stop generating visits after this date"
+    )
+
+    # Visit defaults
+    checklist_template = models.ForeignKey(
+        'apps_locations.ChecklistTemplate',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_maintenance_templates"
+    )
+    maintenance_category = models.ForeignKey(
+        MaintenanceCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_templates"
+    )
+    assigned_technician = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recurring_template_assignments",
+        help_text="Default technician for generated visits"
+    )
+    scheduled_start_time = models.TimeField(null=True, blank=True)
+    scheduled_end_time = models.TimeField(null=True, blank=True)
+    manager_notes = models.TextField(blank=True)
+
+    # Status
+    is_active = models.BooleanField(default=True)
+
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_recurring_templates"
+    )
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Recurring Visit Template"
+        verbose_name_plural = "Recurring Visit Templates"
+
+    def __str__(self):
+        return f"{self.name} ({self.get_frequency_display()})"
+
+    def get_interval_days(self) -> int:
+        """Return the interval in days based on frequency."""
+        if self.frequency == self.FREQUENCY_MONTHLY:
+            return 30
+        elif self.frequency == self.FREQUENCY_QUARTERLY:
+            return 90
+        elif self.frequency == self.FREQUENCY_YEARLY:
+            return 365
+        else:  # custom
+            return self.interval_days
+
+
+class GeneratedVisitLog(models.Model):
+    """
+    Tracks which visits (Jobs) were generated from which template.
+
+    Used to:
+    1. Prevent duplicate generation for the same date
+    2. Track history of auto-generated visits
+    3. Allow filtering visits by source template
+
+    unique_together on (template, scheduled_date) ensures idempotent generation.
+    """
+    template = models.ForeignKey(
+        RecurringVisitTemplate,
+        on_delete=models.CASCADE,
+        related_name="generated_visits"
+    )
+    job = models.ForeignKey(
+        'apps_jobs.Job',
+        on_delete=models.CASCADE,
+        related_name="recurring_source"
+    )
+    scheduled_date = models.DateField()
+    generated_at = models.DateTimeField(auto_now_add=True)
+    generated_by = models.ForeignKey(
+        'apps_accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="generated_visits"
+    )
+
+    class Meta:
+        unique_together = ["template", "scheduled_date"]
+        ordering = ["-scheduled_date"]
+        verbose_name = "Generated Visit Log"
+        verbose_name_plural = "Generated Visit Logs"
+
+    def __str__(self):
+        return f"{self.template.name} -> Job #{self.job_id} ({self.scheduled_date})"

@@ -111,6 +111,7 @@ export interface VisitFilters {
   category_id?: number;
   date_from?: string; // YYYY-MM-DD
   date_to?: string;   // YYYY-MM-DD
+  sla_reason?: string; // Filter by SLA violation reason code
 }
 
 // =============================================================================
@@ -231,6 +232,7 @@ export async function listVisits(filters?: VisitFilters): Promise<ServiceVisit[]
     category_id: filters?.category_id,
     date_from: filters?.date_from,
     date_to: filters?.date_to,
+    sla_reason: filters?.sla_reason, // Filter by SLA violation reason
   });
 }
 
@@ -346,6 +348,432 @@ export async function downloadAssetHistoryReport(assetId: number): Promise<Blob>
 // Query Keys for React Query
 // =============================================================================
 
+// =============================================================================
+// Technicians API (S2-P1)
+// =============================================================================
+
+/**
+ * Technician with maintenance-specific stats.
+ * Different from base Cleaner type - includes aggregated data.
+ */
+export interface MaintenanceTechnician {
+  id: number;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  total_visits: number;
+  sla_violation_rate: number; // 0.0 to 1.0
+}
+
+/**
+ * List technicians with maintenance stats.
+ * GET /api/maintenance/technicians/
+ */
+export async function listMaintenanceTechnicians(): Promise<MaintenanceTechnician[]> {
+  const res = await apiClient.get<MaintenanceTechnician[]>("/api/maintenance/technicians/");
+  return res.data;
+}
+
+// =============================================================================
+// Analytics API (S2-P2)
+// =============================================================================
+
+/**
+ * Date range filter for analytics endpoints.
+ */
+export interface AnalyticsDateRange {
+  date_from: string; // YYYY-MM-DD
+  date_to: string;   // YYYY-MM-DD
+}
+
+/**
+ * KPI summary with deltas.
+ */
+export interface MaintenanceAnalyticsSummary {
+  visits_completed: number;
+  sla_compliance_rate: number;  // 0.0 to 1.0
+  avg_visit_duration_hours: number;
+  issues_detected: number;
+  visits_delta: number;   // % change vs previous period
+  sla_delta: number;
+  duration_delta: number;
+  issues_delta: number;
+}
+
+/**
+ * Daily visits trend point.
+ */
+export interface MaintenanceVisitsTrendPoint {
+  date: string;  // YYYY-MM-DD
+  visits_completed: number;
+}
+
+/**
+ * Daily SLA trend point.
+ */
+export interface MaintenanceSlaTrendPoint {
+  date: string;  // YYYY-MM-DD
+  visits_completed: number;
+  visits_with_violations: number;
+  violation_rate: number;  // 0.0 to 1.0
+}
+
+/**
+ * Asset performance stats.
+ */
+export interface MaintenanceAssetPerformance {
+  asset_id: number;
+  asset_name: string;
+  asset_type_name: string;
+  location_name: string;
+  visits_completed: number;
+  violations_count: number;
+  violation_rate: number;  // 0.0 to 1.0
+}
+
+/**
+ * Technician performance stats.
+ */
+export interface MaintenanceTechnicianPerformance {
+  technician_id: number;
+  technician_name: string;
+  visits_completed: number;
+  avg_duration_hours: number;
+  sla_compliance_rate: number;  // 0.0 to 1.0
+  violations_count: number;
+}
+
+/**
+ * Build query string from date range.
+ */
+function buildDateQuery(range: AnalyticsDateRange): string {
+  return `?date_from=${range.date_from}&date_to=${range.date_to}`;
+}
+
+/**
+ * Get analytics summary (KPIs).
+ * GET /api/maintenance/analytics/summary/
+ */
+export async function getMaintenanceAnalyticsSummary(
+  range: AnalyticsDateRange
+): Promise<MaintenanceAnalyticsSummary> {
+  const res = await apiClient.get<MaintenanceAnalyticsSummary>(
+    `/api/maintenance/analytics/summary/${buildDateQuery(range)}`
+  );
+  return res.data;
+}
+
+/**
+ * Get daily visits trend.
+ * GET /api/maintenance/analytics/visits-trend/
+ */
+export async function getMaintenanceVisitsTrend(
+  range: AnalyticsDateRange
+): Promise<MaintenanceVisitsTrendPoint[]> {
+  const res = await apiClient.get<MaintenanceVisitsTrendPoint[]>(
+    `/api/maintenance/analytics/visits-trend/${buildDateQuery(range)}`
+  );
+  return res.data;
+}
+
+/**
+ * Get daily SLA violations trend.
+ * GET /api/maintenance/analytics/sla-trend/
+ */
+export async function getMaintenanceSlaTrend(
+  range: AnalyticsDateRange
+): Promise<MaintenanceSlaTrendPoint[]> {
+  const res = await apiClient.get<MaintenanceSlaTrendPoint[]>(
+    `/api/maintenance/analytics/sla-trend/${buildDateQuery(range)}`
+  );
+  return res.data;
+}
+
+/**
+ * Get assets performance (sorted by violations).
+ * GET /api/maintenance/analytics/assets-performance/
+ */
+export async function getMaintenanceAssetsPerformance(
+  range: AnalyticsDateRange
+): Promise<MaintenanceAssetPerformance[]> {
+  const res = await apiClient.get<MaintenanceAssetPerformance[]>(
+    `/api/maintenance/analytics/assets-performance/${buildDateQuery(range)}`
+  );
+  return res.data;
+}
+
+/**
+ * Get technicians performance (sorted by violations).
+ * GET /api/maintenance/analytics/technicians-performance/
+ */
+export async function getMaintenanceTechniciansPerformance(
+  range: AnalyticsDateRange
+): Promise<MaintenanceTechnicianPerformance[]> {
+  const res = await apiClient.get<MaintenanceTechnicianPerformance[]>(
+    `/api/maintenance/analytics/technicians-performance/${buildDateQuery(range)}`
+  );
+  return res.data;
+}
+
+// =============================================================================
+// Reports API (S2-P3)
+// =============================================================================
+
+/**
+ * Report data structure.
+ */
+export interface MaintenanceReportData {
+  period: {
+    from: string;
+    to: string;
+  };
+  visits_count: number;
+  violations_count: number;
+  issue_rate: number;
+  technicians: Array<{
+    id: number;
+    name: string;
+    visits: number;
+    violations: number;
+  }>;
+  assets: Array<{
+    id: number;
+    name: string;
+    type_name: string;
+    visits: number;
+    violations: number;
+  }>;
+  locations: Array<{
+    id: number;
+    name: string;
+    visits: number;
+    violations: number;
+  }>;
+  top_sla_reasons: Array<{
+    code: string;
+    count: number;
+  }>;
+}
+
+/**
+ * Get weekly maintenance report (last 7 days).
+ * GET /api/maintenance/reports/weekly/
+ */
+export async function getMaintenanceWeeklyReport(): Promise<MaintenanceReportData> {
+  const res = await apiClient.get<MaintenanceReportData>("/api/maintenance/reports/weekly/");
+  return res.data;
+}
+
+/**
+ * Get monthly maintenance report (last 30 days).
+ * GET /api/maintenance/reports/monthly/
+ */
+export async function getMaintenanceMonthlyReport(): Promise<MaintenanceReportData> {
+  const res = await apiClient.get<MaintenanceReportData>("/api/maintenance/reports/monthly/");
+  return res.data;
+}
+
+/**
+ * Download weekly maintenance report as PDF.
+ * GET /api/maintenance/reports/weekly/pdf/
+ */
+export async function downloadMaintenanceWeeklyReportPdf(): Promise<Blob> {
+  const res = await apiClient.get("/api/maintenance/reports/weekly/pdf/", {
+    responseType: "blob",
+  });
+  return res.data;
+}
+
+/**
+ * Download monthly maintenance report as PDF.
+ * GET /api/maintenance/reports/monthly/pdf/
+ */
+export async function downloadMaintenanceMonthlyReportPdf(): Promise<Blob> {
+  const res = await apiClient.get("/api/maintenance/reports/monthly/pdf/", {
+    responseType: "blob",
+  });
+  return res.data;
+}
+
+/**
+ * Send weekly maintenance report via email.
+ * POST /api/maintenance/reports/weekly/email/
+ */
+export async function sendMaintenanceWeeklyReportEmail(email?: string): Promise<void> {
+  await apiClient.post("/api/maintenance/reports/weekly/email/", { email });
+}
+
+/**
+ * Send monthly maintenance report via email.
+ * POST /api/maintenance/reports/monthly/email/
+ */
+export async function sendMaintenanceMonthlyReportEmail(email?: string): Promise<void> {
+  await apiClient.post("/api/maintenance/reports/monthly/email/", { email });
+}
+
+// =============================================================================
+// Recurring Visit Templates API (Stage 3)
+// =============================================================================
+
+/**
+ * Recurring visit template.
+ */
+export interface RecurringVisitTemplate {
+  id: number;
+  name: string;
+  description: string;
+  asset: { id: number; name: string } | null;
+  location: { id: number; name: string };
+  frequency: "monthly" | "quarterly" | "yearly" | "custom";
+  frequency_display: string;
+  interval_days: number;
+  start_date: string;
+  end_date: string | null;
+  checklist_template: { id: number; name: string } | null;
+  maintenance_category: { id: number; name: string } | null;
+  assigned_technician: { id: number; full_name: string } | null;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+  manager_notes: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+/**
+ * Input for creating/updating recurring template.
+ */
+export interface RecurringTemplateInput {
+  name: string;
+  description?: string;
+  asset_id?: number | null;
+  location_id: number;
+  frequency: "monthly" | "quarterly" | "yearly" | "custom";
+  interval_days?: number;
+  start_date: string;
+  end_date?: string | null;
+  checklist_template_id?: number | null;
+  maintenance_category_id?: number | null;
+  assigned_technician_id?: number | null;
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+  manager_notes?: string;
+  is_active?: boolean;
+}
+
+/**
+ * Result of generating visits from template.
+ */
+export interface GenerateVisitsResult {
+  generated_count: number;
+  visits: Array<{ id: number; scheduled_date: string }>;
+  message?: string;
+}
+
+/**
+ * Filter options for recurring templates.
+ */
+export interface RecurringTemplateFilters {
+  is_active?: boolean;
+  location_id?: number;
+}
+
+/**
+ * Build query string from filters.
+ */
+function buildRecurringTemplateQuery(filters?: RecurringTemplateFilters): string {
+  if (!filters) return "";
+  const params = new URLSearchParams();
+  if (filters.is_active !== undefined) {
+    params.set("is_active", String(filters.is_active));
+  }
+  if (filters.location_id) {
+    params.set("location_id", String(filters.location_id));
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+/**
+ * List recurring visit templates.
+ * GET /api/maintenance/recurring-templates/
+ */
+export async function listRecurringTemplates(
+  filters?: RecurringTemplateFilters
+): Promise<RecurringVisitTemplate[]> {
+  const res = await apiClient.get<RecurringVisitTemplate[]>(
+    `/api/maintenance/recurring-templates/${buildRecurringTemplateQuery(filters)}`
+  );
+  return res.data;
+}
+
+/**
+ * Get single recurring template.
+ * GET /api/maintenance/recurring-templates/{id}/
+ */
+export async function getRecurringTemplate(id: number): Promise<RecurringVisitTemplate> {
+  const res = await apiClient.get<RecurringVisitTemplate>(
+    `/api/maintenance/recurring-templates/${id}/`
+  );
+  return res.data;
+}
+
+/**
+ * Create recurring template.
+ * POST /api/maintenance/recurring-templates/
+ */
+export async function createRecurringTemplate(
+  input: RecurringTemplateInput
+): Promise<RecurringVisitTemplate> {
+  const res = await apiClient.post<RecurringVisitTemplate>(
+    "/api/maintenance/recurring-templates/",
+    input
+  );
+  return res.data;
+}
+
+/**
+ * Update recurring template.
+ * PATCH /api/maintenance/recurring-templates/{id}/
+ */
+export async function updateRecurringTemplate(
+  id: number,
+  input: Partial<RecurringTemplateInput>
+): Promise<RecurringVisitTemplate> {
+  const res = await apiClient.patch<RecurringVisitTemplate>(
+    `/api/maintenance/recurring-templates/${id}/`,
+    input
+  );
+  return res.data;
+}
+
+/**
+ * Delete recurring template.
+ * DELETE /api/maintenance/recurring-templates/{id}/
+ */
+export async function deleteRecurringTemplate(id: number): Promise<void> {
+  await apiClient.delete(`/api/maintenance/recurring-templates/${id}/`);
+}
+
+/**
+ * Generate visits from template.
+ * POST /api/maintenance/recurring-templates/{id}/generate/
+ */
+export async function generateVisitsFromTemplate(
+  templateId: number,
+  dateTo: string
+): Promise<GenerateVisitsResult> {
+  const res = await apiClient.post<GenerateVisitsResult>(
+    `/api/maintenance/recurring-templates/${templateId}/generate/`,
+    { date_to: dateTo }
+  );
+  return res.data;
+}
+
+// =============================================================================
+// Query Keys for React Query
+// =============================================================================
+
 export const maintenanceKeys = {
   // Categories
   categories: {
@@ -377,4 +805,25 @@ export const maintenanceKeys = {
   // Shared
   locations: ["maintenance", "locations"] as const,
   technicians: ["maintenance", "technicians"] as const,
+  // Analytics (S2-P2)
+  analytics: {
+    all: ["maintenance", "analytics"] as const,
+    summary: (range: AnalyticsDateRange) => [...maintenanceKeys.analytics.all, "summary", range] as const,
+    visitsTrend: (range: AnalyticsDateRange) => [...maintenanceKeys.analytics.all, "visitsTrend", range] as const,
+    slaTrend: (range: AnalyticsDateRange) => [...maintenanceKeys.analytics.all, "slaTrend", range] as const,
+    assetsPerformance: (range: AnalyticsDateRange) => [...maintenanceKeys.analytics.all, "assetsPerformance", range] as const,
+    techniciansPerformance: (range: AnalyticsDateRange) => [...maintenanceKeys.analytics.all, "techniciansPerformance", range] as const,
+  },
+  // Reports (S2-P3)
+  reports: {
+    all: ["maintenance", "reports"] as const,
+    weekly: () => [...maintenanceKeys.reports.all, "weekly"] as const,
+    monthly: () => [...maintenanceKeys.reports.all, "monthly"] as const,
+  },
+  // Recurring Templates (Stage 3)
+  recurringTemplates: {
+    all: ["maintenance", "recurringTemplates"] as const,
+    list: (filters?: RecurringTemplateFilters) => [...maintenanceKeys.recurringTemplates.all, "list", filters] as const,
+    detail: (id: number) => [...maintenanceKeys.recurringTemplates.all, "detail", id] as const,
+  },
 } as const;

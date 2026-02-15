@@ -1,19 +1,23 @@
 // dubai-control/src/contexts/maintenance/adapters/useTechnicians.ts
-// Adapter for Technicians (Cleaners) API in Maintenance context
+// Adapter for Technicians API in Maintenance context (S2-P1)
 // See docs/execution/LOVABLE_UI_IMPORT_PROTOCOL.md
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  getCleaners,
   createCleaner,
   updateCleaner,
   getCleanerAuditLog,
-  type Cleaner,
+  resetCleanerPin,
   type CleanerAuditLog,
 } from "@/api/client";
+import {
+  listMaintenanceTechnicians,
+  type MaintenanceTechnician,
+} from "@/api/maintenance";
 
-// Re-export types with maintenance terminology
-export type { Cleaner as Technician, CleanerAuditLog as TechnicianAuditLog };
+// Export Technician type with maintenance stats
+export type Technician = MaintenanceTechnician;
+export type { CleanerAuditLog as TechnicianAuditLog };
 
 // Maintenance context terminology:
 // Technician = Cleaner (same entity, different label)
@@ -27,13 +31,14 @@ export const technicianKeys = {
 };
 
 /**
- * Hook to fetch all technicians (cleaners with role=cleaner).
- * Maps to GET /api/manager/cleaners/
+ * Hook to fetch all technicians with maintenance stats.
+ * Maps to GET /api/maintenance/technicians/
+ * Returns: id, full_name, email, phone, is_active, total_visits, sla_violation_rate
  */
 export function useTechnicians(enabled = true) {
   return useQuery({
     queryKey: technicianKeys.list(),
-    queryFn: getCleaners,
+    queryFn: listMaintenanceTechnicians,
     enabled,
   });
 }
@@ -64,8 +69,9 @@ export function useTechnicianAuditLog(id: number, enabled = true) {
 
 export interface CreateTechnicianInput {
   full_name: string;
+  phone: string; // Required for field app authentication
   email?: string;
-  phone?: string;
+  pin: string; // 4-digit PIN for field app authentication
 }
 
 /**
@@ -103,6 +109,23 @@ export function useUpdateTechnician() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: technicianKeys.all });
       queryClient.invalidateQueries({ queryKey: technicianKeys.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * Mutation hook to reset technician PIN.
+ * Maps to POST /api/manager/cleaners/{id}/reset-pin/
+ * Returns the new PIN for display/copy.
+ */
+export function useResetTechnicianPin() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number) => resetCleanerPin(id),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: technicianKeys.all });
+      queryClient.invalidateQueries({ queryKey: technicianKeys.detail(id) });
     },
   });
 }

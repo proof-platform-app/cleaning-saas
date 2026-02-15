@@ -483,4 +483,92 @@ urlpatterns = [
         api_views.AssetHistoryReportView.as_view(),
         name="maintenance-asset-history-report",
     ),
+    # Maintenance Technicians (S2-P1)
+    path(
+        "maintenance/technicians/",
+        api_views.MaintenanceTechniciansListView.as_view(),
+        name="maintenance-technicians",
+    ),
+
+    # =====================
+    # Maintenance Analytics (S2-P2)
+    # =====================
+    path(
+        "maintenance/analytics/summary/",
+        api_views.MaintenanceAnalyticsSummaryView.as_view(),
+        name="maintenance-analytics-summary",
+    ),
+    path(
+        "maintenance/analytics/visits-trend/",
+        api_views.MaintenanceAnalyticsVisitsTrendView.as_view(),
+        name="maintenance-analytics-visits-trend",
+    ),
+    path(
+        "maintenance/analytics/sla-trend/",
+        api_views.MaintenanceAnalyticsSlaTrendView.as_view(),
+        name="maintenance-analytics-sla-trend",
+    ),
+    path(
+        "maintenance/analytics/assets-performance/",
+        api_views.MaintenanceAnalyticsAssetsPerformanceView.as_view(),
+        name="maintenance-analytics-assets-performance",
+    ),
+    path(
+        "maintenance/analytics/technicians-performance/",
+        api_views.MaintenanceAnalyticsTechniciansPerformanceView.as_view(),
+        name="maintenance-analytics-technicians-performance",
+    ),
+
+    # =====================
+    # Maintenance Reports (S2-P3)
+    # =====================
+    path(
+        "maintenance/reports/weekly/",
+        api_views.MaintenanceWeeklyReportView.as_view(),
+        name="maintenance-reports-weekly",
+    ),
+    path(
+        "maintenance/reports/monthly/",
+        api_views.MaintenanceMonthlyReportView.as_view(),
+        name="maintenance-reports-monthly",
+    ),
+    path(
+        "maintenance/reports/weekly/pdf/",
+        api_views.MaintenanceWeeklyReportPdfView.as_view(),
+        name="maintenance-reports-weekly-pdf",
+    ),
+    path(
+        "maintenance/reports/monthly/pdf/",
+        api_views.MaintenanceMonthlyReportPdfView.as_view(),
+        name="maintenance-reports-monthly-pdf",
+    ),
+    path(
+        "maintenance/reports/weekly/email/",
+        api_views.MaintenanceWeeklyReportEmailView.as_view(),
+        name="maintenance-reports-weekly-email",
+    ),
+    path(
+        "maintenance/reports/monthly/email/",
+        api_views.MaintenanceMonthlyReportEmailView.as_view(),
+        name="maintenance-reports-monthly-email",
+    ),
+
+    # =====================
+    # Maintenance Recurring Templates (Stage 3)
+    # =====================
+    path(
+        "maintenance/recurring-templates/",
+        api_views.RecurringTemplateListCreateView.as_view(),
+        name="maintenance-recurring-templates",
+    ),
+    path(
+        "maintenance/recurring-templates/<int:pk>/",
+        api_views.RecurringTemplateDetailView.as_view(),
+        name="maintenance-recurring-template-detail",
+    ),
+    path(
+        "maintenance/recurring-templates/<int:pk>/generate/",
+        api_views.RecurringTemplateGenerateView.as_view(),
+        name="maintenance-recurring-template-generate",
+    ),
 ]

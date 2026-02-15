@@ -55,4 +55,5 @@ export const maintenancePaths = {
   assetNew: "/maintenance/assets/new",
   assetDetail: (id: number | string) => `/maintenance/assets/${id}`,
   technicians: "/maintenance/technicians",
+  schedules: "/maintenance/schedules",
 } as const;
