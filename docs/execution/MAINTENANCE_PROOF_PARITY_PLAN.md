@@ -125,23 +125,26 @@ If Cleaning can do it, Maintenance can do it — **using the same code**.
 
 ---
 
-### P4: SLA UI Parity
+### P4: SLA UI Parity — DONE
 
 **Goal:** SLA status displayed correctly for maintenance visits.
+
+**Status:** COMPLETE
 
 **Backend (already works):**
 - `compute_sla_status_and_reasons_for_job()` works for any Job
 - Returns `sla_status` + `sla_reasons[]`
 
-**Frontend:**
-- Visit Detail: display SLA badge (ok/violated)
-- Visit Detail: display SLA reasons (if violated)
-- Visit List: SLA status column/filter
+**Frontend (implemented):**
+- Visit Detail: SLA & Proof section with status badge, reasons, timing summary
+- Visit Detail: Human-readable SLA reason labels (same as Cleaning)
+- Visit List: SLA column with indicator (✓/⚠️)
+- Header: SLA badge already present
 
 **Acceptance Criteria:**
-- [ ] Visit Detail shows SLA status badge (green OK / red Violated)
-- [ ] Visit Detail shows SLA violation reasons (human-readable)
-- [ ] Visit List supports SLA filter (optional, nice-to-have)
+- [x] Visit Detail shows SLA status badge (green OK / red Violated)
+- [x] Visit Detail shows SLA violation reasons (human-readable)
+- [x] Visit List shows SLA indicator column
 
 ---
 
@@ -191,7 +194,7 @@ Before Maintenance Proof Parity is considered complete:
 - [x] Checklist execution works end-to-end (P1) — DONE 2026-02-15
 - [x] Photo upload/display works (P2) — DONE 2026-02-15
 - [x] Completion enforcement verified (P3) — DONE 2026-02-15
-- [ ] SLA display works in Visit Detail (P4)
+- [x] SLA display works in Visit Detail (P4) — DONE 2026-02-15
 - [ ] Visit PDF download works (P5)
 - [ ] Asset history PDF export works (P6)
 
@@ -264,7 +267,7 @@ Every change MUST:
 
 | Metric | Target | Current |
 |--------|--------|---------|
-| Proof parity features implemented | 6/6 (100%) | 3/6 (50%) |
+| Proof parity features implemented | 6/6 (100%) | 4/6 (67%) |
 | `verify_roles.sh` passing | 17/17 | TBD |
 | Cleaning regression | 0 broken features | 0 |
 | New Platform Layer changes | 0 | 0 |
@@ -275,6 +278,7 @@ Every change MUST:
 
 | Version | Date | Change |
 |---------|------|--------|
+| 1.4 | 2026-02-15 | P4 SLA UI Parity marked DONE: SLA column in Visit List, SLA & Proof section in VisitDetail, human-readable reason labels |
 | 1.3 | 2026-02-15 | P3 Completion Enforcement marked DONE: standardized error format, ApiErrorPanel, CompletionBlockersPanel, human-readable field mapping |
 | 1.2 | 2026-02-15 | P2 Evidence/Photos marked DONE: photos grid in VisitDetail, before/after sections |
 | 1.1 | 2026-02-15 | P1 Checklist Parity marked DONE: CreateVisit selector, VisitDetail display/toggle, API functions, seed script |

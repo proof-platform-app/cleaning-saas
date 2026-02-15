@@ -41,6 +41,8 @@ export interface VisitLayoutItem {
   hasPhotoAfter?: boolean;
   checklistCompleted?: number;
   checklistTotal?: number;
+  // SLA status
+  slaStatus?: "ok" | "violated" | string;
 }
 
 export interface FilterOption {
@@ -87,6 +89,34 @@ function StatusPill({ status }: { status: VisitStatus }) {
     <span className={cn("status-pill whitespace-nowrap", config.className)}>
       {config.label}
     </span>
+  );
+}
+
+/**
+ * SLA indicator - shows warning icon for violated SLA
+ * Matches Cleaning pattern from JobsTable.tsx
+ */
+function SLAIndicator({ slaStatus }: { slaStatus?: string }) {
+  if (!slaStatus) return <span className="text-muted-foreground/50">—</span>;
+
+  const isViolated = slaStatus === "violated";
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={cn(
+            "inline-flex items-center justify-center w-5 h-5 text-sm",
+            isViolated ? "text-amber-600" : "text-green-600"
+          )}>
+            {isViolated ? "⚠️" : "✓"}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">
+          {isViolated ? "SLA violated" : "SLA OK"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -287,6 +317,7 @@ export function VisitsLovableLayout({
                 <th>Technician</th>
                 <th className="w-[110px]">Scheduled</th>
                 <th className="w-[100px]">Proof</th>
+                <th className="w-[50px]">SLA</th>
                 <th className="w-[50px]"></th>
               </tr>
             </thead>
@@ -324,6 +355,9 @@ export function VisitsLovableLayout({
                         total: visit.checklistTotal || 0,
                       }}
                     />
+                  </td>
+                  <td>
+                    <SLAIndicator slaStatus={visit.slaStatus} />
                   </td>
                   <td>
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 group-hover:text-muted-foreground" />

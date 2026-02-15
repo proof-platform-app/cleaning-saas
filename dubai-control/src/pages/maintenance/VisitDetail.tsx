@@ -33,6 +33,15 @@ function canAccessVisits(role: UserRole): boolean {
   return role === "owner" || role === "manager" || role === "staff";
 }
 
+// Human-readable SLA reason labels (matches Cleaning pattern)
+const SLA_REASON_LABELS: Record<string, string> = {
+  missing_before_photo: "Missing before photo",
+  missing_after_photo: "Missing after photo",
+  checklist_not_completed: "Checklist not completed",
+  late_check_in: "Late check-in",
+  late_check_out: "Late check-out",
+};
+
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -618,19 +627,81 @@ export default function VisitDetail() {
         </div>
       )}
 
-      {/* SLA Violations */}
-      {visit.sla_status === "violated" && visit.sla_reasons && visit.sla_reasons.length > 0 && (
-        <div className="detail-card mt-4 border-red-200 bg-red-50">
-          <h2 className="text-sm font-semibold text-red-800">SLA Violations</h2>
-          <ul className="mt-2 list-disc list-inside text-xs text-red-700">
-            {visit.sla_reasons.map((reason, idx) => (
-              <li key={idx}>
-                {reason.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-              </li>
-            ))}
-          </ul>
+      {/* SLA & Proof Section */}
+      <div className="detail-card mt-4">
+        <h2 className="detail-card-title">SLA & Proof</h2>
+        <div className="mt-3 space-y-3">
+          {/* SLA Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Status
+            </span>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                visit.sla_status === "violated"
+                  ? "bg-red-100 text-red-800"
+                  : "bg-green-100 text-green-800"
+              }`}
+            >
+              {visit.sla_status === "violated" ? "SLA Violated" : "SLA OK"}
+            </span>
+          </div>
+
+          {/* SLA Reasons if violated */}
+          {visit.sla_status === "violated" && visit.sla_reasons && visit.sla_reasons.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Reasons
+              </span>
+              <ul className="mt-1 space-y-1">
+                {visit.sla_reasons.map((reason, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-xs text-red-700">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
+                    <span>
+                      {SLA_REASON_LABELS[reason] ?? reason.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Timing Summary */}
+          <div className="rounded-lg bg-muted/50 p-3">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-muted-foreground">Scheduled:</span>
+                <div className="font-medium text-foreground">
+                  {visit.scheduled_date}
+                  {visit.scheduled_start_time && ` ${visit.scheduled_start_time}`}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Check-in:</span>
+                <div className="font-medium text-foreground">
+                  {visit.actual_start_time
+                    ? new Date(visit.actual_start_time).toLocaleString()
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Scheduled End:</span>
+                <div className="font-medium text-foreground">
+                  {visit.scheduled_end_time || "—"}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Check-out:</span>
+                <div className="font-medium text-foreground">
+                  {visit.actual_end_time
+                    ? new Date(visit.actual_end_time).toLocaleString()
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </MaintenanceLayout>
   );
 }

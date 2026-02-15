@@ -3,7 +3,7 @@
 // Layout imported from control-hub/src/pages/WorkOrdersPage.tsx
 // See docs/execution/LOVABLE_UI_IMPORT_PROTOCOL.md
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
@@ -55,11 +55,13 @@ function mapVisitToLayout(visit: ServiceVisit): VisitLayoutItem {
     locationAddress: visit.location?.address,
     technicianName: visit.cleaner?.full_name,
     scheduledDate: visit.scheduled_date,
-    // Proof indicators - these fields may not exist yet in API
-    hasPhotoBefore: false,
-    hasPhotoAfter: false,
+    // Proof indicators from API
+    hasPhotoBefore: visit.proof?.before_photo || visit.proof?.before_uploaded || false,
+    hasPhotoAfter: visit.proof?.after_photo || visit.proof?.after_uploaded || false,
     checklistCompleted: 0,
     checklistTotal: 0,
+    // SLA status from API
+    slaStatus: visit.sla_status,
   };
 }
 
@@ -69,36 +71,80 @@ function mapVisitToLayout(visit: ServiceVisit): VisitLayoutItem {
 
 export default function VisitList() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useUserRole();
 
-  // Read initial filter values from URL query params
-  const initialStatus = searchParams.get("status") || "all";
-  const initialAsset = searchParams.get("asset_id") || "all";
-  const initialTechnician = searchParams.get("technician_id") || "all";
-  const initialCategory = searchParams.get("category_id") || "all";
-  const paramDateFrom = searchParams.get("date_from");
-  const paramDateTo = searchParams.get("date_to");
-
-  // Filter state - maps 1:1 to backend query params
-  const [statusFilter, setStatusFilter] = useState(initialStatus);
-  const [assetFilter, setAssetFilter] = useState(initialAsset);
-  const [technicianFilter, setTechnicianFilter] = useState(initialTechnician);
-  const [categoryFilter, setCategoryFilter] = useState(initialCategory);
-
-  // Default date range: last 30 days (unless overridden by query params)
+  // Default date range: last 30 days
   const today = format(new Date(), "yyyy-MM-dd");
   const thirtyDaysAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
-  const dateFrom = paramDateFrom || thirtyDaysAgo;
-  const dateTo = paramDateTo || today;
 
-  // Sync filters when URL params change (e.g., deep link navigation)
+  // Read initial filter values from URL query params
+  const getInitialFilters = useCallback(() => ({
+    status: searchParams.get("status") || "all",
+    asset: searchParams.get("asset_id") || "all",
+    technician: searchParams.get("technician_id") || "all",
+    category: searchParams.get("category_id") || "all",
+    dateFrom: searchParams.get("date_from") || thirtyDaysAgo,
+    dateTo: searchParams.get("date_to") || today,
+  }), [searchParams, thirtyDaysAgo, today]);
+
+  // Filter state - maps 1:1 to backend query params
+  const [statusFilter, setStatusFilter] = useState(() => getInitialFilters().status);
+  const [assetFilter, setAssetFilter] = useState(() => getInitialFilters().asset);
+  const [technicianFilter, setTechnicianFilter] = useState(() => getInitialFilters().technician);
+  const [categoryFilter, setCategoryFilter] = useState(() => getInitialFilters().category);
+  const [dateFrom, setDateFrom] = useState(() => getInitialFilters().dateFrom);
+  const [dateTo, setDateTo] = useState(() => getInitialFilters().dateTo);
+
+  // Sync filters FROM URL when query params change (deep link navigation)
   useEffect(() => {
-    setStatusFilter(searchParams.get("status") || "all");
-    setAssetFilter(searchParams.get("asset_id") || "all");
-    setTechnicianFilter(searchParams.get("technician_id") || "all");
-    setCategoryFilter(searchParams.get("category_id") || "all");
-  }, [searchParams]);
+    const params = getInitialFilters();
+    setStatusFilter(params.status);
+    setAssetFilter(params.asset);
+    setTechnicianFilter(params.technician);
+    setCategoryFilter(params.category);
+    setDateFrom(params.dateFrom);
+    setDateTo(params.dateTo);
+  }, [searchParams, getInitialFilters]);
+
+  // Update URL when filters change (for shareable links)
+  const updateUrlParams = useCallback((updates: Record<string, string | undefined>) => {
+    const newParams = new URLSearchParams(searchParams);
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value && value !== "all" && value !== thirtyDaysAgo && value !== today) {
+        newParams.set(key, value);
+      } else {
+        newParams.delete(key);
+      }
+    });
+
+    // Only update if params actually changed
+    if (newParams.toString() !== searchParams.toString()) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, thirtyDaysAgo, today]);
+
+  // Handlers that update both state and URL
+  const handleStatusChange = useCallback((value: string) => {
+    setStatusFilter(value);
+    updateUrlParams({ status: value });
+  }, [updateUrlParams]);
+
+  const handleAssetChange = useCallback((value: string) => {
+    setAssetFilter(value);
+    updateUrlParams({ asset_id: value });
+  }, [updateUrlParams]);
+
+  const handleTechnicianChange = useCallback((value: string) => {
+    setTechnicianFilter(value);
+    updateUrlParams({ technician_id: value });
+  }, [updateUrlParams]);
+
+  const handleCategoryChange = useCallback((value: string) => {
+    setCategoryFilter(value);
+    updateUrlParams({ category_id: value });
+  }, [updateUrlParams]);
 
   const hasAccess = canAccessVisits(user.role);
   const canCreate = canCreateVisits(user.role);
@@ -260,16 +306,17 @@ export default function VisitList() {
               }
         }
         // Filters - map 1:1 to backend query params
+        // Handlers update both state and URL for shareable deep links
         statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
+        onStatusFilterChange={handleStatusChange}
         assetFilter={assetFilter}
-        onAssetFilterChange={setAssetFilter}
+        onAssetFilterChange={handleAssetChange}
         assetOptions={assetOptions}
         technicianFilter={technicianFilter}
-        onTechnicianFilterChange={setTechnicianFilter}
+        onTechnicianFilterChange={handleTechnicianChange}
         technicianOptions={technicianOptions}
         categoryFilter={categoryFilter}
-        onCategoryFilterChange={setCategoryFilter}
+        onCategoryFilterChange={handleCategoryChange}
         categoryOptions={categoryOptions}
       />
     </MaintenanceLayout>
