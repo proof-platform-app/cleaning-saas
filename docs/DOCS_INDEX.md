@@ -38,6 +38,7 @@
 |----------|------|---------|
 | **Cleaning Context** | [docs/product/context_cleaning.md](product/context_cleaning.md) | Cleaning services operational context |
 | **Maintenance Context V1 Scope** | [docs/product/MAINTENANCE_CONTEXT_V1_SCOPE.md](product/MAINTENANCE_CONTEXT_V1_SCOPE.md) | Strict V1 scope definition (assets, visits, boundaries) |
+| **Maintenance V2 Strategy** | [docs/product/MAINTENANCE_V2_STRATEGY.md](product/MAINTENANCE_V2_STRATEGY.md) | Stage-based evolution roadmap (Stages 2-5) |
 | **Fit-out Context** | [docs/product/context_fitout.md](product/context_fitout.md) | Fit-out/construction operational context |
 | **Property Context** | [docs/product/context_property.md](product/context_property.md) | Property management operational context |
 
@@ -101,6 +102,7 @@ docs/
 ├── product/
 │   ├── PAID_ACTIVATION_FLOW_v1.md # Manual paid activation spec
 │   ├── MAINTENANCE_CONTEXT_V1_SCOPE.md # Maintenance V1 strict scope
+│   ├── MAINTENANCE_V2_STRATEGY.md # Maintenance V2 evolution roadmap
 │   ├── context_cleaning.md     # Cleaning operational context
 │   ├── context_maintenance.md  # Maintenance operational context
 │   ├── context_fitout.md       # Fit-out operational context
