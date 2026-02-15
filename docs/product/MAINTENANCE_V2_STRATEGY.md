@@ -1,9 +1,10 @@
 # MAINTENANCE CONTEXT — V2 STRATEGY
 
-**Status:** PLANNED  
-**Version:** 1.0  
-**Created:** 2026-02-15  
-**Authority:** Platform Strategy  
+**Status:** IMPLEMENTED
+**Version:** 2.0
+**Created:** 2026-02-15
+**Updated:** 2026-02-16
+**Authority:** Platform Strategy
 
 ---
 
@@ -11,7 +12,7 @@
 
 This document defines the strategic evolution of Maintenance Context after V1 Release Lock.
 
-Maintenance V1 is an execution verification layer.  
+Maintenance V1 is an execution verification layer.
 V2 defines how Maintenance becomes a standalone operational product without breaking Platform invariants.
 
 ---
@@ -47,7 +48,7 @@ Each stage must:
 
 ---
 
-# STAGE 2 — Operational Expansion
+# STAGE 2 — Operational Expansion ✅ COMPLETED
 
 **Goal:** Make Maintenance usable as daily operational tool.
 
@@ -96,33 +97,41 @@ No financial analytics.
 
 ---
 
-# STAGE 3 — Recurring Execution
+# STAGE 3 — Recurring Execution ✅ COMPLETED
+
+**Commit:** `e39ca0c`
 
 **Goal:** Introduce predictable maintenance cycles.
 
 Add:
 
-- Recurring visit templates
-- Frequency rules (monthly, quarterly, yearly)
-- Auto-scheduling engine
+- RecurringVisitTemplate model
+- Frequency rules (monthly, quarterly, yearly, custom interval)
+- Batch generation via "Generate Visits" button
+- GeneratedVisitLog for tracking
 
 Constraints:
 
 - No SLA timers yet
 - No escalation workflows
 - No reactive ticket creation
+- No celery/cron (batch generation only)
 
-Recurring engine must generate normal Visits (Jobs).
+Recurring engine generates normal Visits (Jobs with context=CONTEXT_MAINTENANCE).
 
 ---
 
-# STAGE 4 — SLA & Priority Layer
+# STAGE 4 — SLA & Priority Layer ✅ COMPLETED
+
+**Commit:** `983649e`
 
 Add:
 
-- SLA timers (visual only)
+- SLA deadline field on Job model
 - Priority classification (Low / Medium / High)
-- SLA badge system
+- SLA badge system in UI
+- SLA deadline countdown timer
+- Priority indicator in visit list
 
 Constraints:
 
@@ -130,23 +139,55 @@ Constraints:
 - No background job engine
 - No notification storm
 
-SLA must remain verification-based.
+SLA remains verification-based.
 
 ---
 
-# STAGE 5 — Contracts & Warranty (Future)
+# STAGE 5 Lite — Contracts & Warranty ✅ COMPLETED
+
+**Commit:** `e90ca3d`
+
+**Note:** Implemented as "Lite" version without billing integration.
 
 Add:
 
-- Service contract model
-- Warranty expiration tracking
-- Contract-based recurring visits
+- ServiceContract model (service agreements tracking)
+- Warranty fields on Asset (start_date, end_date, provider, notes, status)
+- Contract-linked recurring templates
+- Contracts management page
+- Warranty display in Asset detail
 
 Constraints:
 
-- Billing integration required
-- Payment provider integration must exist
-- Separate release lock required
+- No billing integration (deferred)
+- No payment provider integration
+- Informational tracking only
+
+---
+
+# STAGE 6 — Notifications Layer ✅ COMPLETED
+
+**Commit:** `006812e`
+
+**Goal:** Enable proactive communication with technicians.
+
+Add:
+
+- MaintenanceNotificationLog model (audit trail)
+- Email notification service (notifications.py)
+- Manual notification via "Notify" dropdown button
+- Notification types:
+  - `visit_reminder` — Remind technician about upcoming visit
+  - `sla_warning` — Alert about approaching SLA deadline
+  - `assignment` — Notify about visit assignment
+  - `completion` — Notify manager about completed visit
+
+Constraints:
+
+- No celery/cron (synchronous sending)
+- No push notifications (email only)
+- No notification preferences UI (all enabled by default)
+- Uses existing Django email backend
 
 ---
 
@@ -178,14 +219,15 @@ Every stage requires:
 
 Maintenance becomes standalone when:
 
-- Has technician management
-- Has analytics layer
-- Has recurring scheduling
-- Has SLA visibility
-- Has report suite
-- Has release lock document
+- ✅ Has technician management
+- ✅ Has analytics layer
+- ✅ Has recurring scheduling
+- ✅ Has SLA visibility
+- ✅ Has report suite
+- ✅ Has release lock document
+- ✅ Has notifications layer
 
-Only after Stage 4 is Maintenance considered independent product tier.
+**MaintainProof is now a standalone product tier.**
 
 ---
 
@@ -206,3 +248,4 @@ Any Stage implementation requires:
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | 2026-02-15 | Initial V2 Strategy |
+| 2.0 | 2026-02-16 | Stages 3-6 implemented, status IMPLEMENTED |
